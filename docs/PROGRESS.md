@@ -244,6 +244,52 @@ no console errors, no horizontal overflow.
 `frontend/src/app/core/api.ts`. Delete `mock.interceptor.ts` and `mock-data.ts`
 once all of them exist.
 
+---
+
+## Repo and UI pass
+
+**It is a monorepo already**, and now it is a git repo. `frontend/` + `backend/`
++ `docs/` under one root is the layout `BUILD_PLAN.md` specifies. No nx, no
+turborepo, no pnpm workspaces: two apps in two languages with separate package
+managers share nothing at build time, so a build graph would be pure overhead.
+Added `README.md`, renamed `hired_BUILD_PLAN.md` to `BUILD_PLAN.md` as the plan
+asks, `git init` and a first commit. 55 files tracked, no `node_modules` or
+`.venv` leaked.
+
+**Requirement coverage panel** on the generate page, between the fit card and
+the flags. It uses `parsed_jd`, which the API already returned and the UI was
+throwing away. Every required and preferred skill gets a chip at one of three
+levels:
+
+| Colour | Meaning |
+|---|---|
+| Green | Named inside a bullet that is currently selected. Defensible. |
+| Amber | On the skills line or a stack, with no bullet behind it. The question you do not want cold. |
+| Red | A requirement the page never mentions at all. |
+
+Evidence is bullet text only, deliberately. A stack line is a list, same as the
+skills line, and listing a technology is not the same as having a sentence that
+describes using it. That distinction is also what makes the panel react: deselect
+the Next.js bullet and Next.js drops from green to amber while you watch.
+
+Matching is a case-insensitive substring test, so "React" hits "React Native"
+and a posting saying "ReactJS" misses "React" on the page. The synonym map
+planned for `profile/skills_taxonomy.md` in v2 is the upgrade path.
+
+**Other changes in this pass**
+
+- `Cmd`/`Ctrl` `Enter` in the JD textarea generates, with the hint in the help line.
+- The preview pane is paper white in both themes now. It represents a printed
+  page; rendering it dark was wrong.
+- Both sticky panes cap at `calc(100dvh - 4.5rem)` and scroll internally. A
+  sticky element taller than the viewport hides its own bottom, which was
+  putting the Generate button out of reach on short screens.
+- Relative dates in the applications list and detail, exact date in the
+  `title`. `Intl.RelativeTimeFormat` in `core/dates.ts`, no dependency.
+
+Re-verified in headless Chromium at 1440 and 375, light and dark: no console
+errors, no horizontal overflow, coverage counter moves on deselect.
+
 **Not built, and deliberately:** v2 screens. The skills-frequency dashboard and
 the reply-rate charts aggregate over twenty-plus saved applications. With an
 empty database they are charts of nothing, and the plan gates them behind real

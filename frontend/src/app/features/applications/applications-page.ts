@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
 
 import { ApplicationsService } from '../../core/applications.service';
+import { ago, daysSince } from '../../core/dates';
 import { APPLICATION_STATUSES, Application, ApplicationStatus } from '../../core/models';
 import { Icon } from '../../shared/icon';
 
@@ -50,13 +51,11 @@ export class ApplicationsPage {
     );
   });
 
+  readonly ago = ago;
+
   /** Anything sitting in Applied for more than ten days needs a follow-up. */
   stale(application: Application): boolean {
-    if (application.status !== 'applied' || !application.applied_at) {
-      return false;
-    }
-    const days = (Date.now() - Date.parse(application.applied_at)) / 86_400_000;
-    return days > 10;
+    return application.status === 'applied' && daysSince(application.applied_at) > 10;
   }
 
   statusClass(status: ApplicationStatus): string {

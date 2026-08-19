@@ -92,8 +92,11 @@
                   </span>
                 }
               </td>
-              <td class="tabular text-fg-subtle px-3 py-2.5">
-                {{ application.created_at.slice(0, 10) }}
+              <td
+                class="text-fg-subtle px-3 py-2.5 whitespace-nowrap"
+                [title]="application.created_at.slice(0, 10)"
+              >
+                {{ ago(application.created_at) }}
               </td>
               <td class="px-2">
                 <a

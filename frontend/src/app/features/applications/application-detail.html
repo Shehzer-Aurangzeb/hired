@@ -58,8 +58,11 @@
         }
       </div>
       @if (application.applied_at) {
-        <span class="tabular text-fg-subtle ml-auto text-[11px]">
-          Applied {{ application.applied_at.slice(0, 10) }}
+        <span
+          class="text-fg-subtle ml-auto text-[11px]"
+          [title]="application.applied_at.slice(0, 10)"
+        >
+          Applied {{ ago(application.applied_at) }}
         </span>
       }
     </section>

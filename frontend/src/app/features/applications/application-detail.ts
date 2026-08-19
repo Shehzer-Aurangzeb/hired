@@ -4,6 +4,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, map, of, switchMap } from 'rxjs';
 
 import { ApplicationsService } from '../../core/applications.service';
+import { ago } from '../../core/dates';
 import { APPLICATION_STATUSES, Application, ApplicationStatus } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
 import { Icon } from '../../shared/icon';
@@ -24,6 +25,7 @@ export class ApplicationDetail {
   private readonly route = inject(ActivatedRoute);
 
   readonly statuses = APPLICATION_STATUSES;
+  readonly ago = ago;
   readonly saving = signal(false);
   readonly local = signal<Application | null>(null);
 
