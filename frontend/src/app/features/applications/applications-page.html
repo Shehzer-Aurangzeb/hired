@@ -1,0 +1,113 @@
+<div class="mx-auto max-w-6xl p-4">
+  <div class="mb-4 flex flex-wrap items-center gap-3">
+    <h1 class="text-[15px] font-semibold">Applications</h1>
+
+    <label class="relative ml-auto w-56">
+      <span class="sr-only">Search applications</span>
+      <app-icon
+        name="search"
+        [size]="14"
+        class="text-fg-subtle pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2"
+      />
+      <input
+        type="search"
+        class="field pl-8"
+        placeholder="Company or role"
+        [value]="query()"
+        (input)="query.set($any($event.target).value)"
+      />
+    </label>
+  </div>
+
+  <div class="mb-3 flex flex-wrap gap-1" role="group" aria-label="Filter by status">
+    @for (option of filters; track option) {
+      <button
+        type="button"
+        class="chip hover:border-line-strong cursor-pointer capitalize"
+        [class]="filter() === option ? 'border-accent text-accent' : ''"
+        [attr.aria-pressed]="filter() === option"
+        (click)="filter.set(option)"
+      >
+        {{ option }}
+        <span class="tabular text-fg-subtle">{{ counts().get(option) ?? 0 }}</span>
+      </button>
+    }
+  </div>
+
+  @if (applications() === null) {
+    <div class="card divide-line divide-y" aria-busy="true">
+      @for (row of [1, 2, 3, 4, 5]; track row) {
+        <div class="flex items-center gap-4 px-3 py-3">
+          <div class="bg-surface h-3 w-40 animate-pulse rounded"></div>
+          <div class="bg-surface h-3 w-56 animate-pulse rounded"></div>
+          <div class="bg-surface ml-auto h-3 w-16 animate-pulse rounded"></div>
+        </div>
+      }
+    </div>
+  } @else if (visible().length === 0) {
+    <div class="card text-fg-muted flex flex-col items-center gap-2 px-6 py-16 text-center">
+      <app-icon name="file-text" [size]="22" class="text-fg-subtle" />
+      @if ((applications() ?? []).length === 0) {
+        <p class="text-[13px]">No applications saved yet.</p>
+        <a routerLink="/generate" class="btn btn-outline mt-1">Generate the first one</a>
+      } @else {
+        <p class="text-[13px]">Nothing matches that filter.</p>
+      }
+    </div>
+  } @else {
+    <div class="card overflow-x-auto">
+      <table class="w-full text-left text-[13px]">
+        <thead class="border-line bg-surface text-fg-muted border-b">
+          <tr>
+            <th scope="col" class="px-3 py-2 text-[11px] font-medium tracking-wide uppercase">Company</th>
+            <th scope="col" class="px-3 py-2 text-[11px] font-medium tracking-wide uppercase">Role</th>
+            <th scope="col" class="px-3 py-2 text-[11px] font-medium tracking-wide uppercase">Fit</th>
+            <th scope="col" class="px-3 py-2 text-[11px] font-medium tracking-wide uppercase">Status</th>
+            <th scope="col" class="px-3 py-2 text-[11px] font-medium tracking-wide uppercase">Created</th>
+            <th scope="col" class="w-8"><span class="sr-only">Open</span></th>
+          </tr>
+        </thead>
+        <tbody class="divide-line divide-y">
+          @for (application of visible(); track application.id) {
+            <tr class="hover:bg-surface transition-colors duration-150">
+              <td class="px-3 py-2.5 font-medium">
+                <a
+                  [routerLink]="['/applications', application.id]"
+                  class="hover:text-accent"
+                >
+                  {{ application.company }}
+                </a>
+              </td>
+              <td class="text-fg-muted px-3 py-2.5">{{ application.role }}</td>
+              <td class="tabular px-3 py-2.5 font-semibold" [class]="scoreTone(application.fit_score)">
+                {{ application.fit_score }}
+              </td>
+              <td class="px-3 py-2.5">
+                <span class="badge" [class]="statusClass(application.status)">
+                  {{ application.status }}
+                </span>
+                @if (stale(application)) {
+                  <span class="badge bg-warn-soft text-warn ml-1" title="Applied more than 10 days ago">
+                    follow up
+                  </span>
+                }
+              </td>
+              <td class="tabular text-fg-subtle px-3 py-2.5">
+                {{ application.created_at.slice(0, 10) }}
+              </td>
+              <td class="px-2">
+                <a
+                  [routerLink]="['/applications', application.id]"
+                  class="text-fg-subtle hover:text-fg block"
+                  [attr.aria-label]="'Open ' + application.company + ' ' + application.role"
+                >
+                  <app-icon name="chevron-right" [size]="15" />
+                </a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>

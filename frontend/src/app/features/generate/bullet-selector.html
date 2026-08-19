@@ -1,0 +1,81 @@
+<div cdkDropListGroup class="flex flex-col gap-3">
+  @for (section of sections(); track section.project_id; let sectionIndex = $index) {
+    <section class="card overflow-hidden">
+      <header class="border-line bg-surface flex items-baseline gap-2 border-b px-3 py-2">
+        <h3 class="text-[13px] font-semibold">{{ section.project_name }}</h3>
+        <span class="text-fg-subtle truncate text-[11px]">{{ section.label }}</span>
+        <span class="tabular text-fg-muted ml-auto text-[11px]">
+          {{ activeCount(section) }}/{{ section.bullets.length }}
+        </span>
+      </header>
+
+      <ul
+        cdkDropList
+        [cdkDropListData]="section.bullets"
+        (cdkDropListDropped)="onDrop(sectionIndex, $event)"
+        class="divide-line divide-y"
+      >
+        @for (bullet of section.bullets; track bullet.id; let bulletIndex = $index) {
+          <li
+            cdkDrag
+            [cdkDragDisabled]="!isOn(bullet.id)"
+            class="group bg-raised flex items-start gap-2 px-3 py-2.5 transition-colors duration-150"
+            [class.opacity-45]="!isOn(bullet.id)"
+          >
+            <button
+              type="button"
+              cdkDragHandle
+              class="text-fg-subtle hover:text-fg mt-0.5 hidden cursor-grab active:cursor-grabbing sm:block"
+              [disabled]="!isOn(bullet.id)"
+              [attr.aria-label]="'Drag to reorder ' + bullet.id"
+            >
+              <app-icon name="grip" [size]="14" />
+            </button>
+
+            <input
+              type="checkbox"
+              class="accent-accent mt-1 size-4 shrink-0 cursor-pointer"
+              [checked]="isOn(bullet.id)"
+              (change)="toggle(bullet.id)"
+              [attr.aria-label]="'Include bullet ' + bullet.id"
+            />
+
+            <div class="min-w-0 flex-1">
+              <p class="text-[13px] leading-relaxed">{{ bullet.text }}</p>
+              <p class="mt-1 flex items-center gap-2">
+                <span class="mono text-fg-subtle">{{ bullet.id }}</span>
+                @if (bullet.rephrased) {
+                  <span class="badge bg-warn-soft text-warn" title="Wording was adjusted toward JD keywords inside the claim boundary">
+                    rephrased
+                  </span>
+                }
+              </p>
+            </div>
+
+            <!-- Keyboard equivalent of the drag handle. -->
+            <span class="flex flex-col opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+              <button
+                type="button"
+                class="text-fg-subtle hover:text-fg cursor-pointer disabled:cursor-default disabled:opacity-30"
+                [disabled]="bulletIndex === 0 || !isOn(bullet.id)"
+                (click)="nudge(sectionIndex, bulletIndex, -1)"
+                [attr.aria-label]="'Move ' + bullet.id + ' up'"
+              >
+                <app-icon name="chevron-right" [size]="13" class="-rotate-90" />
+              </button>
+              <button
+                type="button"
+                class="text-fg-subtle hover:text-fg cursor-pointer disabled:cursor-default disabled:opacity-30"
+                [disabled]="bulletIndex === section.bullets.length - 1 || !isOn(bullet.id)"
+                (click)="nudge(sectionIndex, bulletIndex, 1)"
+                [attr.aria-label]="'Move ' + bullet.id + ' down'"
+              >
+                <app-icon name="chevron-right" [size]="13" class="rotate-90" />
+              </button>
+            </span>
+          </li>
+        }
+      </ul>
+    </section>
+  }
+</div>

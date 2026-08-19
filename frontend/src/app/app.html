@@ -1,0 +1,42 @@
+<a
+  href="#main"
+  class="btn btn-outline sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50"
+>
+  Skip to content
+</a>
+
+<header
+  class="border-line bg-raised sticky top-0 z-30 flex h-12 items-center gap-1 border-b px-3"
+>
+  <!-- The wordmark is the first thing to go on a narrow screen. Labelled nav
+       items matter more than branding, and the tab title still says hired. -->
+  <span class="text-fg mr-3 hidden text-[15px] font-semibold tracking-tight sm:block">hired</span>
+
+  <nav class="flex min-w-0 items-center gap-0.5" aria-label="Main">
+    @for (item of nav; track item.path) {
+      <a
+        [routerLink]="item.path"
+        routerLinkActive="!bg-surface !text-fg"
+        class="text-fg-muted hover:bg-surface hover:text-fg flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[13px] font-medium transition-colors duration-150"
+      >
+        <app-icon [name]="item.icon" [size]="15" />
+        {{ item.label }}
+      </a>
+    }
+  </nav>
+
+  <button
+    type="button"
+    class="btn btn-ghost ml-auto !min-h-8 !px-2"
+    (click)="theme.toggle()"
+    [attr.aria-label]="theme.mode() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
+  >
+    <app-icon [name]="theme.mode() === 'dark' ? 'sun' : 'moon'" [size]="15" />
+  </button>
+</header>
+
+<main id="main" tabindex="-1">
+  <router-outlet />
+</main>
+
+<app-toast-host />
