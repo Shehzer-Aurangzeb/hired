@@ -178,6 +178,12 @@ export class GeneratePage {
   /** Listed on the page with no bullet behind it. The interview risk. */
   readonly unbacked = computed(() => this.coverage().filter((c) => c.covered && !c.evidenced));
 
+  /** Required and preferred read differently, so they are not one flat list. */
+  readonly coverageGroups = computed(() => [
+    { label: 'Required', items: this.coverage().filter((c) => c.required) },
+    { label: 'Preferred', items: this.coverage().filter((c) => !c.required) },
+  ]);
+
   readonly blockers = computed(() =>
     (this.gen.result()?.flags ?? []).filter((f) => f.type === 'block'),
   );

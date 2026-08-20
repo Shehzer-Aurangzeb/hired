@@ -160,10 +160,14 @@
         </span>
 
         <div class="ml-auto flex gap-2">
-          <button type="button" class="btn btn-ghost !min-h-8" (click)="startEdit()">
+          <button type="button" class="btn btn-outline !min-h-8" (click)="startEdit()">
+            <app-icon name="arrow-left" [size]="14" />
             Edit posting
           </button>
-          <button type="button" class="btn btn-ghost !min-h-8" (click)="reset()">Clear</button>
+          <button type="button" class="btn btn-outline !min-h-8" (click)="reset()">
+            <app-icon name="x" [size]="14" />
+            Clear
+          </button>
         </div>
       </div>
     </div>
@@ -171,38 +175,49 @@
     <!-- the numbers that decide whether to send it, always in view -->
     <div class="border-line bg-surface sticky top-12 z-20 border-b px-4 py-2">
       <div class="mx-auto flex max-w-[86rem] flex-wrap items-center gap-x-5 gap-y-2">
-        <p class="flex items-baseline gap-1.5">
-          <span class="tabular text-lg leading-none font-semibold" [class]="scoreTone(result.fit.score)">
-            {{ result.fit.score }}<span class="text-fg-subtle text-[11px]">/10</span>
-          </span>
-          <span class="text-fg-subtle text-[11px] tracking-wide uppercase">fit</span>
-        </p>
+        <div class="flex flex-wrap gap-2">
+          <div class="stat" title="How well the posting matches your profile, judged by the selector.">
+            <p class="stat-value" [class]="scoreTone(result.fit.score)">
+              {{ result.fit.score }}<span class="text-fg-subtle text-xs font-normal">/10</span>
+            </p>
+            <p class="stat-label">Fit score</p>
+          </div>
 
-        <p class="flex items-baseline gap-1.5">
-          <span
-            class="tabular text-[13px] font-semibold"
-            [class]="requiredCovered().evidenced === requiredCovered().total ? 'text-accent' : 'text-warn'"
+          <div
+            class="stat"
+            title="Required skills from the posting that a selected bullet actually names. Skills that only appear on the skills line do not count."
           >
-            {{ requiredCovered().evidenced }}/{{ requiredCovered().total }}
-          </span>
-          <span class="text-fg-subtle text-[11px]">required backed by a bullet</span>
-        </p>
+            <p
+              class="stat-value"
+              [class]="requiredCovered().evidenced === requiredCovered().total ? 'text-accent' : 'text-warn'"
+            >
+              {{ requiredCovered().evidenced }}<span class="text-fg-subtle text-xs font-normal">/{{ requiredCovered().total }}</span>
+            </p>
+            <p class="stat-label">Requirements covered</p>
+          </div>
 
-        <p class="flex items-baseline gap-1.5">
-          <span class="tabular text-[13px] font-semibold" [class]="pageLoad() > 100 ? 'text-danger' : 'text-fg'">
-            {{ pageLoad() }}%
-          </span>
-          <span class="text-fg-subtle text-[11px]">of one page</span>
-        </p>
+          <div
+            class="stat"
+            title="Estimated share of a one-page CV that the selected bullets fill. A character-count heuristic; the render loop in the backend is the real measurement."
+          >
+            <p class="stat-value" [class]="pageLoad() > 100 ? 'text-danger' : 'text-fg'">
+              {{ pageLoad() }}<span class="text-fg-subtle text-xs font-normal">%</span>
+            </p>
+            <p class="stat-label">Page filled</p>
+          </div>
 
-        <p class="flex items-baseline gap-1.5">
-          <span class="tabular text-[13px] font-semibold">{{ selectedCount() }}</span>
-          <span class="text-fg-subtle text-[11px]">bullets</span>
-        </p>
+          <div class="stat" title="Bullets currently checked. These are what will print.">
+            <p class="stat-value text-fg">{{ selectedCount() }}</p>
+            <p class="stat-label">Bullets on page</p>
+          </div>
+        </div>
 
         <div class="ml-auto flex items-center gap-2">
           @if (blockers().length) {
-            <span class="text-danger text-[11px]">Blocked by the claim guard</span>
+            <span class="border-danger bg-danger-soft text-danger flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium">
+              <app-icon name="ban" [size]="14" />
+              Blocked by the claim guard
+            </span>
           }
           <button
             type="button"
@@ -234,63 +249,92 @@
     <div class="mx-auto grid max-w-[86rem] gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_34rem] xl:items-start">
       <!-- ---------- decisions ---------- -->
       <div class="flex min-w-0 flex-col gap-3">
-        <section class="card p-3.5">
-          <h2 class="section-title mb-1.5">Why this score</h2>
-          <p class="text-[13px] leading-relaxed">{{ result.fit.reasoning }}</p>
-          @if (result.fit.gaps.length) {
-            <p class="mt-2 flex flex-wrap items-center gap-1.5">
-              <span class="text-fg-subtle text-[11px]">Gaps</span>
-              @for (gap of result.fit.gaps; track gap) {
-                <span class="chip border-warn/50 text-warn">{{ gap }}</span>
-              }
-            </p>
-          }
+        <section class="card overflow-hidden">
+          <header class="card-head">
+            <h2 class="section-title">Why this score</h2>
+          </header>
+          <div class="p-3.5">
+            <p class="text-[13px] leading-relaxed">{{ result.fit.reasoning }}</p>
+            @if (result.fit.gaps.length) {
+              <p class="mt-2.5 flex flex-wrap items-center gap-1.5">
+                <span class="text-fg-muted text-[11px] font-medium">Gaps</span>
+                @for (gap of result.fit.gaps; track gap) {
+                  <span class="chip border-warn/50 bg-warn-soft text-warn font-medium">{{ gap }}</span>
+                }
+              </p>
+            }
+          </div>
         </section>
 
         @if (coverage().length) {
-          <section class="card p-3.5">
-            <h2 class="section-title mb-2">Requirement coverage</h2>
-            <ul class="flex flex-wrap gap-1.5">
-              @for (item of coverage(); track item.name) {
-                <li
-                  class="chip"
-                  [class]="
-                    item.evidenced
-                      ? 'border-accent/50 text-accent'
-                      : item.covered
-                        ? 'border-warn/50 text-warn'
-                        : item.required
-                          ? 'border-danger/50 text-danger'
-                          : 'text-fg-subtle'
-                  "
-                  [title]="
-                    (item.required ? 'Required' : 'Preferred') +
-                    ', importance ' +
-                    item.importance +
-                    (item.evidenced
-                      ? '. Backed by a bullet on the page.'
-                      : item.covered
-                        ? '. On the skills line, but no bullet backs it.'
-                        : '. Not on the page at all.')
-                  "
-                >
-                  <app-icon
-                    [name]="item.evidenced ? 'check' : item.covered ? 'alert' : 'x'"
-                    [size]="11"
-                  />
-                  {{ item.name }}
-                  @if (!item.required) {
-                    <span class="text-fg-subtle text-[10px]">pref</span>
-                  }
-                </li>
+          <section class="card overflow-hidden">
+            <header class="card-head">
+              <h2 class="section-title">Requirement coverage</h2>
+              <span
+                class="badge ml-auto"
+                [class]="
+                  requiredCovered().evidenced === requiredCovered().total
+                    ? 'bg-accent-soft text-accent'
+                    : 'bg-warn-soft text-warn'
+                "
+              >
+                {{ requiredCovered().evidenced }} of {{ requiredCovered().total }} required
+              </span>
+            </header>
+
+            <div class="p-3.5">
+              @for (group of coverageGroups(); track group.label) {
+                @if (group.items.length) {
+                  <p class="text-fg-muted mb-1.5 text-[11px] font-medium tracking-wide uppercase">
+                    {{ group.label }}
+                  </p>
+                  <ul class="mb-3 flex flex-wrap gap-1.5">
+                    @for (item of group.items; track item.name) {
+                      <li
+                        class="chip font-medium"
+                        [class]="
+                          item.evidenced
+                            ? 'border-accent/50 bg-accent-soft text-accent'
+                            : item.covered
+                              ? 'border-warn/50 bg-warn-soft text-warn'
+                              : item.required
+                                ? 'border-danger/50 bg-danger-soft text-danger'
+                                : 'bg-surface text-fg-subtle'
+                        "
+                        [title]="
+                          (item.required ? 'Required' : 'Preferred') +
+                          ', importance ' +
+                          item.importance +
+                          (item.evidenced
+                            ? '. Backed by a bullet on the page.'
+                            : item.covered
+                              ? '. On the skills line, but no bullet backs it.'
+                              : '. Not on the page at all.')
+                        "
+                      >
+                        <app-icon
+                          [name]="item.evidenced ? 'check' : item.covered ? 'alert' : 'x'"
+                          [size]="12"
+                        />
+                        {{ item.name }}
+                      </li>
+                    }
+                  </ul>
+                }
               }
-            </ul>
-            <p class="text-fg-subtle mt-2 text-[11px]">
-              <span class="text-accent">Green</span> is backed by a bullet.
-              <span class="text-warn">Amber</span> is on the skills line with nothing behind it,
-              which is the question you do not want to be asked cold.
-              <span class="text-danger">Red</span> is a requirement the page never mentions.
-            </p>
+
+              <div class="border-line flex flex-wrap gap-x-4 gap-y-1 border-t pt-2.5 text-[11px]">
+                <span class="text-accent flex items-center gap-1 font-medium">
+                  <app-icon name="check" [size]="12" /> backed by a bullet
+                </span>
+                <span class="text-warn flex items-center gap-1 font-medium">
+                  <app-icon name="alert" [size]="12" /> listed, nothing behind it
+                </span>
+                <span class="text-danger flex items-center gap-1 font-medium">
+                  <app-icon name="x" [size]="12" /> not on the page
+                </span>
+              </div>
+            </div>
           </section>
         }
 
@@ -366,7 +410,7 @@
                compensation is needed. -->
           <div class="rounded-card border-line max-h-[calc(100dvh-11rem)] overflow-auto border">
             <article
-              class="w-[816px] bg-white p-12 text-[13px] leading-snug text-slate-900"
+              class="min-h-[1056px] w-[816px] bg-white p-12 text-[13px] leading-snug text-slate-900"
               [style.zoom]="sheetScale()"
             >
               <h3 class="text-[19px] font-bold">

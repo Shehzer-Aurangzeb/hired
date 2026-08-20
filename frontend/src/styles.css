@@ -117,7 +117,27 @@
   }
 
   .section-title {
-    @apply text-[11px] font-semibold tracking-[0.08em] text-fg-muted uppercase;
+    @apply text-[11px] font-semibold tracking-[0.08em] text-fg uppercase;
+  }
+
+  /* Card heading strip. Same treatment as the bullet section headers, which
+     already read clearly, so the rest of the page borrows it. */
+  .card-head {
+    @apply border-line bg-surface flex items-center gap-2 border-b px-3 py-2;
+  }
+
+  /* One stat in the decision bar: big value, small label under it. */
+  .stat {
+    @apply border-line bg-raised rounded-card border px-3 py-1.5;
+  }
+
+  .stat-value {
+    @apply text-xl leading-none font-semibold;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat-label {
+    @apply text-fg-muted mt-1 text-[10px] tracking-wide whitespace-nowrap uppercase;
   }
 }
 

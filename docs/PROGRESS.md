@@ -391,6 +391,51 @@ round trip all behave.
 
 ---
 
+## Legibility pass on the generate result
+
+Review said the numbers were unreadable, the section headings faded into the
+page, the coverage chips were hard to tell apart, and the two header actions did
+not look like buttons.
+
+**The decision bar is four labelled stat tiles**, each a bordered box with a
+20px value and a small caption, replacing a single quiet run of text. The
+captions say what the numbers mean, and each tile carries a `title` with the
+full explanation:
+
+| Tile | Meaning |
+|---|---|
+| Fit score | The selector's judgement of the match. |
+| Requirements covered | Required skills a selected bullet actually names. Skills line entries do not count. |
+| Page filled | Estimated share of a one-page CV. A character heuristic; the backend render loop is the real measurement. |
+| Bullets on page | How many are checked and will print. |
+
+"39% of one page" and "6 bullets" were the two nobody could read. They now say
+"Page filled" and "Bullets on page".
+
+**Card headings borrow the bullet-section treatment**, a `bg-surface` strip with
+a border under it, because that pattern already read clearly and the rest of the
+page did not. `.section-title` also moved from `fg-muted` to `fg`.
+
+**Coverage chips are filled, not outlined.** Green, amber and red now carry their
+soft background as well as the border, split into Required and Preferred groups
+with a legend underneath. Outline plus a small icon was not enough separation.
+
+**"Blocked by the claim guard"** is a bordered red badge rather than loose text.
+
+**The two header actions are `btn-outline` with icons.** They were `btn-ghost`,
+which is invisible until hover.
+
+**The sheet has a real page body**, `min-h-[1056px]`, 11in at 96dpi. A three
+project CV used to render as a floating block that stopped halfway, which read
+as broken. It now reads as a short CV on a full page, which is what it is.
+
+New classes in `styles.css`: `.card-head`, `.stat`, `.stat-value`, `.stat-label`.
+
+All six routes still pass the contrast audit, nothing overflows at 375, 768 or
+1024.
+
+---
+
 ## Mock scenarios
 
 The mock ignores the pasted text and always returned the same 8/10 result, so
