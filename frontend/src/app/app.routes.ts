@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 
 import { authGuard, guestGuard } from './core/auth.guard';
+import { profileGuard, setupGuard } from './core/profile.guard';
 
 export const routes: Routes = [
   {
@@ -10,28 +11,35 @@ export const routes: Routes = [
     loadComponent: () => import('./features/lock/lock-page').then((m) => m.LockPage),
   },
   {
+    path: 'setup',
+    title: 'Set up · hired',
+    canActivate: [authGuard, setupGuard],
+    loadComponent: () =>
+      import('./features/onboarding/onboarding-page').then((m) => m.OnboardingPage),
+  },
+  {
     path: 'generate',
-    canActivate: [authGuard],
+    canActivate: [authGuard, profileGuard],
     title: 'Generate · hired',
     loadComponent: () => import('./features/generate/generate-page').then((m) => m.GeneratePage),
   },
   {
     path: 'applications',
-    canActivate: [authGuard],
+    canActivate: [authGuard, profileGuard],
     title: 'Applications · hired',
     loadComponent: () =>
       import('./features/applications/applications-page').then((m) => m.ApplicationsPage),
   },
   {
     path: 'applications/:id',
-    canActivate: [authGuard],
+    canActivate: [authGuard, profileGuard],
     title: 'Application · hired',
     loadComponent: () =>
       import('./features/applications/application-detail').then((m) => m.ApplicationDetail),
   },
   {
     path: 'profile',
-    canActivate: [authGuard],
+    canActivate: [authGuard, profileGuard],
     title: 'Profile · hired',
     loadComponent: () => import('./features/profile/profile-page').then((m) => m.ProfilePage),
   },

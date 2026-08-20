@@ -4,6 +4,8 @@ import { Observable, delay, of, throwError } from 'rxjs';
 import { MOCK_PASSWORD, USE_MOCKS } from './api';
 import { Application } from './models';
 import { MOCK_APPLICATIONS, MOCK_GENERATE, mockGenerate } from './mock-data';
+import { PROFILE_TEMPLATE } from '../features/onboarding/template';
+import { ProfileIssue, ValidationResult } from './models';
 
 // ponytail: module-level array, not a service. Mock state lives exactly as long
 // as the tab does, which is the point. Delete this file when the backend lands.
@@ -13,6 +15,8 @@ let applications: Application[] = MOCK_APPLICATIONS.map((a) => ({ ...a }));
 // has to as well or every refresh signs you out. Lockout state is not persisted:
 // a page reload clearing it matches nothing real, but it keeps the demo usable.
 const SESSION_KEY = 'hired-mock-session';
+const PROFILE_KEY = 'hired-mock-profile';
+const PROFILE_AT_KEY = 'hired-mock-profile-at';
 let failures = 0;
 
 function signedIn(): boolean {
@@ -80,6 +84,34 @@ function route(method: string, path: string, body: unknown): Observable<HttpResp
     return failWith(401, 'That password is not right.', path);
   }
 
+  if (method === 'GET' && path === '/api/profile/source') {
+    const text = sessionStorage.getItem(PROFILE_KEY);
+    return respond(
+      { text: text ?? '', exists: !!text, updated_at: sessionStorage.getItem(PROFILE_AT_KEY) },
+      300,
+    );
+  }
+
+  if (method === 'GET' && path === '/api/profile/template') {
+    return respond({ text: PROFILE_TEMPLATE }, 200);
+  }
+
+  if (method === 'POST' && path === '/api/profile/validate') {
+    return respond(checkProfile((body as { text: string }).text), 500);
+  }
+
+  if (method === 'PUT' && path === '/api/profile/source') {
+    const { text } = body as { text: string };
+    const result = checkProfile(text);
+    if (!result.ok) {
+      return failWith(422, 'The profile did not parse.', path, { errors: result.errors });
+    }
+    const at = new Date().toISOString();
+    sessionStorage.setItem(PROFILE_KEY, text);
+    sessionStorage.setItem(PROFILE_AT_KEY, at);
+    return respond({ text, exists: true, updated_at: at }, 500);
+  }
+
   if (method === 'POST' && path === '/api/auth/logout') {
     setSignedIn(false);
     return respond({ authenticated: false }, 150);
@@ -142,6 +174,66 @@ function route(method: string, path: string, body: unknown): Observable<HttpResp
   }
 
   return null;
+}
+
+/**
+ * Stand-in for the real parser. Catches the mistakes that actually happen when
+ * hand-writing this file, including the quoting trap that broke it once already.
+ *
+ * ponytail: line scanning, not a YAML parse. The backend does the real thing;
+ * this exists so the UI has something honest to render before then.
+ */
+function checkProfile(text: string): ValidationResult {
+  const lines = text.split('\n');
+  const errors: ProfileIssue[] = [];
+  const warnings: ProfileIssue[] = [];
+
+  if (!/^# Identity$/m.test(text)) {
+    errors.push({ line: null, message: 'No "# Identity" section. Every profile needs one.' });
+  }
+  if (!/^name:\s*\S/m.test(text)) {
+    errors.push({ line: null, message: 'Identity has no name.' });
+  }
+
+  lines.forEach((line, i) => {
+    // - "quoted phrase" trailing words  ->  YAML sees two scalars and gives up
+    if (/^\s*-\s+".*"\s+\S/.test(line)) {
+      errors.push({
+        line: i + 1,
+        message:
+          'A list item that starts with a quote must be quoted end to end. Wrap the whole value in single quotes.',
+      });
+    }
+    if (/\t/.test(line)) {
+      errors.push({ line: i + 1, message: 'Tab character. YAML wants spaces.' });
+    }
+  });
+
+  const projects = text.split(/^### /m).slice(1);
+  const bullets = (text.match(/^\s+- id:/gm) ?? []).length;
+  const missing = projects.filter((p) => !/claim_boundary:/.test(p)).length;
+
+  if (missing) {
+    warnings.push({
+      line: null,
+      message: `${missing} project${missing === 1 ? '' : 's'} without a claim_boundary. The guard cannot protect what has no boundary.`,
+    });
+  }
+  if (!projects.length) {
+    warnings.push({ line: null, message: 'No projects yet, so there is nothing to select from.' });
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+    summary: {
+      projects: projects.length,
+      bullets,
+      blocked: (text.match(/status:\s*blocked/g) ?? []).length,
+      missing_boundaries: missing,
+    },
+  };
 }
 
 function respond<T>(body: T, ms: number): Observable<HttpResponse<T>> {

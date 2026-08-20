@@ -16,7 +16,10 @@ MASTER = Path(
 app = FastAPI(title="hired")
 app.add_middleware(
     CORSMiddleware,
+    # The session is an httpOnly cookie, so every request carries credentials.
+    # That also forbids a wildcard origin, which is why this list is explicit.
     allow_origins=["http://localhost:4200"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

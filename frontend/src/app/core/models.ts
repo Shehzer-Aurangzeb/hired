@@ -78,6 +78,34 @@ export interface Profile {
   experience: Experience[];
 }
 
+// ---------- profile source (the raw markdown, not built yet) ----------
+
+export interface ProfileSource {
+  text: string;
+  exists: boolean;
+  updated_at: string | null;
+}
+
+export interface ProfileIssue {
+  /** 1-indexed, or null when the problem is not tied to a line. */
+  line: number | null;
+  message: string;
+}
+
+export interface ProfileSummary {
+  projects: number;
+  bullets: number;
+  blocked: number;
+  missing_boundaries: number;
+}
+
+export interface ValidationResult {
+  ok: boolean;
+  errors: ProfileIssue[];
+  warnings: ProfileIssue[];
+  summary: ProfileSummary | null;
+}
+
 // ---------- generate (POST /api/generate, not built yet) ----------
 
 export interface RequiredSkill {

@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { AuthService } from './core/auth.service';
+import { ProfileService } from './core/profile.service';
 import { Icon } from './shared/icon';
 import { ToastHost } from './shared/toast-host';
 
@@ -12,6 +13,7 @@ import { ToastHost } from './shared/toast-host';
 })
 export class App {
   readonly auth = inject(AuthService);
+  readonly profile = inject(ProfileService);
   private readonly router = inject(Router);
 
   signOut(): void {

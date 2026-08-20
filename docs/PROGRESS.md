@@ -391,6 +391,50 @@ round trip all behave.
 
 ---
 
+## First-run setup
+
+Signing in with no profile lands on `/setup`. `profileGuard` sends every other
+route there, `setupGuard` sends you away once a profile exists, and the nav
+stays hidden until then, since none of it works yet.
+
+**Three ways in**: paste, upload a `.md`, or start from a template. The template
+is a commented skeleton that explains each section, with the claim boundary
+written before the bullets so the shape teaches the rule.
+
+**Validate before save, never after.** The result clears the moment the text
+changes, because a stale green tick is worse than none. Errors carry a line
+number and quote the offending line, so you are not counting rows. The summary
+lands as four tiles: projects, bullets, blocked, missing boundaries.
+
+The mock validator is a line scanner rather than a YAML parse, but it catches
+the mistakes that actually happen, including the quoting trap that broke this
+project once already:
+
+```yaml
+- "~50% reduction in repeat API calls" must always carry "estimated"   # breaks
+- '"~50% reduction in repeat API calls" must always carry "estimated"' # fine
+```
+
+Uploads are capped at 512 KB client-side and the profile persists in
+`sessionStorage` under mocks, same as the session.
+
+**A real bug came out of the auth work.** `authInterceptor` adds
+`withCredentials` to every request, including the live `GET /api/profile`, and
+the backend's CORS had no `allow_credentials`, so the browser blocked it. Fixed
+in `backend/app/main.py`. It is required anyway once the cookie is real, and it
+is why `allow_origins` cannot become a wildcard. Backend tests still pass.
+
+**Mocked routes**: `GET /api/profile/source`, `GET /api/profile/template`,
+`POST /api/profile/validate`, `PUT /api/profile/source`. The save carries
+`expected_updated_at` so the backend can reject a stale write with 409.
+
+Verified: first run redirects to setup, template loads and validates clean,
+breaking the quoting rule fails with the right line, fixing it passes, saving
+lands on `/generate` with the nav back, and `/setup` then redirects to
+`/profile`. Contrast passes, no overflow at 375, 768 or 1440.
+
+---
+
 ## Lock screen and auth
 
 Three amendments to `BUILD_PLAN.md`, all deliberate: the app will be deployed

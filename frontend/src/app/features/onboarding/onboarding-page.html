@@ -1,0 +1,195 @@
+<div class="mx-auto max-w-3xl px-4 py-10">
+  <!-- ============ what and why ============ -->
+  <header class="mb-6">
+    <span class="border-line bg-surface text-fg-muted mb-3 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]">
+      Step 1 of 1 · one-time setup
+    </span>
+    <h1 class="text-2xl font-semibold tracking-tight">Add your master profile</h1>
+    <p class="text-fg-muted mt-2 max-w-xl text-[14px] leading-relaxed">
+      hired works from one Markdown file listing your projects, the bullets you would actually put
+      on a CV, and the boundary of what each project lets you claim. Nothing in it is generated.
+      The selector only ever picks from what you write here.
+    </p>
+  </header>
+
+  @if (!source()) {
+    <!-- ============ pick a way in ============ -->
+    <div class="grid gap-3 sm:grid-cols-3">
+      <button
+        type="button"
+        class="card hover:border-line-strong hover:bg-surface cursor-pointer p-4 text-left transition-colors duration-150"
+        (click)="choose('paste')"
+      >
+        <span class="bg-surface text-fg-muted mb-2 flex size-8 items-center justify-center rounded-md">
+          <app-icon name="file-text" [size]="16" />
+        </span>
+        <p class="text-[13px] font-medium">Paste it</p>
+        <p class="text-fg-muted mt-0.5 text-[12px] leading-relaxed">
+          You already have the file open somewhere.
+        </p>
+      </button>
+
+      <label
+        class="card hover:border-line-strong hover:bg-surface cursor-pointer p-4 text-left transition-colors duration-150"
+      >
+        <span class="bg-surface text-fg-muted mb-2 flex size-8 items-center justify-center rounded-md">
+          <app-icon name="download" [size]="16" class="rotate-180" />
+        </span>
+        <p class="text-[13px] font-medium">Upload a file</p>
+        <p class="text-fg-muted mt-0.5 text-[12px] leading-relaxed">
+          Any <span class="mono">.md</span> file from your machine.
+        </p>
+        <input type="file" accept=".md,.markdown,text/markdown,text/plain" class="sr-only" (change)="onFile($event)" />
+      </label>
+
+      <button
+        type="button"
+        class="card hover:border-line-strong hover:bg-surface cursor-pointer p-4 text-left transition-colors duration-150"
+        (click)="choose('template')"
+      >
+        <span class="bg-accent-soft text-accent mb-2 flex size-8 items-center justify-center rounded-md">
+          <app-icon name="sparkles" [size]="16" />
+        </span>
+        <p class="text-[13px] font-medium">Start from a template</p>
+        <p class="text-fg-muted mt-0.5 text-[12px] leading-relaxed">
+          A commented skeleton explaining every section.
+        </p>
+      </button>
+    </div>
+
+    @if (loadError()) {
+      <p class="border-danger/50 bg-danger-soft text-danger rounded-card mt-3 flex items-start gap-2 border px-3 py-2 text-[12px]" role="alert">
+        <app-icon name="alert" [size]="14" class="mt-0.5 shrink-0" />
+        {{ loadError() }}
+      </p>
+    }
+
+    <p class="text-fg-subtle mt-6 text-[12px] leading-relaxed">
+      Not sure what goes in it? Take the template. It is the fastest way to see the shape, and you
+      can replace every line of it later.
+    </p>
+  } @else {
+    <!-- ============ review and save ============ -->
+    <div class="mb-3 flex flex-wrap items-center gap-2">
+      <button type="button" class="btn btn-ghost !px-2" (click)="restart()">
+        <app-icon name="arrow-left" [size]="15" />
+        Start over
+      </button>
+      @if (fileName()) {
+        <span class="chip mono">{{ fileName() }}</span>
+      }
+      <button type="button" class="btn btn-outline ml-auto" [disabled]="checking()" (click)="check()">
+        @if (checking()) {
+          <app-icon name="refresh" [size]="15" class="animate-spin" />
+          Checking
+        } @else {
+          <app-icon name="check" [size]="15" />
+          Check it
+        }
+      </button>
+    </div>
+
+    <!-- summary, once we know something -->
+    @if (result()?.summary; as summary) {
+      <div class="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div class="stat-lg">
+          <p class="stat-value text-fg">{{ summary.projects }}</p>
+          <p class="stat-label">Projects</p>
+        </div>
+        <div class="stat-lg">
+          <p class="stat-value text-fg">{{ summary.bullets }}</p>
+          <p class="stat-label">Bullets</p>
+        </div>
+        <div class="stat-lg">
+          <p class="stat-value" [class]="summary.blocked ? 'text-danger' : 'text-fg-subtle'">
+            {{ summary.blocked }}
+          </p>
+          <p class="stat-label">Blocked</p>
+        </div>
+        <div class="stat-lg" [class]="summary.missing_boundaries ? 'border-warn/50 bg-warn-soft' : ''">
+          <p class="stat-value" [class]="summary.missing_boundaries ? 'text-warn' : 'text-fg-subtle'">
+            {{ summary.missing_boundaries }}
+          </p>
+          <p class="stat-label">No boundary</p>
+        </div>
+      </div>
+    }
+
+    <!-- problems -->
+    @if (result(); as result) {
+      @for (issue of result.errors; track issue.message + issue.line) {
+        <p class="border-danger/50 bg-danger-soft text-danger rounded-card mb-2 flex items-start gap-2 border px-3 py-2 text-[12px]" role="alert">
+          <app-icon name="ban" [size]="14" class="mt-0.5 shrink-0" />
+          <span>
+            @if (issue.line) {
+              <strong class="font-semibold">Line {{ issue.line }}.</strong>
+            }
+            {{ issue.message }}
+            @if (issue.line) {
+              <br />
+              <code class="mono">{{ lineText(issue) }}</code>
+            }
+          </span>
+        </p>
+      }
+      @for (issue of result.warnings; track issue.message) {
+        <p class="border-warn/50 bg-warn-soft text-warn rounded-card mb-2 flex items-start gap-2 border px-3 py-2 text-[12px]">
+          <app-icon name="alert" [size]="14" class="mt-0.5 shrink-0" />
+          {{ issue.message }}
+        </p>
+      }
+      @if (result.ok && !result.warnings.length) {
+        <p class="border-accent/50 bg-accent-soft text-accent rounded-card mb-2 flex items-start gap-2 border px-3 py-2 text-[12px]">
+          <app-icon name="check" [size]="14" class="mt-0.5 shrink-0" />
+          Parses cleanly. Save it and the app is ready.
+        </p>
+      }
+    }
+
+    @if (loadError()) {
+      <p class="border-danger/50 bg-danger-soft text-danger rounded-card mb-2 flex items-start gap-2 border px-3 py-2 text-[12px]" role="alert">
+        <app-icon name="alert" [size]="14" class="mt-0.5 shrink-0" />
+        {{ loadError() }}
+      </p>
+    }
+
+    <!-- the file -->
+    <section class="card overflow-hidden">
+      <header class="card-head">
+        <h2 class="section-title">master.md</h2>
+        <span class="tabular text-fg-subtle ml-auto text-[11px]">
+          {{ lines().length }} lines · {{ text().length }} chars
+        </span>
+      </header>
+      <textarea
+        rows="22"
+        class="mono w-full resize-y border-0 bg-transparent p-3.5 !text-[12px] leading-relaxed focus:outline-none"
+        spellcheck="false"
+        placeholder="# Identity&#10;name: Your Name&#10;..."
+        [value]="text()"
+        (input)="update($any($event.target).value)"
+        aria-label="Profile markdown"
+      ></textarea>
+    </section>
+
+    <div class="mt-3 flex flex-wrap items-center gap-2">
+      <p class="text-fg-subtle text-[12px]">
+        @if (!result()) {
+          Check it before saving.
+        } @else if (!result()?.ok) {
+          Fix the errors above, then check again.
+        } @else {
+          You can edit all of this later from the Profile tab.
+        }
+      </p>
+      <button type="button" class="btn btn-primary ml-auto" [disabled]="!canSave()" (click)="save()">
+        @if (saving()) {
+          <app-icon name="refresh" [size]="15" class="animate-spin" />
+          Saving
+        } @else {
+          Save and start
+        }
+      </button>
+    </div>
+  }
+</div>

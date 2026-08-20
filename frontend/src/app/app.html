@@ -13,7 +13,8 @@
        items matter more than branding, and the tab title still says hired. -->
   <span class="text-fg mr-3 hidden text-[15px] font-semibold tracking-tight sm:block">hired</span>
 
-  <nav class="flex min-w-0 items-center gap-0.5" aria-label="Main">
+    @if (profile.exists()) {
+      <nav class="flex min-w-0 items-center gap-0.5" aria-label="Main">
     @for (item of nav; track item.path) {
       <a
         [routerLink]="item.path"
@@ -24,7 +25,10 @@
         {{ item.label }}
       </a>
     }
-    </nav>
+      </nav>
+    } @else {
+      <span class="text-fg-subtle text-[12px]">Setting up</span>
+    }
 
     <button type="button" class="btn btn-ghost ml-auto !min-h-8 !px-2" (click)="signOut()" title="Sign out">
       <app-icon name="log-out" [size]="15" />
