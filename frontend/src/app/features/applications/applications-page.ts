@@ -1,5 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, inject, linkedSignal, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  computed,
+  inject,
+  linkedSignal,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { DecimalPipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
 
@@ -51,8 +61,9 @@ const SEGMENTS: { key: Segment; label: string; color: string; hatched?: boolean 
 @Component({
   selector: 'app-applications-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Icon],
+  imports: [RouterLink, Icon, DecimalPipe],
   templateUrl: './applications-page.html',
+  host: { '(document:keydown)': 'onKey($event)' },
 })
 export class ApplicationsPage {
   private readonly api = inject(ApplicationsService);
@@ -70,6 +81,29 @@ export class ApplicationsPage {
   readonly query = signal('');
   readonly filter = signal<Filter>('all');
   readonly saving = signal<number | null>(null);
+  /** Which band segment the pointer is over, so the others can recede. */
+  readonly hovered = signal<Segment | null>(null);
+
+  private readonly searchBox = viewChild<ElementRef<HTMLInputElement>>('searchBox');
+
+  /** Slash focuses search, the way every tool with a list does it. */
+  onKey(event: KeyboardEvent): void {
+    if (event.key !== '/') {
+      return;
+    }
+    // target is document when nothing is focused, and document has no closest()
+    const target = event.target;
+    if (target instanceof HTMLElement && target.closest('input, textarea, select')) {
+      return;
+    }
+    event.preventDefault();
+    this.searchBox()?.nativeElement.focus();
+  }
+
+  segmentOpacity(key: Segment): number {
+    const hovered = this.hovered();
+    return !hovered || hovered === key ? 1 : 0.35;
+  }
 
   private readonly loaded = toSignal<Application[] | null>(
     this.api.list().pipe(catchError(() => of<Application[]>([]))),

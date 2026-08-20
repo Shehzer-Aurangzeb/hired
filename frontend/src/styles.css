@@ -51,6 +51,14 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* WebKit draws its own clear button on type=search. We draw a styled one, so
+     two crosses appeared. Kill the native one everywhere rather than per input. */
+  input[type='search']::-webkit-search-cancel-button,
+  input[type='search']::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
   :focus-visible {
     outline: 2px solid var(--color-ink);
     outline-offset: 2px;
@@ -129,6 +137,31 @@
   /* One stat in the decision bar: big value, small label under it. */
   .stat {
     @apply border-line bg-raised rounded-card border px-3 py-1.5;
+  }
+
+  /* Same tile, sized to lead a page rather than sit in a toolbar. */
+  .stat-lg {
+    @apply border-line bg-raised rounded-card border px-4 py-3 text-left;
+  }
+
+  .stat-lg .stat-value {
+    @apply text-[26px];
+  }
+
+  /* Search field with room for a leading icon and a trailing affordance. */
+  .search {
+    @apply border-line-strong bg-raised text-fg placeholder:text-fg-subtle
+           w-full rounded-lg border py-2.5 pr-10 pl-9 text-[13px]
+           transition-colors duration-150;
+  }
+
+  .search:hover {
+    @apply border-fg-subtle;
+  }
+
+  .search:focus {
+    @apply border-ink outline-none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-ink) 12%, transparent);
   }
 
   .stat-value {

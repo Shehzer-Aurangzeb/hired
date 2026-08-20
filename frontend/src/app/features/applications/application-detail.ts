@@ -4,6 +4,7 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, map, of, switchMap } from 'rxjs';
 
+import { USE_MOCKS } from '../../core/api';
 import { ApplicationsService } from '../../core/applications.service';
 import { ago } from '../../core/dates';
 import {
@@ -35,6 +36,8 @@ export class ApplicationDetail {
   readonly ago = ago;
   readonly saving = signal(false);
   readonly viewing = signal(false);
+  /** No export endpoint yet, so there is no file to frame. */
+  readonly mocked = USE_MOCKS;
   readonly local = signal<Application | null>(null);
 
   private readonly loaded = toSignal<Application | null | undefined>(

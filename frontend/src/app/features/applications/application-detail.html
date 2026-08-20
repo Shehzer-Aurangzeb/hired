@@ -168,7 +168,16 @@
             <app-icon name="x" [size]="15" />
           </button>
         </div>
-        @if (viewing()) {
+        @if (mocked) {
+          <div class="text-fg-muted flex h-[calc(92dvh-2.5rem)] flex-col items-center justify-center gap-2 p-6 text-center">
+            <app-icon name="file-text" [size]="24" class="text-fg-subtle" />
+            <p class="text-[13px]">No PDF yet.</p>
+            <p class="text-fg-subtle max-w-sm text-[12px]">
+              The export endpoint arrives with Phase 2. This dialog frames the real file once it
+              does.
+            </p>
+          </div>
+        } @else if (viewing()) {
           <iframe
             [src]="safePdfUrl(application.id)"
             class="h-[calc(92dvh-2.5rem)] w-full border-0"

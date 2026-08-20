@@ -391,6 +391,37 @@ round trip all behave.
 
 ---
 
+## Applications: polish pass
+
+**Two clear crosses in the search field.** WebKit draws its own on
+`input[type=search]` and we draw a styled one. Killed the native
+`::-webkit-search-cancel-button` in `styles.css` rather than on one input, since
+the profile filter has the same field.
+
+**Search** is its own `.search` class now: larger, rounded, a soft focus ring
+via `color-mix`, a leading icon, and a `/` key hint that turns into the clear
+button once there is text. Pressing `/` anywhere on the page focuses it.
+
+**Headline numbers moved to their own row** as four larger `.stat-lg` tiles:
+Total, Sent, Reply rate, Need follow-up. The follow-up tile is a button that
+filters to Ghosted, which let the amber banner above the table go. Same
+information, one less stacked alert.
+
+**Pipeline band** got taller with fully rounded ends, and hovering a segment
+fades the others to 35% so the one under the pointer reads clearly. The legend
+became pill buttons carrying a dot, a label, a count and a percentage, matching
+the chip language used elsewhere.
+
+**Two bugs found while verifying.** `onKey` called `target.closest` on
+`event.target`, which is `document` when nothing is focused, so pressing `/`
+with no focus threw. And the PDF dialog framed a URL with no backend behind it,
+so it 404'd; under `USE_MOCKS` it now explains that the export endpoint arrives
+in Phase 2 instead of showing a browser error page.
+
+Contrast passes, no overflow at 375, 768, 1024 or 1440.
+
+---
+
 ## Applications: pipeline band, row click, PDF in place
 
 **Rows are clickable.** `openRow` ignores clicks that land on an `a`, `button`,
