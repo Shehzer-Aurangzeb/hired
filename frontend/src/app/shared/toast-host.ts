@@ -18,13 +18,16 @@ import { Icon } from './icon';
           class="card pointer-events-auto flex items-start gap-2 p-3 shadow-lg"
           [class.border-danger]="toast.kind === 'error'"
         >
-          <span [class]="toast.kind === 'error' ? 'text-danger' : 'text-accent'">
+          <span
+            class="mt-0.5 shrink-0"
+            [class]="toast.kind === 'error' ? 'text-danger' : 'text-accent'"
+          >
             <app-icon [name]="toast.kind === 'error' ? 'alert' : 'check'" />
           </span>
-          <p class="flex-1 text-[13px] leading-snug">{{ toast.message }}</p>
+          <p class="min-w-0 flex-1 text-[13px] leading-snug break-words">{{ toast.message }}</p>
           <button
             type="button"
-            class="text-fg-subtle hover:text-fg cursor-pointer"
+            class="text-fg-subtle hover:text-fg mt-0.5 shrink-0 cursor-pointer"
             (click)="toasts.dismiss(toast.id)"
             aria-label="Dismiss notification"
           >

@@ -222,11 +222,12 @@
           <button
             type="button"
             class="btn btn-outline !min-h-8"
+            [disabled]="gen.summarizing()"
             (click)="regenerateSummary()"
             title="Regenerate the summary without redoing bullet selection"
           >
-            <app-icon name="refresh" [size]="14" />
-            Summary
+            <app-icon name="refresh" [size]="14" [class.animate-spin]="gen.summarizing()" />
+            {{ gen.summarizing() ? 'Rewriting' : 'Summary' }}
           </button>
           <button
             type="button"

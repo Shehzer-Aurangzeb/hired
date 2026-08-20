@@ -17,6 +17,7 @@ export class GenerateService {
   readonly result = signal<GenerateResponse | null>(null);
   readonly generating = signal(false);
   readonly exporting = signal(false);
+  readonly summarizing = signal(false);
   readonly lastRequest = signal<GenerateRequest | null>(null);
 
   generate(body: GenerateRequest): Observable<GenerateResponse> {
@@ -33,6 +34,7 @@ export class GenerateService {
   /** Re-rolls the summary only, so a good bullet selection is not thrown away. */
   regenerateSummary(titleVariant: string): Observable<{ summary: string }> {
     const jd = this.lastRequest()?.jd_text ?? '';
+    this.summarizing.set(true);
     return this.http
       .post<{ summary: string }>(`${API}/api/generate/summary`, {
         jd_text: jd,
@@ -45,6 +47,7 @@ export class GenerateService {
             this.result.set({ ...current, cv: { ...current.cv, summary } });
           }
         }),
+        finalize(() => this.summarizing.set(false)),
       );
   }
 
