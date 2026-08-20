@@ -391,6 +391,49 @@ round trip all behave.
 
 ---
 
+## Application detail
+
+Brought in line with the other two pages, and two pieces of duplicated logic
+were pulled out rather than copied a third time.
+
+**`core/pipeline.ts`** now owns the stage list, the validated segment colours,
+`FOLLOW_UP_DAYS`, `inSegment`, `waitingDays`, `statusClass` and `scoreTone`. The
+list page and the detail page both import it, so the ghosted rule and the
+palette cannot drift apart.
+
+**`core/coverage.ts`** owns `computeCoverage`. It takes plain strings rather
+than a CV shape, so the generate page (a fresh `GeneratedCv`) and the detail
+page (a saved `Application`) can both call it.
+
+**Headline numbers**: Fit score, Requirements backed, Bullets sent, Days out.
+The Days out tile turns amber when the record has gone quiet, reusing the same
+`inSegment(a, 'ghosted')` rule as the list.
+
+**Status is a track, not a chip row.** Generated → Applied → Replied →
+Interview → Offer reads left to right with completed steps ticked and the
+current one in ink. Rejected sits apart on the right as a terminal state, and
+selecting it takes the record off the track entirely.
+
+**"What they asked for"** shows the posting's requirements against the bullets
+that actually printed, green when a bullet named it and red when nothing did.
+
+Deliberately two states here, not the three on the generate page. The record
+stores the bullets and the summary but not the skills line, so "on the page but
+unbacked" cannot be distinguished from "absent". The caption says exactly what
+was matched rather than implying a comparison the data cannot support. Storing
+`skills_lines` on the record would buy the third state, and is not worth a
+column that only this display would read.
+
+**Notes** gained a save indicator in the card header: "Saves when you click
+away", then "Saving…", then "Saved".
+
+Verified: the status track moves through every stage and off it, notes save,
+the generate page coverage counter still reacts to deselection after the
+extraction, the list still renders every status. Contrast passes, no overflow
+at 375, 768, 1024 or 1440.
+
+---
+
 ## Applications: polish pass
 
 **Two clear crosses in the search field.** WebKit draws its own on

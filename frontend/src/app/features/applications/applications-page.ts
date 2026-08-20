@@ -14,49 +14,18 @@ import { Router, RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
 
 import { ApplicationsService } from '../../core/applications.service';
-import { ago, daysSince } from '../../core/dates';
+import { ago } from '../../core/dates';
 import { Application, ApplicationStatus } from '../../core/models';
+import {
+  SEGMENTS,
+  Segment,
+  inSegment,
+  scoreTone,
+  statusClass,
+  waitingDays,
+} from '../../core/pipeline';
 import { ToastService } from '../../core/toast.service';
 import { Icon } from '../../shared/icon';
-
-/** Sitting in Applied this long with no reply means it needs chasing. */
-const FOLLOW_UP_DAYS = 10;
-
-/**
- * Segments double as the filter, so the legend is the only status control on the
- * page. `waiting` and `ghosted` are both status 'applied'; the split is derived
- * from how long it has been sitting.
- */
-export type Segment =
-  | 'generated'
-  | 'waiting'
-  | 'replied'
-  | 'interview'
-  | 'offer'
-  | 'ghosted'
-  | 'rejected';
-
-export type Filter = 'all' | Segment;
-
-/**
- * Validated with the dataviz palette checker against the beige card surface
- * (#faf7f0): lightness band, CVD separation, normal-vision floor and 3:1
- * contrast all pass in this exact left-to-right order. Reordering can break the
- * adjacent-pair checks, so re-run the validator if you change it.
- *
- * ponytail: ghosted is intentionally below the chroma floor. "Nothing happened"
- * should read as absence of colour, and the legend carries the label anyway.
- * `generated` has no hue at all; it is hatched, so no seventh colour is needed.
- */
-const SEGMENTS: { key: Segment; label: string; color: string; hatched?: boolean }[] = [
-  { key: 'generated', label: 'Not sent', color: '#b9ae95', hatched: true },
-  { key: 'waiting', label: 'Waiting', color: '#3a6ea8' },
-  { key: 'replied', label: 'Replied', color: '#a86a08' },
-  { key: 'interview', label: 'Interview', color: '#0a7f66' },
-  { key: 'offer', label: 'Offer', color: '#6b4fa8' },
-  { key: 'ghosted', label: 'Ghosted', color: '#8b8378' },
-  { key: 'rejected', label: 'Rejected', color: '#b23b2c' },
-];
 
 @Component({
   selector: 'app-applications-page',
@@ -79,7 +48,7 @@ export class ApplicationsPage {
     'offer',
   ];
   readonly query = signal('');
-  readonly filter = signal<Filter>('all');
+  readonly filter = signal<'all' | Segment>('all');
   readonly saving = signal<number | null>(null);
   /** Which band segment the pointer is over, so the others can recede. */
   readonly hovered = signal<Segment | null>(null);
@@ -156,19 +125,8 @@ export class ApplicationsPage {
       });
   });
 
-  inSegment(application: Application, segment: Segment): boolean {
-    if (segment === 'ghosted') {
-      return application.status === 'applied' && this.waitingDays(application) > FOLLOW_UP_DAYS;
-    }
-    if (segment === 'waiting') {
-      return application.status === 'applied' && this.waitingDays(application) <= FOLLOW_UP_DAYS;
-    }
-    return application.status === segment;
-  }
-
-  waitingDays(application: Application): number {
-    return Math.floor(daysSince(application.applied_at));
-  }
+  readonly inSegment = inSegment;
+  readonly waitingDays = waitingDays;
 
   toggleFilter(segment: Segment): void {
     this.filter.update((current) => (current === segment ? 'all' : segment));
@@ -199,23 +157,6 @@ export class ApplicationsPage {
 
   readonly ago = ago;
 
-  statusClass(status: ApplicationStatus): string {
-    switch (status) {
-      case 'offer':
-      case 'interview':
-        return 'bg-accent-soft text-accent';
-      case 'replied':
-        return 'bg-warn-soft text-warn';
-      case 'rejected':
-        return 'bg-danger-soft text-danger';
-      default:
-        return 'bg-surface text-fg-muted';
-    }
-  }
-
-  scoreTone(score: number): string {
-    if (score >= 8) return 'text-accent';
-    if (score >= 6) return 'text-warn';
-    return 'text-danger';
-  }
+  readonly statusClass = statusClass;
+  readonly scoreTone = scoreTone;
 }

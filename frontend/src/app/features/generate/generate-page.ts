@@ -12,7 +12,8 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { USE_MOCKS } from '../../core/api';
 import { GenerateService } from '../../core/generate.service';
 import { MOCK_JD_TEXT } from '../../core/mock-data';
-import { CvSection, GeneratedCv, RequiredSkill } from '../../core/models';
+import { Coverage, computeCoverage } from '../../core/coverage';
+import { CvSection, GeneratedCv } from '../../core/models';
 import { ProfileService } from '../../core/profile.service';
 import { ToastService } from '../../core/toast.service';
 import { Icon } from '../../shared/icon';
@@ -20,16 +21,6 @@ import { BulletSelector } from './bullet-selector';
 
 /** Rough one-page budget in characters. The server render loop is the real judge. */
 const PAGE_BUDGET = 3000;
-
-export interface Coverage {
-  name: string;
-  importance: number;
-  required: boolean;
-  /** Appears anywhere on the page, skills line included. What an ATS scan sees. */
-  covered: boolean;
-  /** Appears in a bullet or a project stack. What you can defend in an interview. */
-  evidenced: boolean;
-}
 
 @Component({
   selector: 'app-generate-page',
@@ -111,59 +102,22 @@ export class GeneratePage {
     return Math.round(((cv.summary.length + body) / PAGE_BUDGET) * 100);
   });
 
-  /**
-   * What the posting asked for, against what the page actually says. Two levels,
-   * because they answer different questions:
-   *
-   *   covered   somewhere on the page: skills line, stack, title, summary. What a
-   *             keyword scan sees.
-   *   evidenced named inside a bullet. What you can point at when asked to
-   *             describe the work.
-   *
-   * A skill that is listed but not evidenced is the interview trap this whole
-   * tool exists to avoid, so it gets its own colour rather than counting as a hit.
-   *
-   * ponytail: case-insensitive substring match. "React" hits "React Native", and
-   * "ReactJS" in a posting misses "React" on the page. The synonym map planned
-   * for `profile/skills_taxonomy.md` is the upgrade path.
-   */
+  /** Bullets carry the evidence; the skills line and stacks only make it visible. */
   readonly coverage = computed<Coverage[]>(() => {
     const jd = this.gen.result()?.parsed_jd;
     const cv = this.finalCv();
     if (!jd || !cv) {
       return [];
     }
-    // Bullets only. A stack line is a list, same as the skills line, and listing
-    // a technology is not the same as having a sentence that describes using it.
-    const evidence = cv.sections
-      .flatMap((s) => s.bullets.map((b) => b.text))
-      .join(' ')
-      .toLowerCase();
+    const bullets = cv.sections.flatMap((s) => s.bullets.map((b) => b.text)).join(' ');
     const page = [
-      evidence,
+      bullets,
       cv.title,
       cv.summary,
       ...cv.skills_lines.flatMap((l) => l.items),
       ...cv.sections.flatMap((s) => s.stack),
-    ]
-      .join(' ')
-      .toLowerCase();
-
-    const check = (skill: RequiredSkill, required: boolean): Coverage => {
-      const needle = skill.name.toLowerCase();
-      return {
-        name: skill.name,
-        importance: skill.importance,
-        required,
-        covered: page.includes(needle),
-        evidenced: evidence.includes(needle),
-      };
-    };
-
-    return [
-      ...jd.required_skills.map((s) => check(s, true)),
-      ...jd.preferred_skills.map((s) => check(s, false)),
-    ];
+    ].join(' ');
+    return computeCoverage(jd, bullets, page);
   });
 
   readonly requiredCovered = computed(() => {

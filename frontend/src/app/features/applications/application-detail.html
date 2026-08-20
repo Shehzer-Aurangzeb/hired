@@ -1,32 +1,34 @@
-<div class="mx-auto max-w-5xl p-4">
+<div class="mx-auto max-w-6xl p-4">
   <a routerLink="/applications" class="btn btn-ghost mb-3 !px-2">
     <app-icon name="arrow-left" [size]="15" />
     Applications
   </a>
 
-  @if (application() === undefined) {
+  @if (record() === undefined) {
     <div class="card space-y-3 p-4" aria-busy="true">
-      <div class="bg-surface h-5 w-56 animate-pulse rounded"></div>
+      <div class="bg-surface h-6 w-56 animate-pulse rounded"></div>
       <div class="bg-surface h-3 w-full animate-pulse rounded"></div>
       <div class="bg-surface h-3 w-3/4 animate-pulse rounded"></div>
     </div>
-  } @else if (application(); as application) {
-    <header class="mb-4 flex flex-wrap items-start gap-4">
+  } @else if (record(); as application) {
+    <!-- ---------- header ---------- -->
+    <header class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-3">
       <div class="min-w-0">
-        <h1 class="text-lg font-semibold">{{ application.company }}</h1>
-        <p class="text-fg-muted text-[13px]">
+        <h1 class="flex items-center gap-2 text-xl font-semibold tracking-tight">
+          <span
+            class="size-2.5 shrink-0 rounded-full"
+            [style.background]="segmentColor()"
+            aria-hidden="true"
+          ></span>
+          {{ application.company }}
+        </h1>
+        <p class="text-fg-muted mt-0.5 text-[13px]">
           {{ application.role }}
           @if (application.source) {
             · via {{ application.source }}
           }
+          · <span class="mono">{{ application.title_variant }}</span> variant
         </p>
-      </div>
-
-      <div class="text-right">
-        <p class="tabular text-2xl leading-none font-semibold" [class]="scoreTone(application.fit_score)">
-          {{ application.fit_score }}<span class="text-fg-subtle text-sm">/10</span>
-        </p>
-        <p class="text-fg-subtle text-[10px] tracking-wide uppercase">Fit</p>
       </div>
 
       <div class="ml-auto flex gap-2">
@@ -37,43 +39,112 @@
         <a
           [href]="pdfUrl(application.id)"
           [attr.download]="application.filename"
-          class="btn btn-outline"
+          class="btn btn-outline !px-2.5"
           title="Download the file"
+          aria-label="Download the PDF"
         >
           <app-icon name="download" [size]="15" />
         </a>
       </div>
     </header>
 
-    <!-- status -->
-    <section class="card mb-3 flex flex-wrap items-center gap-2 p-3">
-      <span class="section-title">Status</span>
-      <div class="flex flex-wrap gap-1" role="group" aria-label="Set application status">
-        @for (status of statuses; track status) {
-          <button
-            type="button"
-            class="chip hover:border-line-strong cursor-pointer capitalize disabled:cursor-not-allowed"
-            [class]="application.status === status ? statusClass(status) + ' border-transparent' : ''"
-            [attr.aria-pressed]="application.status === status"
-            [disabled]="saving()"
-            (click)="setStatus(status)"
-          >
-            {{ status }}
-          </button>
-        }
+    <!-- ---------- headline numbers ---------- -->
+    <div class="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div class="stat-lg" title="The selector's judgement of the match when this was generated.">
+        <p class="stat-value" [class]="scoreTone(application.fit_score)">
+          {{ application.fit_score }}<span class="text-fg-subtle text-sm font-normal">/10</span>
+        </p>
+        <p class="stat-label">Fit score</p>
       </div>
-      @if (application.applied_at) {
-        <span
-          class="text-fg-subtle ml-auto text-[11px]"
-          [title]="application.applied_at.slice(0, 10)"
+      <div class="stat-lg" title="Required skills from the posting that a bullet on the page named.">
+        <p class="stat-value" [class]="backed().hit === backed().total ? 'text-accent' : 'text-warn'">
+          {{ backed().hit }}<span class="text-fg-subtle text-sm font-normal">/{{ backed().total }}</span>
+        </p>
+        <p class="stat-label">Requirements backed</p>
+      </div>
+      <div class="stat-lg">
+        <p class="stat-value text-fg">{{ application.selected_bullets.length }}</p>
+        <p class="stat-label">Bullets sent</p>
+      </div>
+      <div
+        class="stat-lg"
+        [class]="ghosted() ? 'border-warn/50 bg-warn-soft' : ''"
+        [title]="application.applied_at ? 'Days since it was sent.' : 'Not sent yet.'"
+      >
+        <p class="stat-value" [class]="ghosted() ? 'text-warn' : 'text-fg'">
+          {{ daysOut() === null ? '—' : daysOut() }}
+        </p>
+        <p class="stat-label flex items-center gap-1">
+          @if (ghosted()) {
+            <app-icon name="alert" [size]="11" class="text-warn" />
+          }
+          Days out
+        </p>
+      </div>
+    </div>
+
+    <!-- ---------- status track ---------- -->
+    <section class="card mb-4 overflow-hidden">
+      <header class="card-head">
+        <h2 class="section-title">Status</h2>
+        @if (application.applied_at) {
+          <span class="text-fg-subtle ml-auto text-[11px]" [title]="application.applied_at.slice(0, 10)">
+            Applied {{ ago(application.applied_at) }}
+          </span>
+        }
+      </header>
+
+      <div class="flex flex-wrap items-center gap-2 p-3.5">
+        <!-- Progression reads left to right; rejected is a terminal state, not a step. -->
+        <div class="flex flex-wrap items-center gap-1" role="group" aria-label="Move through the pipeline">
+          @for (status of track; track status; let i = $index) {
+            @if (i > 0) {
+              <app-icon
+                name="chevron-right"
+                [size]="13"
+                [class]="i <= stage() ? 'text-fg-subtle' : 'text-line'"
+              />
+            }
+            <button
+              type="button"
+              class="cursor-pointer rounded-full border px-2.5 py-1 text-[12px] capitalize transition-colors duration-150 disabled:cursor-not-allowed"
+              [class]="
+                application.status === status
+                  ? 'border-ink bg-ink text-ink-fg font-semibold'
+                  : i < stage()
+                    ? 'border-line-strong bg-surface text-fg-muted'
+                    : 'border-line text-fg-subtle hover:border-line-strong hover:text-fg'
+              "
+              [attr.aria-current]="application.status === status ? 'step' : null"
+              [disabled]="saving()"
+              (click)="setStatus(status)"
+            >
+              @if (i < stage()) {
+                <app-icon name="check" [size]="11" class="mr-0.5 inline align-[-1px]" />
+              }
+              {{ status }}
+            </button>
+          }
+        </div>
+
+        <button
+          type="button"
+          class="ml-auto cursor-pointer rounded-full border px-2.5 py-1 text-[12px] capitalize transition-colors duration-150"
+          [class]="
+            application.status === 'rejected'
+              ? 'border-danger bg-danger-soft text-danger font-semibold'
+              : 'border-line text-fg-subtle hover:border-danger/50 hover:text-danger'
+          "
+          [disabled]="saving()"
+          (click)="setStatus('rejected')"
         >
-          Applied {{ ago(application.applied_at) }}
-        </span>
-      }
+          Rejected
+        </button>
+      </div>
     </section>
 
     <div class="grid gap-3 lg:grid-cols-2 lg:items-start">
-      <!-- what the CV said -->
+      <!-- ---------- what was sent ---------- -->
       <section class="card overflow-hidden">
         <header class="card-head">
           <h2 class="section-title shrink-0">What was sent</h2>
@@ -90,7 +161,7 @@
 
           <!-- The text as printed, stored on the record. Joining ids against the
                live profile would show today's wording, not what they read. -->
-          @for (group of groupedBullets(application); track group.project) {
+          @for (group of groups(); track group.project) {
             <p class="mt-2.5 text-[12px] font-semibold">{{ group.project }}</p>
             <ul class="mt-1 flex flex-col gap-1.5">
               @for (bullet of group.bullets; track bullet.id) {
@@ -103,97 +174,147 @@
           } @empty {
             <p class="text-fg-subtle text-[12px]">No bullet text stored on this record.</p>
           }
-
-          <p class="text-fg-subtle mt-3.5 text-[11px]">
-            Title variant: <span class="mono">{{ application.title_variant }}</span>
-          </p>
         </div>
       </section>
 
-      <!-- why the score -->
-      <section class="card overflow-hidden">
-        <header class="card-head">
-          <h2 class="section-title">Fit reasoning</h2>
-        </header>
-        <div class="p-3.5">
-        <p class="text-[13px] leading-relaxed">{{ application.fit_reasoning }}</p>
-
-        @if (application.gaps.length) {
-          <h3 class="text-fg-muted mt-3 mb-1 text-[11px] tracking-wide uppercase">Gaps</h3>
-          <p class="flex flex-wrap gap-1">
-            @for (gap of application.gaps; track gap) {
-              <span class="chip border-warn/40 text-warn">{{ gap }}</span>
-            }
-          </p>
-        }
-
-        <h3 class="text-fg-muted mt-3 mb-1 text-[11px] tracking-wide uppercase">
-          Required by the posting
-        </h3>
-        <p class="flex flex-wrap gap-1">
-          @for (skill of application.jd_parsed.required_skills; track skill.name) {
-            <span class="chip" [class.border-line-strong]="skill.importance === 3">
-              {{ skill.name }}
+      <div class="flex flex-col gap-3">
+        <!-- ---------- what they asked for ---------- -->
+        <section class="card overflow-hidden">
+          <header class="card-head">
+            <h2 class="section-title">What they asked for</h2>
+            <span
+              class="badge ml-auto"
+              [class]="backed().hit === backed().total ? 'bg-accent-soft text-accent' : 'bg-warn-soft text-warn'"
+            >
+              {{ backed().hit }} of {{ backed().total }} backed
             </span>
-          }
-        </p>
-
-        <h3 class="text-fg-muted mt-3.5 mb-1 text-[11px] tracking-wide uppercase">Notes</h3>
-        <textarea
-          rows="3"
-          class="field resize-y font-normal"
-          placeholder="Recruiter name, call outcome, anything to remember."
-          [value]="application.notes ?? ''"
-          [disabled]="saving()"
-          (blur)="saveNotes(application, $any($event.target).value)"
-        ></textarea>
-        <p class="text-fg-subtle mt-1 text-[11px]">Saves when you click away.</p>
-        </div>
-      </section>
-
-      <!-- the PDF, in place. Loaded only once opened. -->
-      <dialog
-        #pdfDialog
-        class="rounded-card border-line bg-raised m-auto h-[92dvh] w-[min(60rem,94vw)] border p-0 backdrop:bg-black/50"
-        (close)="viewing.set(false)"
-      >
-        <div class="card-head sticky top-0">
-          <h2 class="section-title truncate">{{ application.filename }}</h2>
-          <button
-            type="button"
-            class="btn btn-ghost ml-auto !min-h-7 !px-2"
-            (click)="closePdf(pdfDialog)"
-            aria-label="Close the PDF"
-          >
-            <app-icon name="x" [size]="15" />
-          </button>
-        </div>
-        @if (mocked) {
-          <div class="text-fg-muted flex h-[calc(92dvh-2.5rem)] flex-col items-center justify-center gap-2 p-6 text-center">
-            <app-icon name="file-text" [size]="24" class="text-fg-subtle" />
-            <p class="text-[13px]">No PDF yet.</p>
-            <p class="text-fg-subtle max-w-sm text-[12px]">
-              The export endpoint arrives with Phase 2. This dialog frames the real file once it
-              does.
+          </header>
+          <div class="p-3.5">
+            <ul class="flex flex-wrap gap-1.5">
+              @for (item of coverage(); track item.name) {
+                <li
+                  class="chip font-medium"
+                  [class]="
+                    item.evidenced
+                      ? 'border-accent/50 bg-accent-soft text-accent'
+                      : item.required
+                        ? 'border-danger/50 bg-danger-soft text-danger'
+                        : 'bg-surface text-fg-subtle'
+                  "
+                  [title]="
+                    (item.required ? 'Required' : 'Preferred') +
+                    (item.evidenced ? '. A bullet on the page named it.' : '. No bullet named it.')
+                  "
+                >
+                  <app-icon [name]="item.evidenced ? 'check' : 'x'" [size]="12" />
+                  {{ item.name }}
+                  @if (!item.required) {
+                    <span class="text-fg-subtle text-[10px]">pref</span>
+                  }
+                </li>
+              }
+            </ul>
+            <p class="text-fg-subtle mt-2.5 text-[11px]">
+              Matched against the bullet text stored on this record. The skills line is not saved,
+              so this says whether a bullet backed the skill, not whether the word appeared anywhere.
             </p>
           </div>
-        } @else if (viewing()) {
-          <iframe
-            [src]="safePdfUrl(application.id)"
-            class="h-[calc(92dvh-2.5rem)] w-full border-0"
-            [title]="'PDF preview of ' + application.filename"
-          ></iframe>
-        }
-      </dialog>
+        </section>
 
-      <!-- the posting -->
-      <section class="card overflow-hidden lg:col-span-2">
-        <header class="card-head">
-          <h2 class="section-title">Job description</h2>
-        </header>
-        <pre class="text-fg-muted max-h-80 overflow-y-auto p-3.5 text-[12px] leading-relaxed whitespace-pre-wrap">{{ application.jd_text }}</pre>
-      </section>
+        <!-- ---------- why the score ---------- -->
+        <section class="card overflow-hidden">
+          <header class="card-head">
+            <h2 class="section-title">Why this score</h2>
+          </header>
+          <div class="p-3.5">
+            <p class="text-[13px] leading-relaxed">{{ application.fit_reasoning }}</p>
+            @if (application.gaps.length) {
+              <p class="mt-2.5 flex flex-wrap items-center gap-1.5">
+                <span class="text-fg-muted text-[11px] font-medium">Gaps</span>
+                @for (gap of application.gaps; track gap) {
+                  <span class="chip border-warn/50 bg-warn-soft text-warn font-medium">{{ gap }}</span>
+                }
+              </p>
+            }
+          </div>
+        </section>
+
+        <!-- ---------- notes ---------- -->
+        <section class="card overflow-hidden">
+          <header class="card-head">
+            <h2 class="section-title">Notes</h2>
+            <span class="text-fg-subtle ml-auto text-[11px]">
+              @if (saving()) {
+                Saving…
+              } @else if (savedAt()) {
+                Saved
+              } @else {
+                Saves when you click away
+              }
+            </span>
+          </header>
+          <div class="p-3.5">
+            <textarea
+              rows="4"
+              class="field resize-y font-normal"
+              placeholder="Recruiter name, call outcome, anything worth remembering before the next round."
+              [value]="application.notes ?? ''"
+              [disabled]="saving()"
+              (blur)="saveNotes(application, $any($event.target).value)"
+            ></textarea>
+          </div>
+        </section>
+      </div>
     </div>
+
+    <!-- ---------- the posting ---------- -->
+    <section class="card mt-3 overflow-hidden">
+      <header class="card-head">
+        <h2 class="section-title">Job description</h2>
+        <span class="text-fg-subtle ml-auto text-[11px]">
+          {{ application.jd_parsed.seniority }} · {{ application.jd_parsed.location }} ·
+          {{ application.jd_parsed.work_mode }}
+          @if (application.jd_parsed.years_required) {
+            · {{ application.jd_parsed.years_required }}+ years
+          }
+        </span>
+      </header>
+      <pre class="text-fg-muted max-h-96 overflow-y-auto p-3.5 text-[12px] leading-relaxed whitespace-pre-wrap">{{ application.jd_text }}</pre>
+    </section>
+
+    <!-- the PDF, in place. Loaded only once opened. -->
+    <dialog
+      #pdfDialog
+      class="rounded-card border-line bg-raised m-auto h-[92dvh] w-[min(60rem,94vw)] border p-0 backdrop:bg-black/50"
+      (close)="viewing.set(false)"
+    >
+      <div class="card-head sticky top-0">
+        <h2 class="section-title truncate">{{ application.filename }}</h2>
+        <button
+          type="button"
+          class="btn btn-ghost ml-auto !min-h-7 !px-2"
+          (click)="closePdf(pdfDialog)"
+          aria-label="Close the PDF"
+        >
+          <app-icon name="x" [size]="15" />
+        </button>
+      </div>
+      @if (mocked) {
+        <div class="text-fg-muted flex h-[calc(92dvh-2.5rem)] flex-col items-center justify-center gap-2 p-6 text-center">
+          <app-icon name="file-text" [size]="24" class="text-fg-subtle" />
+          <p class="text-[13px]">No PDF yet.</p>
+          <p class="text-fg-subtle max-w-sm text-[12px]">
+            The export endpoint arrives with Phase 2. This dialog frames the real file once it does.
+          </p>
+        </div>
+      } @else if (viewing()) {
+        <iframe
+          [src]="safePdfUrl(application.id)"
+          class="h-[calc(92dvh-2.5rem)] w-full border-0"
+          [title]="'PDF preview of ' + application.filename"
+        ></iframe>
+      }
+    </dialog>
   } @else {
     <div class="card text-fg-muted px-6 py-16 text-center">
       <p class="text-[13px]">That application does not exist.</p>
