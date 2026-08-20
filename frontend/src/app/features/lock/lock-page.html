@@ -1,0 +1,169 @@
+<div class="grid min-h-dvh lg:grid-cols-[1.1fr_1fr]">
+  <!-- ============ what this is ============ -->
+  <section class="border-line flex flex-col justify-center gap-8 border-b p-8 sm:p-12 lg:border-r lg:border-b-0">
+    <div>
+      <p class="text-fg flex items-center gap-2 text-[15px] font-semibold tracking-tight">
+        <span class="bg-ink text-ink-fg flex size-6 items-center justify-center rounded-md text-[13px] font-bold">
+          h
+        </span>
+        hired
+      </p>
+
+      <h1 class="mt-6 max-w-lg text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
+        A job posting in. A one-page CV out. Nothing invented on the way.
+      </h1>
+      <p class="text-fg-muted mt-4 max-w-md text-[14px] leading-relaxed">
+        hired tailors a CV to a posting by picking from bullets you wrote yourself, then checks
+        every claim against the boundary you set for that project.
+      </p>
+    </div>
+
+    <ul class="flex max-w-md flex-col gap-4">
+      <li class="flex gap-3">
+        <span class="bg-accent-soft text-accent mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md">
+          <app-icon name="check" [size]="14" />
+        </span>
+        <div>
+          <p class="text-[13px] font-medium">Bullet ids, not prose</p>
+          <p class="text-fg-muted text-[12px] leading-relaxed">
+            The model returns ids from a fixed pool. It cannot write a claim that is not already in
+            your profile.
+          </p>
+        </div>
+      </li>
+      <li class="flex gap-3">
+        <span class="bg-warn-soft text-warn mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md">
+          <app-icon name="alert" [size]="14" />
+        </span>
+        <div>
+          <p class="text-[13px] font-medium">Gaps surfaced, never papered over</p>
+          <p class="text-fg-muted text-[12px] leading-relaxed">
+            Anything the posting wants that no bullet covers comes back as a gap, not a stretched
+            sentence.
+          </p>
+        </div>
+      </li>
+      <li class="flex gap-3">
+        <span class="bg-surface text-fg-muted mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md">
+          <app-icon name="file-text" [size]="14" />
+        </span>
+        <div>
+          <p class="text-[13px] font-medium">One page, measured</p>
+          <p class="text-fg-muted text-[12px] leading-relaxed">
+            The renderer prints, counts pages and drops the lowest-priority bullet until it fits.
+          </p>
+        </div>
+      </li>
+    </ul>
+
+    <!-- Abstract on purpose. A realistic-looking CV here would be a fake document. -->
+    <div class="hidden max-w-md items-end gap-3 sm:flex" aria-hidden="true">
+      <div class="border-line bg-surface flex-1 rounded-md border p-3">
+        <p class="text-fg-subtle mb-2 text-[10px] tracking-wide uppercase">Posting</p>
+        <div class="flex flex-col gap-1.5">
+          <span class="bg-line-strong/50 block h-1.5 w-full rounded-full"></span>
+          <span class="bg-line-strong/50 block h-1.5 w-11/12 rounded-full"></span>
+          <span class="bg-line-strong/50 block h-1.5 w-4/5 rounded-full"></span>
+          <span class="bg-line-strong/50 block h-1.5 w-full rounded-full"></span>
+        </div>
+      </div>
+      <app-icon name="chevron-right" [size]="18" class="text-fg-subtle mb-6 shrink-0" />
+      <div class="border-line-strong flex-1 rounded-md border bg-white p-3 shadow-sm">
+        <p class="mb-2 text-[10px] tracking-wide text-slate-400 uppercase">CV</p>
+        <div class="flex flex-col gap-1.5">
+          <span class="block h-2 w-1/2 rounded-full bg-slate-800"></span>
+          <span class="block h-1.5 w-3/4 rounded-full bg-slate-300"></span>
+          <span class="mt-1 block h-1.5 w-full rounded-full bg-slate-200"></span>
+          <span class="block h-1.5 w-11/12 rounded-full bg-slate-200"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ the gate ============ -->
+  <section class="flex flex-col justify-center p-8 sm:p-12">
+    <div class="mx-auto w-full max-w-sm">
+      <span class="border-line bg-surface text-fg-muted mb-4 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]">
+        <app-icon name="lock" [size]="12" />
+        Private instance
+      </span>
+
+      <h2 class="text-xl font-semibold tracking-tight">Sign in</h2>
+      <p class="text-fg-muted mt-1 text-[13px]">
+        One password guards the whole instance. There are no accounts, because there is only ever
+        one person in here.
+      </p>
+
+      <form class="mt-6" [formGroup]="form" (ngSubmit)="submit()">
+        <label class="label" for="password">Password</label>
+        <div class="relative">
+          <input
+            #password
+            id="password"
+            formControlName="password"
+            [type]="reveal() ? 'text' : 'password'"
+            class="field !py-2.5 pr-10"
+            autocomplete="current-password"
+            [attr.aria-invalid]="!!error()"
+            aria-describedby="password-error"
+          />
+          <button
+            type="button"
+            class="text-fg-subtle hover:text-fg absolute top-1/2 right-2.5 -translate-y-1/2 cursor-pointer"
+            (click)="reveal.set(!reveal())"
+            [attr.aria-label]="reveal() ? 'Hide password' : 'Show password'"
+            [attr.aria-pressed]="reveal()"
+          >
+            <app-icon [name]="reveal() ? 'eye-off' : 'eye'" [size]="15" />
+          </button>
+        </div>
+
+        <div id="password-error" aria-live="polite">
+          @if (error()) {
+            <p
+              class="border-danger/50 bg-danger-soft text-danger rounded-card mt-2.5 flex items-start gap-2 border px-3 py-2 text-[12px]"
+              role="alert"
+            >
+              <app-icon name="alert" [size]="14" class="mt-0.5 shrink-0" />
+              <span>
+                {{ error() }}
+                @if (lockedFor() > 0) {
+                  <br />
+                  Try again in {{ lockedFor() }}s.
+                }
+              </span>
+            </p>
+          }
+        </div>
+
+        <button
+          type="submit"
+          class="btn btn-primary mt-4 w-full"
+          [disabled]="busy() || lockedFor() > 0 || form.invalid"
+        >
+          @if (busy()) {
+            <app-icon name="refresh" [size]="15" class="animate-spin" />
+            Checking
+          } @else if (lockedFor() > 0) {
+            Locked for {{ lockedFor() }}s
+          } @else {
+            <app-icon name="lock" [size]="15" />
+            Unlock
+          }
+        </button>
+      </form>
+
+      @if (demoPassword) {
+        <p class="border-line bg-surface text-fg-muted rounded-card mt-4 px-3 py-2 text-[12px]">
+          Demo build. The password is <code class="mono text-fg">{{ demoPassword }}</code
+          >. A real deployment hashes it server-side and this hint disappears.
+        </p>
+      }
+
+      <p class="text-fg-subtle mt-6 text-[11px] leading-relaxed">
+        The session is an httpOnly cookie, so the browser never holds anything readable by script.
+        Every API route refuses to answer without it.
+      </p>
+    </div>
+  </section>
+</div>

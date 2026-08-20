@@ -10,3 +10,9 @@ export const API = 'http://localhost:8000';
  * Flip to false as each backend route lands.
  */
 export const USE_MOCKS = true;
+
+/**
+ * Only used while USE_MOCKS is on. The real password is hashed in the database
+ * and never reaches the browser; this exists so the demo has something to type.
+ */
+export const MOCK_PASSWORD = 'hired';

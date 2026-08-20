@@ -13,11 +13,15 @@ export type IconName =
   | 'arrow-left'
   | 'refresh'
   | 'search'
-  | 'x';
+  | 'x'
+  | 'lock'
+  | 'log-out'
+  | 'eye'
+  | 'eye-off';
 
 /**
  * Inline SVG from the Lucide set, drawn with @switch.
- * ponytail: 13 icons do not justify a dependency, and inlining avoids the
+ * ponytail: 17 icons do not justify a dependency, and inlining avoids the
  * DomSanitizer dance that a path-map version would need.
  */
 @Component({
@@ -98,6 +102,25 @@ export type IconName =
         @case ('x') {
           <path d="M18 6 6 18" />
           <path d="m6 6 12 12" />
+        }
+        @case ('lock') {
+          <rect x="3" y="11" width="18" height="11" rx="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        }
+        @case ('log-out') {
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          <path d="m16 17 5-5-5-5" />
+          <path d="M21 12H9" />
+        }
+        @case ('eye') {
+          <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7" />
+          <circle cx="12" cy="12" r="3" />
+        }
+        @case ('eye-off') {
+          <path d="M10.7 5.1A9.9 9.9 0 0 1 12 5c6.4 0 10 7 10 7a15.5 15.5 0 0 1-3.4 4.2" />
+          <path d="M6.6 6.6A15.6 15.6 0 0 0 2 12s3.6 7 10 7a9.8 9.8 0 0 0 5.4-1.6" />
+          <path d="m2 2 20 20" />
+          <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
         }
       }
     </svg>

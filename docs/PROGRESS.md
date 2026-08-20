@@ -391,6 +391,61 @@ round trip all behave.
 
 ---
 
+## Lock screen and auth
+
+Three amendments to `BUILD_PLAN.md`, all deliberate: the app will be deployed
+rather than only run locally, it gets a password gate, and the profile moves
+into the database. The plan ruled out all three for v1.
+
+**Why the profile moves.** A container filesystem is ephemeral, so a
+`master.md` on disk vanishes on redeploy unless a volume is mounted. Durable
+storage is already needed for `applications.db`, so putting the profile there
+means one thing to persist instead of two. `parse()` only needs to take a
+string instead of a `Path`; the file stays the import and export format.
+
+**How auth works.** The password is hashed server-side. Login returns an
+httpOnly session cookie, so the browser never holds anything a script can read,
+and `withCredentials` carries it. On boot the app asks
+`GET /api/auth/session` once, shared between the guard and the shell.
+
+- `authGuard` on every route but `/login`, redirecting with `?next=` so a deep
+  link survives signing in.
+- `guestGuard` on `/login`, so an existing session does not sit on the gate.
+- `authInterceptor` runs first and turns any 401 into a sign-out plus a bounce.
+  Calls to `/api/auth/` are exempt, since a wrong password belongs in the form
+  rather than in a redirect.
+- The header, nav and sign-out only render once authenticated.
+
+**The screen itself** is the project's front door, so it explains the project.
+Two columns: what hired does and the three claims that make it interesting on
+the left, the gate on the right. The posting-to-CV illustration is abstract
+grey bars on purpose, since a realistic-looking CV there would be a fabricated
+document.
+
+States covered: idle, checking, wrong password, rate limited with a live
+countdown and a disabled button, and server unreachable, which is worth its own
+message because a free-tier host can take half a minute to wake.
+
+Reveal toggle, `autocomplete="current-password"`, `aria-invalid`, the error in
+an `aria-live` region with `role="alert"`, and focus returned to the field on
+failure.
+
+**Mocked routes**: `GET /api/auth/session`, `POST /api/auth/login`,
+`POST /api/auth/logout`. Three misses trigger a 429 with `retry_after`, the
+same shape the backend will use. The demo password is `hired` and the hint on
+screen is behind `USE_MOCKS`.
+
+The mock session persists in `sessionStorage`. Module state reset on every
+reload, which signed you out on refresh; a real cookie would not. Lockout state
+is deliberately not persisted.
+
+Verified end to end: deep link redirects with `next`, login honours it, reload
+keeps the session, `/login` bounces an authenticated visitor to `/generate`,
+sign out clears the shell, three failures lock the form. Contrast passes on the
+lock screen and all four app routes, nothing overflows from 375 to 1440.
+
+---
+
 ## Application detail
 
 Brought in line with the other two pages, and two pieces of duplicated logic

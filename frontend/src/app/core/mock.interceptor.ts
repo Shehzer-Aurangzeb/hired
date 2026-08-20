@@ -1,13 +1,31 @@
 import { HttpErrorResponse, HttpInterceptorFn, HttpResponse } from '@angular/common/http';
 import { Observable, delay, of, throwError } from 'rxjs';
 
-import { USE_MOCKS } from './api';
+import { MOCK_PASSWORD, USE_MOCKS } from './api';
 import { Application } from './models';
 import { MOCK_APPLICATIONS, MOCK_GENERATE, mockGenerate } from './mock-data';
 
 // ponytail: module-level array, not a service. Mock state lives exactly as long
 // as the tab does, which is the point. Delete this file when the backend lands.
 let applications: Application[] = MOCK_APPLICATIONS.map((a) => ({ ...a }));
+
+// The real session is an httpOnly cookie and survives a reload, so the stand-in
+// has to as well or every refresh signs you out. Lockout state is not persisted:
+// a page reload clearing it matches nothing real, but it keeps the demo usable.
+const SESSION_KEY = 'hired-mock-session';
+let failures = 0;
+
+function signedIn(): boolean {
+  return sessionStorage.getItem(SESSION_KEY) === '1';
+}
+
+function setSignedIn(value: boolean): void {
+  if (value) {
+    sessionStorage.setItem(SESSION_KEY, '1');
+  } else {
+    sessionStorage.removeItem(SESSION_KEY);
+  }
+}
 
 /**
  * ?mock=<name> switches fixtures, so the states the happy path never reaches can
@@ -41,6 +59,31 @@ export const mockInterceptor: HttpInterceptorFn = (req, next) => {
 
 function route(method: string, path: string, body: unknown): Observable<HttpResponse<unknown>> | null {
   const idMatch = /^\/api\/applications\/(\d+)$/.exec(path);
+
+  if (method === 'GET' && path === '/api/auth/session') {
+    return respond({ authenticated: signedIn() }, 250);
+  }
+
+  if (method === 'POST' && path === '/api/auth/login') {
+    // Three misses and the real backend will rate limit, so the mock does too.
+    if (failures >= 3) {
+      return failWith(429, 'Too many attempts. Wait a moment before trying again.', path, {
+        retry_after: 30,
+      });
+    }
+    if ((body as { password: string }).password === MOCK_PASSWORD) {
+      setSignedIn(true);
+      failures = 0;
+      return respond({ authenticated: true }, 600);
+    }
+    failures += 1;
+    return failWith(401, 'That password is not right.', path);
+  }
+
+  if (method === 'POST' && path === '/api/auth/logout') {
+    setSignedIn(false);
+    return respond({ authenticated: false }, 150);
+  }
 
   if (method === 'POST' && path === '/api/generate') {
     if (scenario() === 'error') {
@@ -110,7 +153,16 @@ function notFound(path: string): Observable<never> {
 }
 
 function fail(status: number, detail: string, path: string): Observable<never> {
+  return failWith(status, detail, path);
+}
+
+function failWith(
+  status: number,
+  detail: string,
+  path: string,
+  extra: Record<string, unknown> = {},
+): Observable<never> {
   return throwError(
-    () => new HttpErrorResponse({ status, url: path, error: { detail } }),
+    () => new HttpErrorResponse({ status, url: path, error: { detail, ...extra } }),
   ).pipe(delay(400)) as Observable<never>;
 }

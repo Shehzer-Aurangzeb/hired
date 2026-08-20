@@ -1,6 +1,7 @@
-import { Component } from '@angular/core';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Component, inject } from '@angular/core';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
+import { AuthService } from './core/auth.service';
 import { Icon } from './shared/icon';
 import { ToastHost } from './shared/toast-host';
 
@@ -10,6 +11,13 @@ import { ToastHost } from './shared/toast-host';
   templateUrl: './app.html',
 })
 export class App {
+  readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+
+  signOut(): void {
+    this.auth.logout().subscribe(() => this.router.navigate(['/login']));
+  }
+
   readonly nav = [
     { path: '/generate', label: 'Generate', icon: 'sparkles' },
     { path: '/applications', label: 'Applications', icon: 'file-text' },

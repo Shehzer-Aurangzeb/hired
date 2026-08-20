@@ -5,9 +5,10 @@
   Skip to content
 </a>
 
-<header
-  class="border-line bg-raised sticky top-0 z-30 flex h-12 items-center gap-1 border-b px-3"
->
+@if (auth.authenticated()) {
+  <header
+    class="border-line bg-raised sticky top-0 z-30 flex h-12 items-center gap-1 border-b px-3"
+  >
   <!-- The wordmark is the first thing to go on a narrow screen. Labelled nav
        items matter more than branding, and the tab title still says hired. -->
   <span class="text-fg mr-3 hidden text-[15px] font-semibold tracking-tight sm:block">hired</span>
@@ -23,9 +24,14 @@
         {{ item.label }}
       </a>
     }
-  </nav>
+    </nav>
 
-</header>
+    <button type="button" class="btn btn-ghost ml-auto !min-h-8 !px-2" (click)="signOut()" title="Sign out">
+      <app-icon name="log-out" [size]="15" />
+      <span class="sr-only">Sign out</span>
+    </button>
+  </header>
+}
 
 <main id="main" tabindex="-1">
   <router-outlet />
