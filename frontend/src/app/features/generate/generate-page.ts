@@ -9,7 +9,9 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
+import { USE_MOCKS } from '../../core/api';
 import { GenerateService } from '../../core/generate.service';
+import { MOCK_JD_TEXT } from '../../core/mock-data';
 import { CvSection, GeneratedCv, RequiredSkill } from '../../core/models';
 import { ProfileService } from '../../core/profile.service';
 import { ToastService } from '../../core/toast.service';
@@ -51,6 +53,17 @@ export class GeneratePage {
     role: [''],
     title_variant: [''],
   });
+
+  constructor() {
+    // ?mock=<scenario> should show that state on load, not after you also paste
+    // text and press Generate. Guarded by USE_MOCKS, and the mock-data import
+    // breaks loudly when the fixtures are deleted, which is the cue to delete
+    // this block too.
+    if (USE_MOCKS && new URLSearchParams(location.search).has('mock') && !this.gen.result()) {
+      this.form.patchValue({ jd_text: MOCK_JD_TEXT });
+      this.generate();
+    }
+  }
 
   /**
    * linkedSignal, so a fresh generation resets the edits but the user can still

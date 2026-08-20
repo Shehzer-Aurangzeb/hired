@@ -135,6 +135,13 @@ export const MOCK_GENERATE: GenerateResponse = {
   ],
 };
 
+/** Auto-filled when a ?mock= scenario loads, so the state shows without typing. */
+export const MOCK_JD_TEXT =
+  'Front-End Developer, Montreal. Build responsive customer-facing interfaces in React and ' +
+  'TypeScript, contribute to our component library, and work with designers and back-end ' +
+  'engineers to ship features. Requirements: 3+ years front-end, strong React and TypeScript, ' +
+  'Next.js, WCAG 2.1 AA accessibility, CI/CD pipelines. Nice to have: GraphQL, testing, French.';
+
 /**
  * Variants of the base fixture, so the states the happy path never reaches get
  * rendered at least once. Append ?mock=<name> to the URL.

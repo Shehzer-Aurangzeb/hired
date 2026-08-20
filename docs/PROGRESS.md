@@ -413,6 +413,17 @@ The variants are derived from `MOCK_GENERATE` rather than hand-written, so they
 cannot drift from the real response shape. The interceptor logs the list to the
 console on load. All of it is deleted along with the mocks.
 
+**The scenarios run on load.** First version only applied the scenario to the
+next Generate call, so typing the URL dropped you on an empty form and looked
+like nothing had happened. `GenerateService` is root-scoped and holds the
+result, which made it worse: navigating in-app kept the previous result on
+screen. Now `GeneratePage` checks for the param in its constructor and fires a
+generate with a canned posting, so the URL alone shows the state. Plain
+`/generate` is untouched and still opens an empty form.
+
+That block imports from `mock-data.ts` on purpose. When the fixtures are
+deleted the import breaks loudly, which is the cue to delete the block too.
+
 **This immediately found a real bug.** `error` raised no toast, because
 interceptors were registered as `[mockInterceptor, errorInterceptor]`, which
 makes the mock outermost. When the mock short-circuits with an error it never
