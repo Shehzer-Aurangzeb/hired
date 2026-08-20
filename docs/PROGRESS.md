@@ -290,6 +290,53 @@ planned for `profile/skills_taxonomy.md` in v2 is the upgrade path.
 Re-verified in headless Chromium at 1440 and 375, light and dark: no console
 errors, no horizontal overflow, coverage counter moves on deselect.
 
+---
+
+## Beige theme, one mode, favicon
+
+**Dark mode is gone, not hidden.** Deleted `core/theme.ts`, the header toggle,
+the pre-paint script in `index.html`, the `.dark` token block, and the now
+unused `sun` and `moon` icons. `color-scheme: light` so native controls follow.
+
+**Palette: beige paper, near-black ink.** The app previews a document meant for
+print, so a warm light ground is the honest backdrop.
+
+| Token | Value | Role |
+|---|---|---|
+| `bg` | `#f0eadc` | page |
+| `raised` | `#faf7f0` | cards, header |
+| `surface` | `#e6dfcd` | table heads, subtle fills |
+| `line` | `#dad1bd` | dividers |
+| `line-strong` | `#9c8c68` | control edges, 3:1 as WCAG 1.4.11 wants |
+| `fg` | `#14110c` | body text, 15.7:1 |
+| `fg-muted` | `#57503f` | 6.7:1 |
+| `fg-subtle` | `#665d4b` | 11px text, 4.95:1 |
+| `ink` | `#1a1712` | primary button, focus ring |
+| `accent` | `#2f6b4f` | covered, good |
+| `warn` | `#7e5210` | soft flags |
+| `danger` | `#9b2c21` | hard blocks |
+
+The primary button is ink, not the green. One primary action per screen, and on
+beige the highest-contrast thing on the page should be the thing you press.
+
+**The CV preview stays white with neutral grey text**, deliberately. It is a
+sheet of paper, not app chrome, and now that the page is beige it actually
+reads as one.
+
+**Contrast is verified, not assumed.** A script walks every rendered text node
+on all four routes, resolves its real background through the ancestor chain,
+and checks the ratio against the AA threshold for that font size and weight.
+All four pages report zero failures. Re-run it from
+`docs/contrast-audit.js` after any palette change.
+
+**Favicon**: `frontend/public/favicon.svg`, a lowercase `h` in beige on an ink
+rounded square, matching the plan's rule that the name is always lowercase.
+Two stroked paths, legible at 16px. Deleted the default Angular `favicon.ico`;
+an SVG icon covers every browser that matters and there is no build step.
+
+**Also tidied:** added a meta description, deleted the default Angular
+`frontend/README.md` since the root `README.md` covers running both apps.
+
 **Not built, and deliberately:** v2 screens. The skills-frequency dashboard and
 the reply-rate charts aggregate over twenty-plus saved applications. With an
 empty database they are charts of nothing, and the plan gates them behind real

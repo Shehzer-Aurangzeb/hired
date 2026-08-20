@@ -1,53 +1,41 @@
 @import "tailwindcss";
 
-/* Design tokens. Dense pro tool: slate surfaces, one green accent for the
-   primary action, amber for soft flags, red for hard blocks. Light and dark
-   are defined together so neither drifts. */
+/* Beige paper, near-black ink. One theme, no dark mode: this renders a document
+   for print, and a warm light ground is the honest preview of that.
+   Every pair below is checked against WCAG AA (4.5:1 text, 3:1 control edges). */
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
 
-  --color-bg: #ffffff;
-  --color-surface: #f8fafc;
-  --color-raised: #ffffff;
-  --color-line: #e2e8f0;
-  --color-line-strong: #cbd5e1;
-  --color-fg: #0f172a;
-  --color-fg-muted: #64748b;
-  --color-fg-subtle: #94a3b8;
-  --color-accent: #15803d;
-  --color-accent-fg: #ffffff;
-  --color-accent-soft: #dcfce7;
-  --color-warn: #b45309;
-  --color-warn-soft: #fef3c7;
-  --color-danger: #b91c1c;
-  --color-danger-soft: #fee2e2;
+  --color-bg: #f0eadc;
+  --color-surface: #e6dfcd;
+  --color-raised: #faf7f0;
+
+  --color-line: #dad1bd;
+  --color-line-strong: #9c8c68;
+
+  --color-fg: #14110c;
+  --color-fg-muted: #57503f;
+  --color-fg-subtle: #665d4b;
+
+  --color-ink: #1a1712;
+  --color-ink-fg: #faf7f0;
+
+  --color-accent: #2f6b4f;
+  --color-accent-soft: #dce7dd;
+  --color-warn: #7e5210;
+  --color-warn-soft: #f2e6ca;
+  --color-danger: #9b2c21;
+  --color-danger-soft: #f6ded9;
 
   --radius-card: 0.5rem;
-}
-
-.dark {
-    --color-bg: #0f172a;
-    --color-surface: #131c30;
-    --color-raised: #1a2438;
-    --color-line: #293345;
-    --color-line-strong: #3b465c;
-    --color-fg: #f1f5f9;
-    --color-fg-muted: #94a3b8;
-    --color-fg-subtle: #64748b;
-    --color-accent: #4ade80;
-    --color-accent-fg: #06210f;
-    --color-accent-soft: #14351f;
-    --color-warn: #fbbf24;
-    --color-warn-soft: #3a2c0c;
-    --color-danger: #f87171;
-  --color-danger-soft: #3d1414;
 }
 
 @layer base {
   html {
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    color-scheme: light;
   }
 
   body {
@@ -64,7 +52,7 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--color-ink);
     outline-offset: 2px;
   }
 
@@ -85,8 +73,10 @@
     min-height: 36px;
   }
 
+  /* Ink, not the green. One primary action per screen, and on beige the
+     highest-contrast thing on the page should be the thing you press. */
   .btn-primary {
-    @apply bg-accent text-accent-fg border-accent hover:opacity-90;
+    @apply bg-ink text-ink-fg border-ink hover:bg-fg-muted hover:border-fg-muted;
   }
 
   .btn-ghost {
@@ -94,11 +84,7 @@
   }
 
   .btn-outline {
-    @apply bg-raised text-fg border-line hover:border-line-strong hover:bg-surface;
-  }
-
-  .btn-danger {
-    @apply bg-transparent text-danger border-transparent hover:bg-danger-soft;
+    @apply bg-raised text-fg border-line-strong hover:bg-surface;
   }
 
   .card {
@@ -106,9 +92,9 @@
   }
 
   .field {
-    @apply w-full rounded-md border border-line bg-raised px-3 py-2 text-[13px] text-fg
+    @apply w-full rounded-md border border-line-strong bg-raised px-3 py-2 text-[13px] text-fg
            placeholder:text-fg-subtle transition-colors duration-150
-           hover:border-line-strong focus:border-accent focus:outline-none;
+           hover:border-fg-subtle focus:border-ink focus:outline-none;
   }
 
   .label {
@@ -116,7 +102,7 @@
   }
 
   .chip {
-    @apply inline-flex items-center gap-1 rounded-full border border-line
+    @apply inline-flex items-center gap-1 rounded-full border border-line-strong/60
            px-2 py-0.5 text-[11px] text-fg-muted whitespace-nowrap;
   }
 

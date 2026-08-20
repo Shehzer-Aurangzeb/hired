@@ -9,8 +9,6 @@ export type IconName =
   | 'ban'
   | 'check'
   | 'download'
-  | 'sun'
-  | 'moon'
   | 'chevron-right'
   | 'arrow-left'
   | 'refresh'
@@ -19,7 +17,7 @@ export type IconName =
 
 /**
  * Inline SVG from the Lucide set, drawn with @switch.
- * ponytail: 15 icons do not justify a dependency, and inlining avoids the
+ * ponytail: 13 icons do not justify a dependency, and inlining avoids the
  * DomSanitizer dance that a path-map version would need.
  */
 @Component({
@@ -79,20 +77,6 @@ export type IconName =
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
           <path d="m7 10 5 5 5-5" />
           <path d="M12 15V3" />
-        }
-        @case ('sun') {
-          <circle cx="12" cy="12" r="4" />
-          <path d="M12 2v2" />
-          <path d="M12 20v2" />
-          <path d="m4.9 4.9 1.4 1.4" />
-          <path d="m17.7 17.7 1.4 1.4" />
-          <path d="M2 12h2" />
-          <path d="M20 12h2" />
-          <path d="m6.3 17.7-1.4 1.4" />
-          <path d="m19.1 4.9-1.4 1.4" />
-        }
-        @case ('moon') {
-          <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9" />
         }
         @case ('chevron-right') {
           <path d="m9 18 6-6-6-6" />

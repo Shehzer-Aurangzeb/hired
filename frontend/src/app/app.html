@@ -25,14 +25,6 @@
     }
   </nav>
 
-  <button
-    type="button"
-    class="btn btn-ghost ml-auto !min-h-8 !px-2"
-    (click)="theme.toggle()"
-    [attr.aria-label]="theme.mode() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
-  >
-    <app-icon [name]="theme.mode() === 'dark' ? 'sun' : 'moon'" [size]="15" />
-  </button>
 </header>
 
 <main id="main" tabindex="-1">
