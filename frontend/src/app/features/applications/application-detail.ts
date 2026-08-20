@@ -5,7 +5,12 @@ import { catchError, map, of, switchMap } from 'rxjs';
 
 import { ApplicationsService } from '../../core/applications.service';
 import { ago } from '../../core/dates';
-import { APPLICATION_STATUSES, Application, ApplicationStatus } from '../../core/models';
+import {
+  APPLICATION_STATUSES,
+  Application,
+  ApplicationStatus,
+  SentBullet,
+} from '../../core/models';
 import { ToastService } from '../../core/toast.service';
 import { Icon } from '../../shared/icon';
 
@@ -47,15 +52,42 @@ export class ApplicationDetail {
     if (!current || current.status === status) {
       return;
     }
+    this.save(current.id, { status }, `Marked as ${status}.`);
+  }
+
+  /** Saves on blur. Nothing to press, nothing to forget after a recruiter call. */
+  saveNotes(current: Application, notes: string): void {
+    const next = notes.trim() || null;
+    if (next === (current.notes ?? null)) {
+      return;
+    }
+    this.save(current.id, { notes: next }, 'Notes saved.');
+  }
+
+  private save(id: number, changes: Partial<Application>, message: string): void {
     this.saving.set(true);
-    this.api.updateStatus(current.id, status).subscribe({
+    this.api.patch(id, changes).subscribe({
       next: (updated) => {
         this.local.set(updated);
         this.saving.set(false);
-        this.toast.ok(`Marked as ${status}.`);
+        this.toast.ok(message);
       },
       error: () => this.saving.set(false),
     });
+  }
+
+  /** Bullets grouped by the project they came from, in the order they printed. */
+  groupedBullets(current: Application): { project: string; bullets: SentBullet[] }[] {
+    const groups: { project: string; bullets: SentBullet[] }[] = [];
+    for (const bullet of current.selected_bullets ?? []) {
+      const last = groups.at(-1);
+      if (last?.project === bullet.project_name) {
+        last.bullets.push(bullet);
+      } else {
+        groups.push({ project: bullet.project_name, bullets: [bullet] });
+      }
+    }
+    return groups;
   }
 
   pdfUrl(id: number): string {

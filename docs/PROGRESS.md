@@ -391,6 +391,51 @@ round trip all behave.
 
 ---
 
+## Applications screens
+
+**Inline status change.** Marking something applied is the most frequent action
+in the app and it used to cost a page visit. Every row now carries a status
+select that patches and updates the row in place. The filter counts recompute
+live.
+
+**Follow-up is the point of the list.** Anything in Applied for more than ten
+days sorts to the top, gets a warm row tint and a "N days, no reply" line, and
+a banner above the table says how many there are.
+
+**The detail page shows the bullet text, not ids.** It used to list
+`dedicate-caching` and nothing else, which is useless three weeks later when
+the whole promise of the view is interview prep.
+
+That needed a contract change rather than a frontend join. Joining
+`selected_bullet_ids` against the live profile would render today's `master.md`
+wording, so editing a bullet later would make this page confidently show
+something the employer never read. In a tool built around not overclaiming,
+that is the wrong bug to ship. The record carries the text instead:
+
+```python
+selected_bullets: list[dict] = Field(sa_column=Column(JSON))
+# [{"id": "dedicate-caching", "text": "Built the data layer with...",
+#   "project_name": "Dedicate"}]
+```
+
+`selected_bullet_ids` stays, because the v2 "which bullets get replies" question
+aggregates on ids. `SentBullet` in `core/models.ts` mirrors it.
+
+**Notes are editable**, saved on blur. `notes` was already a v1 column and it is
+what you want to write straight after a recruiter call.
+
+**Cards below `md`, table above.** The table used to scroll sideways on a phone.
+
+`ApplicationsService.updateStatus` became `patch(id, changes)`, since status and
+notes were about to be two near-identical methods.
+
+**Not built:** kanban, reply-rate charts, timeline metrics. All v2, all gated
+behind twenty real applications. Column sorting is YAGNI at six rows.
+
+Contrast passes on every route, no overflow at 375, 768, 1024 or 1440.
+
+---
+
 ## Legibility pass on the generate result
 
 Review said the numbers were unreadable, the section headings faded into the

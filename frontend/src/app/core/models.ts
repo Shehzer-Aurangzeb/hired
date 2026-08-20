@@ -166,6 +166,17 @@ export const APPLICATION_STATUSES = [
 
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
 
+/**
+ * A bullet as it appeared on the exported PDF. Stored on the record rather than
+ * joined against the live profile at read time, because master.md keeps
+ * changing and this view has to show what the employer actually read.
+ */
+export interface SentBullet {
+  id: string;
+  text: string;
+  project_name: string;
+}
+
 export interface Application {
   id: number;
   company: string;
@@ -178,6 +189,7 @@ export interface Application {
   gaps: string[];
   title_variant: string;
   selected_bullet_ids: string[];
+  selected_bullets: SentBullet[];
   summary_text: string;
   pdf_path: string;
   filename: string;

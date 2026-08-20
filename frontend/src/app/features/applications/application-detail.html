@@ -69,28 +69,48 @@
 
     <div class="grid gap-3 lg:grid-cols-2 lg:items-start">
       <!-- what the CV said -->
-      <section class="card p-3.5">
-        <h2 class="section-title mb-2">What was sent</h2>
-        <p class="mono text-fg-subtle mb-2 break-all">{{ application.filename }}</p>
-        <p class="text-[13px] leading-relaxed">{{ application.summary_text }}</p>
+      <section class="card overflow-hidden">
+        <header class="card-head">
+          <h2 class="section-title shrink-0">What was sent</h2>
+          <span class="mono text-fg-subtle ml-auto min-w-0 truncate" [title]="application.filename">
+            {{ application.filename }}
+          </span>
+        </header>
+        <div class="p-3.5">
+          <p class="text-[13px] leading-relaxed">{{ application.summary_text }}</p>
 
-        <h3 class="text-fg-muted mt-3 mb-1 text-[11px] tracking-wide uppercase">
-          Bullets on the page ({{ application.selected_bullet_ids.length }})
-        </h3>
-        <ul class="flex flex-wrap gap-1">
-          @for (id of application.selected_bullet_ids; track id) {
-            <li class="chip mono">{{ id }}</li>
+          <h3 class="text-fg-muted mt-3.5 mb-1.5 text-[11px] tracking-wide uppercase">
+            Bullets on the page ({{ application.selected_bullets.length }})
+          </h3>
+
+          <!-- The text as printed, stored on the record. Joining ids against the
+               live profile would show today's wording, not what they read. -->
+          @for (group of groupedBullets(application); track group.project) {
+            <p class="mt-2.5 text-[12px] font-semibold">{{ group.project }}</p>
+            <ul class="mt-1 flex flex-col gap-1.5">
+              @for (bullet of group.bullets; track bullet.id) {
+                <li class="border-line border-l-2 pl-2.5">
+                  <p class="text-[13px] leading-relaxed">{{ bullet.text }}</p>
+                  <p class="mono text-fg-subtle">{{ bullet.id }}</p>
+                </li>
+              }
+            </ul>
+          } @empty {
+            <p class="text-fg-subtle text-[12px]">No bullet text stored on this record.</p>
           }
-        </ul>
 
-        <p class="text-fg-subtle mt-3 text-[11px]">
-          Title variant: <span class="mono">{{ application.title_variant }}</span>
-        </p>
+          <p class="text-fg-subtle mt-3.5 text-[11px]">
+            Title variant: <span class="mono">{{ application.title_variant }}</span>
+          </p>
+        </div>
       </section>
 
       <!-- why the score -->
-      <section class="card p-3.5">
-        <h2 class="section-title mb-2">Fit reasoning</h2>
+      <section class="card overflow-hidden">
+        <header class="card-head">
+          <h2 class="section-title">Fit reasoning</h2>
+        </header>
+        <div class="p-3.5">
         <p class="text-[13px] leading-relaxed">{{ application.fit_reasoning }}</p>
 
         @if (application.gaps.length) {
@@ -113,16 +133,25 @@
           }
         </p>
 
-        @if (application.notes) {
-          <h3 class="text-fg-muted mt-3 mb-1 text-[11px] tracking-wide uppercase">Notes</h3>
-          <p class="text-[13px]">{{ application.notes }}</p>
-        }
+        <h3 class="text-fg-muted mt-3.5 mb-1 text-[11px] tracking-wide uppercase">Notes</h3>
+        <textarea
+          rows="3"
+          class="field resize-y font-normal"
+          placeholder="Recruiter name, call outcome, anything to remember."
+          [value]="application.notes ?? ''"
+          [disabled]="saving()"
+          (blur)="saveNotes(application, $any($event.target).value)"
+        ></textarea>
+        <p class="text-fg-subtle mt-1 text-[11px]">Saves when you click away.</p>
+        </div>
       </section>
 
       <!-- the posting -->
-      <section class="card p-3.5 lg:col-span-2">
-        <h2 class="section-title mb-2">Job description</h2>
-        <pre class="text-fg-muted max-h-80 overflow-y-auto text-[12px] leading-relaxed whitespace-pre-wrap">{{ application.jd_text }}</pre>
+      <section class="card overflow-hidden lg:col-span-2">
+        <header class="card-head">
+          <h2 class="section-title">Job description</h2>
+        </header>
+        <pre class="text-fg-muted max-h-80 overflow-y-auto p-3.5 text-[12px] leading-relaxed whitespace-pre-wrap">{{ application.jd_text }}</pre>
       </section>
     </div>
   } @else {

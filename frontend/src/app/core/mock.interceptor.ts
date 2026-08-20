@@ -2,7 +2,7 @@ import { HttpErrorResponse, HttpInterceptorFn, HttpResponse } from '@angular/com
 import { Observable, delay, of, throwError } from 'rxjs';
 
 import { USE_MOCKS } from './api';
-import { Application, ApplicationStatus } from './models';
+import { Application } from './models';
 import { MOCK_APPLICATIONS, MOCK_GENERATE, mockGenerate } from './mock-data';
 
 // ponytail: module-level array, not a service. Mock state lives exactly as long
@@ -80,10 +80,18 @@ function route(method: string, path: string, body: unknown): Observable<HttpResp
 
   if (method === 'PATCH' && idMatch) {
     const id = Number(idMatch[1]);
-    const status = (body as { status: ApplicationStatus }).status;
+    const changes = body as Partial<Application>;
     applications = applications.map((a) =>
       a.id === id
-        ? { ...a, status, applied_at: a.applied_at ?? new Date().toISOString().slice(0, 19) }
+        ? {
+            ...a,
+            ...changes,
+            // Leaving 'generated' is the moment it was actually sent.
+            applied_at:
+              changes.status && changes.status !== 'generated'
+                ? (a.applied_at ?? new Date().toISOString().slice(0, 19))
+                : a.applied_at,
+          }
         : a,
     );
     const updated = applications.find((a) => a.id === id);

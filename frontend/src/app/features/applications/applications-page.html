@@ -19,12 +19,23 @@
     </label>
   </div>
 
+  @if (stale().length) {
+    <p class="border-warn/50 bg-warn-soft text-warn rounded-card mb-3 flex items-center gap-2 border px-3 py-2 text-[13px]">
+      <app-icon name="alert" [size]="15" />
+      <span>
+        <strong class="font-semibold">{{ stale().length }}</strong>
+        {{ stale().length === 1 ? 'application has' : 'applications have' }} been sitting in Applied
+        for more than 10 days. They are at the top of the list.
+      </span>
+    </p>
+  }
+
   <div class="mb-3 flex flex-wrap gap-1" role="group" aria-label="Filter by status">
     @for (option of filters; track option) {
       <button
         type="button"
         class="chip hover:border-line-strong cursor-pointer capitalize"
-        [class]="filter() === option ? 'border-accent text-accent' : ''"
+        [class]="filter() === option ? 'border-ink bg-surface text-fg font-medium' : ''"
         [attr.aria-pressed]="filter() === option"
         (click)="filter.set(option)"
       >
@@ -34,7 +45,7 @@
     }
   </div>
 
-  @if (applications() === null) {
+  @if (rows() === null) {
     <div class="card divide-line divide-y" aria-busy="true">
       @for (row of [1, 2, 3, 4, 5]; track row) {
         <div class="flex items-center gap-4 px-3 py-3">
@@ -47,7 +58,7 @@
   } @else if (visible().length === 0) {
     <div class="card text-fg-muted flex flex-col items-center gap-2 px-6 py-16 text-center">
       <app-icon name="file-text" [size]="22" class="text-fg-subtle" />
-      @if ((applications() ?? []).length === 0) {
+      @if ((rows() ?? []).length === 0) {
         <p class="text-[13px]">No applications saved yet.</p>
         <a routerLink="/generate" class="btn btn-outline mt-1">Generate the first one</a>
       } @else {
@@ -55,7 +66,8 @@
       }
     </div>
   } @else {
-    <div class="card overflow-x-auto">
+    <!-- ---------- table, md and up ---------- -->
+    <div class="card hidden overflow-hidden md:block">
       <table class="w-full text-left text-[13px]">
         <thead class="border-line bg-surface text-fg-muted border-b">
           <tr>
@@ -69,28 +81,43 @@
         </thead>
         <tbody class="divide-line divide-y">
           @for (application of visible(); track application.id) {
-            <tr class="hover:bg-surface transition-colors duration-150">
-              <td class="px-3 py-2.5 font-medium">
+            <tr
+              class="hover:bg-surface transition-colors duration-150"
+              [class]="needsFollowUp(application) ? 'bg-warn-soft/40' : ''"
+            >
+              <td class="px-3 py-2.5">
                 <a
                   [routerLink]="['/applications', application.id]"
-                  class="hover:text-accent"
+                  class="hover:text-accent font-medium"
                 >
                   {{ application.company }}
                 </a>
+                @if (needsFollowUp(application)) {
+                  <p class="text-warn flex items-center gap-1 text-[11px]">
+                    <app-icon name="alert" [size]="11" />
+                    {{ waitingDays(application) }} days, no reply
+                  </p>
+                }
               </td>
               <td class="text-fg-muted px-3 py-2.5">{{ application.role }}</td>
               <td class="tabular px-3 py-2.5 font-semibold" [class]="scoreTone(application.fit_score)">
                 {{ application.fit_score }}
               </td>
               <td class="px-3 py-2.5">
-                <span class="badge" [class]="statusClass(application.status)">
-                  {{ application.status }}
-                </span>
-                @if (stale(application)) {
-                  <span class="badge bg-warn-soft text-warn ml-1" title="Applied more than 10 days ago">
-                    follow up
-                  </span>
-                }
+                <!-- Marking something applied is the most frequent action there is.
+                     Making it cost a page visit was the wrong trade. -->
+                <select
+                  class="field !w-auto !py-1 !text-[12px] cursor-pointer capitalize"
+                  [class]="statusClass(application.status)"
+                  [value]="application.status"
+                  [disabled]="saving() === application.id"
+                  (change)="setStatus(application, $any($event.target).value)"
+                  [attr.aria-label]="'Status for ' + application.company"
+                >
+                  @for (status of statuses; track status) {
+                    <option [value]="status" class="capitalize">{{ status }}</option>
+                  }
+                </select>
               </td>
               <td
                 class="text-fg-subtle px-3 py-2.5 whitespace-nowrap"
@@ -112,5 +139,52 @@
         </tbody>
       </table>
     </div>
+
+    <!-- ---------- cards, below md ---------- -->
+    <ul class="flex flex-col gap-2 md:hidden">
+      @for (application of visible(); track application.id) {
+        <li class="card p-3" [class]="needsFollowUp(application) ? 'border-warn/50 bg-warn-soft/40' : ''">
+          <div class="flex items-start gap-2">
+            <div class="min-w-0 flex-1">
+              <a
+                [routerLink]="['/applications', application.id]"
+                class="hover:text-accent text-[14px] font-medium"
+              >
+                {{ application.company }}
+              </a>
+              <p class="text-fg-muted text-[12px]">{{ application.role }}</p>
+            </div>
+            <p class="tabular shrink-0 text-lg leading-none font-semibold" [class]="scoreTone(application.fit_score)">
+              {{ application.fit_score }}<span class="text-fg-subtle text-[11px] font-normal">/10</span>
+            </p>
+          </div>
+
+          @if (needsFollowUp(application)) {
+            <p class="text-warn mt-1.5 flex items-center gap-1 text-[11px]">
+              <app-icon name="alert" [size]="11" />
+              {{ waitingDays(application) }} days, no reply
+            </p>
+          }
+
+          <div class="mt-2.5 flex items-center gap-2">
+            <select
+              class="field !w-auto !py-1 !text-[12px] cursor-pointer capitalize"
+              [class]="statusClass(application.status)"
+              [value]="application.status"
+              [disabled]="saving() === application.id"
+              (change)="setStatus(application, $any($event.target).value)"
+              [attr.aria-label]="'Status for ' + application.company"
+            >
+              @for (status of statuses; track status) {
+                <option [value]="status" class="capitalize">{{ status }}</option>
+              }
+            </select>
+            <span class="text-fg-subtle ml-auto text-[11px]" [title]="application.created_at.slice(0, 10)">
+              {{ ago(application.created_at) }}
+            </span>
+          </div>
+        </li>
+      }
+    </ul>
   }
 </div>

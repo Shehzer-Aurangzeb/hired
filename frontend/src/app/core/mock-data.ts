@@ -248,6 +248,9 @@ function application(
     gaps,
     title_variant: score >= 8 ? 'frontend' : 'fullstack',
     selected_bullet_ids: MOCK_GENERATE.cv.sections.flatMap((s) => s.bullets.map((b) => b.id)),
+    selected_bullets: MOCK_GENERATE.cv.sections.flatMap((s) =>
+      s.bullets.map((b) => ({ id: b.id, text: b.text, project_name: s.project_name })),
+    ),
     summary_text: MOCK_GENERATE.cv.summary,
     pdf_path: `storage/output/Shehzar_Abbasi_${slug}_${roleSlug}_${created}.pdf`,
     filename: `Shehzar_Abbasi_${slug}_${roleSlug}_${created}.pdf`,
