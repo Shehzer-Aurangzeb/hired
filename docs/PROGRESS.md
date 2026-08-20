@@ -389,6 +389,41 @@ Verified at 375, 414, 768, 1024, 1280 and 1440: no overflow at any width, all
 text passes WCAG AA, sticky bar pins correctly, reset and zoom and the edit
 round trip all behave.
 
+---
+
+## Mock scenarios
+
+The mock ignores the pasted text and always returned the same 8/10 result, so
+five UI branches had never rendered once: hard-block flags, the disabled Export
+button, page fill over 100%, the generate error path, and the empty
+applications state.
+
+Append `?mock=<name>` to any URL:
+
+| Scenario | What it shows |
+|---|---|
+| *(none)* | Air Canada, 8/10, three warnings. The happy path. |
+| `weak` | Fit 3/10 with five gaps. Exercises the red score tone. |
+| `blocked` | Two hard blocks. Export goes disabled and the bar says why. |
+| `overflow` | Four copies of every section, 24 bullets, 121% of a page, red fill bar. |
+| `error` | `POST /api/generate` returns 500. Toast, and the form keeps your text. |
+| `empty` | Applications list comes back empty. |
+
+The variants are derived from `MOCK_GENERATE` rather than hand-written, so they
+cannot drift from the real response shape. The interceptor logs the list to the
+console on load. All of it is deleted along with the mocks.
+
+**This immediately found a real bug.** `error` raised no toast, because
+interceptors were registered as `[mockInterceptor, errorInterceptor]`, which
+makes the mock outermost. When the mock short-circuits with an error it never
+calls `next()`, so the error interceptor was never reached. Once the real
+backend lands the mock would pass through and the toast would have started
+working again, which is exactly the kind of bug that hides until the day you
+switch `USE_MOCKS` off. Swapped to `[errorInterceptor, mockInterceptor]` so the
+error interceptor is outermost and sees failures from either source.
+
+All six scenarios verified: contrast passes AA and nothing overflows at 375.
+
 **Not built, and deliberately:** v2 screens. The skills-frequency dashboard and
 the reply-rate charts aggregate over twenty-plus saved applications. With an
 empty database they are charts of nothing, and the plan gates them behind real

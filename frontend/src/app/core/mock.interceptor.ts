@@ -3,11 +3,26 @@ import { Observable, delay, of, throwError } from 'rxjs';
 
 import { USE_MOCKS } from './api';
 import { Application, ApplicationStatus } from './models';
-import { MOCK_APPLICATIONS, MOCK_GENERATE } from './mock-data';
+import { MOCK_APPLICATIONS, MOCK_GENERATE, mockGenerate } from './mock-data';
 
 // ponytail: module-level array, not a service. Mock state lives exactly as long
 // as the tab does, which is the point. Delete this file when the backend lands.
 let applications: Application[] = MOCK_APPLICATIONS.map((a) => ({ ...a }));
+
+/**
+ * ?mock=<name> switches fixtures, so the states the happy path never reaches can
+ * actually be looked at: weak, blocked, overflow, error, empty.
+ * Read per request rather than at load, so it follows navigation.
+ */
+function scenario(): string {
+  return new URLSearchParams(location.search).get('mock') ?? '';
+}
+
+if (USE_MOCKS) {
+  console.info(
+    '[hired] mocks on. Scenarios: ?mock=weak | blocked | overflow | error | empty',
+  );
+}
 
 /**
  * Answers the routes that have no backend yet (Phases 5, 6 and 9).
@@ -28,9 +43,12 @@ function route(method: string, path: string, body: unknown): Observable<HttpResp
   const idMatch = /^\/api\/applications\/(\d+)$/.exec(path);
 
   if (method === 'POST' && path === '/api/generate') {
+    if (scenario() === 'error') {
+      return fail(500, 'The selector returned malformed JSON.', path);
+    }
     // Two model calls in real life. The delay is there so loading states are
     // built against something realistic instead of an instant response.
-    return respond(MOCK_GENERATE, 1400);
+    return respond(mockGenerate(scenario()), 1400);
   }
 
   if (method === 'POST' && path === '/api/generate/summary') {
@@ -49,6 +67,9 @@ function route(method: string, path: string, body: unknown): Observable<HttpResp
   }
 
   if (method === 'GET' && path === '/api/applications') {
+    if (scenario() === 'empty') {
+      return respond([], 400);
+    }
     return respond([...applications].sort((a, b) => b.created_at.localeCompare(a.created_at)), 400);
   }
 
@@ -77,7 +98,11 @@ function respond<T>(body: T, ms: number): Observable<HttpResponse<T>> {
 }
 
 function notFound(path: string): Observable<never> {
+  return fail(404, 'Not found', path);
+}
+
+function fail(status: number, detail: string, path: string): Observable<never> {
   return throwError(
-    () => new HttpErrorResponse({ status: 404, url: path, error: { detail: 'Not found' } }),
-  ).pipe(delay(200)) as Observable<never>;
+    () => new HttpErrorResponse({ status, url: path, error: { detail } }),
+  ).pipe(delay(400)) as Observable<never>;
 }

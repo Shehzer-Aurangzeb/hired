@@ -135,6 +135,66 @@ export const MOCK_GENERATE: GenerateResponse = {
   ],
 };
 
+/**
+ * Variants of the base fixture, so the states the happy path never reaches get
+ * rendered at least once. Append ?mock=<name> to the URL.
+ *
+ * ponytail: derived from MOCK_GENERATE rather than hand-written, so they cannot
+ * drift from the real shape. Deleted with the rest of the mocks.
+ */
+export function mockGenerate(scenario: string): GenerateResponse {
+  switch (scenario) {
+    case 'weak':
+      return {
+        ...MOCK_GENERATE,
+        fit: {
+          score: 3,
+          reasoning:
+            'Little overlap. The posting is built around a Java and Kubernetes stack, and nothing in the profile touches either. The React work transfers only as general front-end experience.',
+          gaps: ['Java', 'Spring', 'Kubernetes', 'Terraform', 'Kafka'],
+        },
+      };
+
+    case 'blocked':
+      return {
+        ...MOCK_GENERATE,
+        flags: [
+          {
+            type: 'block',
+            message:
+              'Bullet stanley-iap has status blocked. In-app purchases are unverified until package.json is confirmed, so it cannot go on a CV.',
+          },
+          {
+            type: 'block',
+            message:
+              'The rephrased dedicate-caching bullet dropped the word "estimated" from the 50% figure. required_qualifiers says it must always carry it.',
+          },
+          ...MOCK_GENERATE.flags,
+        ],
+      };
+
+    case 'overflow': {
+      // Three extra copies of every section, ids suffixed so they stay unique.
+      // Enough to push the page-fill estimate past 100%.
+      const extra = [1, 2, 3].flatMap((n) =>
+        MOCK_GENERATE.cv.sections.map((section) => ({
+          ...section,
+          project_id: `${section.project_id}-${n}`,
+          project_name: `${section.project_name} (${n})`,
+          bullets: section.bullets.map((b) => ({ ...b, id: `${b.id}-${n}` })),
+        })),
+      );
+      return {
+        ...MOCK_GENERATE,
+        cv: { ...MOCK_GENERATE.cv, sections: [...MOCK_GENERATE.cv.sections, ...extra] },
+      };
+    }
+
+    default:
+      return MOCK_GENERATE;
+  }
+}
+
 export const MOCK_APPLICATIONS: Application[] = [
   application(1, 'Air Canada', 'Front-End Developer', 8, 'interview', '2026-08-02', [
     'Kubernetes',

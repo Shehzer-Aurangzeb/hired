@@ -19,7 +19,9 @@ export const appConfig: ApplicationConfig = {
       // Back navigation restores the previous scroll position.
       withInMemoryScrolling({ scrollPositionRestoration: 'enabled', anchorScrolling: 'enabled' }),
     ),
-    // mock runs first so it can short-circuit before error sees a real failure.
-    provideHttpClient(withInterceptors([mockInterceptor, errorInterceptor])),
+    // error is outermost so it catches failures from both the mock and the real
+    // backend. The other way round, a mock error short-circuits before the
+    // error interceptor is ever reached and no toast is raised.
+    provideHttpClient(withInterceptors([errorInterceptor, mockInterceptor])),
   ],
 };
