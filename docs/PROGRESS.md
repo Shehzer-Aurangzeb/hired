@@ -391,6 +391,58 @@ round trip all behave.
 
 ---
 
+## Applications: pipeline band, row click, PDF in place
+
+**Rows are clickable.** `openRow` ignores clicks that land on an `a`, `button`,
+`select`, `input` or `label`, so the status control still works. The company
+anchor stays for keyboard and middle-click.
+
+**A status select bug shipped in the previous commit.** Every row displayed
+"Generated" regardless of its real status. `[value]` on a `<select>` is applied
+before the `@for` options exist, so nothing matches and the control falls back
+to the first option. Writing the status worked, which is why it passed the
+earlier check; only the display was wrong. Fixed with `[selected]` per option.
+
+**The PDF opens in place.** A native `<dialog>` with an `<iframe>`, loaded only
+once opened. The browser already ships a PDF viewer, so embedding one would be
+a dependency for something built in. Download stays as a secondary icon button.
+
+**Pipeline band.** A stacked horizontal bar over the whole set, ordered live
+stages first and dead ends last: Not sent, Waiting, Replied, Interview, Offer,
+Ghosted, Rejected.
+
+`Ghosted` is derived, not stored. It is status `applied` sitting longer than ten
+days, which is the state you actually care about and the schema has no column
+for.
+
+Colours were run through the dataviz validator against the beige card surface
+rather than picked by eye. The first four attempts failed: red beside brown
+broke the CVD gate, grey beside amber broke the normal-vision floor at ΔE 11.1,
+and the amber only reached 2.4:1 against beige. The passing set is
+
+```
+waiting #3a6ea8 · replied #a86a08 · interview #0a7f66
+offer   #6b4fa8 · ghosted #8b8378 · rejected  #b23b2c
+```
+
+in that exact left-to-right order. Re-run
+`node scripts/validate_palette.js` from the dataviz skill if the order changes.
+`Not sent` is hatched rather than a seventh hue. `Ghosted` sits below the chroma
+floor on purpose, since "nothing happened" should read as absence of colour.
+
+Counts were briefly printed inside the segments and failed contrast on amber and
+grey. They were duplicate information, since the legend already lists every
+count, so they were removed rather than recoloured.
+
+**The legend is the filter**, which let the separate status chip row be deleted.
+Two controls doing the same job is one too many.
+
+**Header** carries a subtitle and three stat tiles, Total, Sent and Reply rate,
+reusing the `.stat` classes from the generate bar. Search is taller with a clear
+button.
+
+---
+
 ## Applications screens
 
 **Inline status change.** Marking something applied is the most frequent action

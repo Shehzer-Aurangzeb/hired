@@ -29,15 +29,20 @@
         <p class="text-fg-subtle text-[10px] tracking-wide uppercase">Fit</p>
       </div>
 
-      <a
-        [href]="pdfUrl(application.id)"
-        target="_blank"
-        rel="noopener"
-        class="btn btn-outline ml-auto"
-      >
-        <app-icon name="download" [size]="15" />
-        Open PDF
-      </a>
+      <div class="ml-auto flex gap-2">
+        <button type="button" class="btn btn-primary" (click)="openPdf(pdfDialog)">
+          <app-icon name="file-text" [size]="15" />
+          View PDF
+        </button>
+        <a
+          [href]="pdfUrl(application.id)"
+          [attr.download]="application.filename"
+          class="btn btn-outline"
+          title="Download the file"
+        >
+          <app-icon name="download" [size]="15" />
+        </a>
+      </div>
     </header>
 
     <!-- status -->
@@ -145,6 +150,32 @@
         <p class="text-fg-subtle mt-1 text-[11px]">Saves when you click away.</p>
         </div>
       </section>
+
+      <!-- the PDF, in place. Loaded only once opened. -->
+      <dialog
+        #pdfDialog
+        class="rounded-card border-line bg-raised m-auto h-[92dvh] w-[min(60rem,94vw)] border p-0 backdrop:bg-black/50"
+        (close)="viewing.set(false)"
+      >
+        <div class="card-head sticky top-0">
+          <h2 class="section-title truncate">{{ application.filename }}</h2>
+          <button
+            type="button"
+            class="btn btn-ghost ml-auto !min-h-7 !px-2"
+            (click)="closePdf(pdfDialog)"
+            aria-label="Close the PDF"
+          >
+            <app-icon name="x" [size]="15" />
+          </button>
+        </div>
+        @if (viewing()) {
+          <iframe
+            [src]="safePdfUrl(application.id)"
+            class="h-[calc(92dvh-2.5rem)] w-full border-0"
+            [title]="'PDF preview of ' + application.filename"
+          ></iframe>
+        }
+      </dialog>
 
       <!-- the posting -->
       <section class="card overflow-hidden lg:col-span-2">

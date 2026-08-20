@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, map, of, switchMap } from 'rxjs';
 
@@ -28,10 +29,12 @@ export class ApplicationDetail {
   private readonly api = inject(ApplicationsService);
   private readonly toast = inject(ToastService);
   private readonly route = inject(ActivatedRoute);
+  private readonly sanitizer = inject(DomSanitizer);
 
   readonly statuses = APPLICATION_STATUSES;
   readonly ago = ago;
   readonly saving = signal(false);
+  readonly viewing = signal(false);
   readonly local = signal<Application | null>(null);
 
   private readonly loaded = toSignal<Application | null | undefined>(
@@ -92,6 +95,25 @@ export class ApplicationDetail {
 
   pdfUrl(id: number): string {
     return this.api.pdfUrl(id);
+  }
+
+  /** Angular blocks iframe src bindings. The URL is our own API plus a numeric id. */
+  safePdfUrl(id: number): SafeResourceUrl {
+    return this.sanitizer.bypassSecurityTrustResourceUrl(this.api.pdfUrl(id));
+  }
+
+  /**
+   * ponytail: native <dialog> plus an iframe. The browser already has a PDF
+   * viewer, so embedding one would be a dependency for something built in.
+   */
+  openPdf(dialog: HTMLDialogElement): void {
+    this.viewing.set(true);
+    dialog.showModal();
+  }
+
+  closePdf(dialog: HTMLDialogElement): void {
+    dialog.close();
+    this.viewing.set(false);
   }
 
   statusClass(status: ApplicationStatus): string {
