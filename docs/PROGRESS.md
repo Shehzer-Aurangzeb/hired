@@ -337,6 +337,58 @@ an SVG icon covers every browser that matters and there is no build step.
 **Also tidied:** added a meta description, deleted the default Angular
 `frontend/README.md` since the root `README.md` covers running both apps.
 
+---
+
+## Generate page redesign
+
+The old three-column layout worked but was 60% empty before generating, kept the
+posting form in prime space after, and rendered the CV at 40% in the narrowest
+column. Rebuilt around the fact that the page has two distinct jobs.
+
+**Phase 1, no result yet.** Centered single column, ~44rem. The posting form is
+the page. Under it, the thesis in three lines: ids not prose, boundaries per
+project, one page measured. That is the only interesting engineering in the
+project and it was previously invisible.
+
+**Phase 2, result exists.** The form collapses to a header strip that names the
+company, role, location, work mode and chosen headline, with `Edit posting` to
+reopen it. Below that a **sticky decision bar** at `top-12` carrying fit score,
+required-backed count, page fill, bullet count and Export. Those are the four
+numbers that decide whether to send it, so they never scroll away.
+
+Then two columns, `minmax(0,1fr)` and `34rem`: decisions on the left (reasoning,
+coverage, flags, bullets), the sheet on the right.
+
+**The sheet renders at true Letter width.** 816px, the real 8.5in at 96dpi,
+scaled with CSS `zoom` and a Fit 62% / Actual size toggle. `zoom` rather than
+`transform: scale`, because the parent box shrinks with it and no height
+compensation is needed.
+
+**Also in this pass**
+
+- The title variant select shows the actual headline text underneath and says
+  what it does. It swaps the CV headline and the summary paragraph.
+- `Reset to suggested`, visible only once the selection has drifted from what
+  the selector returned. Compares exclusions and bullet order.
+- The generating state names the three pieces of work instead of showing a bare
+  spinner. It is a static list, not a stepped bar: `/api/generate` is one round
+  trip, so claiming "step 2 of 3" would be invented.
+
+**Two layout bugs found and fixed during verification**, both the same root
+cause. A CSS grid item defaults to `min-width: auto`, so it refuses to shrink
+below its content: the 816px sheet widened the page instead of scrolling in its
+own container, and the long headline chip pushed 3px past the viewport.
+`min-w-0` on the aside, `truncate` on the chip.
+
+**Deliberately not built:** inline bullet text editing, which would be a hole
+straight through the claim guard, since bullet text is supposed to come from
+`master.md` only. Also no dragging bullets between projects, no j/k navigation,
+no onboarding tour.
+
+Verified at 375, 414, 768, 1024, 1280 and 1440: no overflow at any width, all
+text passes WCAG AA, sticky bar pins correctly, reset and zoom and the edit
+round trip all behave.
+
 **Not built, and deliberately:** v2 screens. The skills-frequency dashboard and
 the reply-rate charts aggregate over twenty-plus saved applications. With an
 empty database they are charts of nothing, and the plan gates them behind real

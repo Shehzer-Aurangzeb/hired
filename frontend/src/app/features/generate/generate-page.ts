@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, inject, linkedSignal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  linkedSignal,
+  signal,
+} from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { GenerateService } from '../../core/generate.service';
@@ -32,6 +40,10 @@ export class GeneratePage {
   private readonly toast = inject(ToastService);
   readonly gen = inject(GenerateService);
   readonly profile = inject(ProfileService).profile;
+
+  /** The posting form owns the screen until there is a result, then collapses. */
+  readonly editing = signal(false);
+  readonly zoom = signal<'fit' | 'actual'>('fit');
 
   readonly form = this.fb.nonNullable.group({
     jd_text: ['', [Validators.required, Validators.minLength(80)]],
@@ -167,6 +179,49 @@ export class GeneratePage {
 
   readonly jdLength = computed(() => this.form.controls.jd_text.value.length);
 
+  private readonly variantId = toSignal(this.form.controls.title_variant.valueChanges, {
+    initialValue: '',
+  });
+
+  /** The headline itself, so the select is not three opaque ids. */
+  readonly variantText = computed(
+    () => this.profile.value()?.titles.find((t) => t.id === this.variantId())?.text ?? '',
+  );
+
+  /** Show the form full width until a result exists, or when reopened to edit. */
+  readonly showForm = computed(() => this.editing() || !this.gen.result());
+
+  /** Has the selection drifted from what the selector suggested. */
+  readonly edited = computed(() => {
+    const suggested = this.gen.result()?.cv.sections ?? [];
+    if (this.excluded().size > 0) {
+      return true;
+    }
+    const order = (list: CvSection[]) =>
+      list.map((s) => s.bullets.map((b) => b.id).join(',')).join('|');
+    return order(suggested) !== order(this.sections());
+  });
+
+  /** Letter is 816px at 96dpi. The sheet renders at that width and is zoomed. */
+  readonly sheetScale = computed(() => (this.zoom() === 'fit' ? 0.62 : 1));
+
+  startEdit(): void {
+    this.editing.set(true);
+  }
+
+  cancelEdit(): void {
+    this.editing.set(false);
+  }
+
+  resetSelection(): void {
+    const result = this.gen.result();
+    if (!result) {
+      return;
+    }
+    this.sections.set(result.cv.sections.map((s) => ({ ...s, bullets: [...s.bullets] })));
+    this.excluded.set(new Set());
+  }
+
   generate(): void {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
@@ -186,6 +241,7 @@ export class GeneratePage {
             { company: res.parsed_jd.company, role: res.parsed_jd.role },
             { emitEvent: false },
           );
+          this.editing.set(false);
         },
         error: () => {
           /* the error interceptor already raised a toast */
@@ -216,6 +272,7 @@ export class GeneratePage {
   reset(): void {
     this.gen.clear();
     this.form.reset();
+    this.editing.set(false);
   }
 
   scoreTone(score: number): string {

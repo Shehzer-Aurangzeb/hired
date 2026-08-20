@@ -1,18 +1,29 @@
-<div class="grid gap-4 p-4 xl:grid-cols-[21rem_minmax(0,1fr)_23rem] xl:items-start">
-  <!-- ============ left: the job description ============ -->
-  <form
-    class="card sticky top-16 flex max-h-[calc(100dvh-4.5rem)] flex-col gap-3 overflow-y-auto p-3.5"
-    [formGroup]="form"
-    (ngSubmit)="generate()"
-  >
-    <h2 class="section-title">Job description</h2>
+<!-- ============================================================
+     Phase 1: the posting owns the screen until there is a result.
+     ============================================================ -->
+@if (showForm()) {
+  <div class="mx-auto max-w-2xl px-4 py-10">
+    @if (editing()) {
+      <button type="button" class="btn btn-ghost mb-3 !px-2" (click)="cancelEdit()">
+        <app-icon name="arrow-left" [size]="15" />
+        Back to the result
+      </button>
+    } @else {
+      <div class="mb-6">
+        <h1 class="text-lg font-semibold">Tailor a CV to a posting</h1>
+        <p class="text-fg-muted mt-1 text-[13px]">
+          Paste the posting. The selector picks bullets from your existing pool and tells you what
+          it could not cover.
+        </p>
+      </div>
+    }
 
-    <div>
+    <form class="card p-4" [formGroup]="form" (ngSubmit)="generate()">
       <label class="label" for="jd">Posting text <span class="text-danger">*</span></label>
       <textarea
         id="jd"
         formControlName="jd_text"
-        rows="12"
+        rows="14"
         class="field resize-y font-normal"
         placeholder="Paste the full posting. The parser wants the responsibilities and requirements sections, not just the blurb."
         (keydown.meta.enter)="generate()"
@@ -20,289 +31,384 @@
         [attr.aria-invalid]="form.controls.jd_text.touched && form.controls.jd_text.invalid"
         aria-describedby="jd-help"
       ></textarea>
-      <p id="jd-help" class="mt-1 flex justify-between text-[11px]">
+      <p id="jd-help" class="mt-1 flex justify-between gap-2 text-[11px]">
         @if (form.controls.jd_text.touched && form.controls.jd_text.invalid) {
           <span class="text-danger" role="alert">
             Paste at least 80 characters so the parser has something to work with.
           </span>
         } @else {
           <span class="text-fg-subtle">
-            Company and role are extracted if you leave them blank.
-            <kbd class="border-line bg-surface rounded border px-1 py-px text-[10px]">Cmd</kbd>
-            <kbd class="border-line bg-surface rounded border px-1 py-px text-[10px]">Enter</kbd>
+            <kbd class="border-line-strong bg-surface rounded border px-1 py-px text-[10px]">Cmd</kbd>
+            <kbd class="border-line-strong bg-surface rounded border px-1 py-px text-[10px]">Enter</kbd>
             to generate.
           </span>
         }
-        <span class="tabular text-fg-subtle shrink-0 pl-2">{{ jdLength() }}</span>
+        <span class="tabular text-fg-subtle shrink-0">{{ jdLength() }}</span>
       </p>
-    </div>
 
-    <div class="grid grid-cols-2 gap-2">
-      <div>
-        <label class="label" for="company">Company</label>
-        <input id="company" formControlName="company" class="field" placeholder="Air Canada" />
+      <div class="mt-4 grid gap-3 sm:grid-cols-3">
+        <div>
+          <label class="label" for="company">Company</label>
+          <input id="company" formControlName="company" class="field" placeholder="Air Canada" />
+        </div>
+        <div>
+          <label class="label" for="role">Role</label>
+          <input id="role" formControlName="role" class="field" placeholder="Front-End Developer" />
+        </div>
+        <div>
+          <label class="label" for="variant">Title variant</label>
+          <select id="variant" formControlName="title_variant" class="field cursor-pointer">
+            <option value="">Let the selector choose</option>
+            @for (title of profile.value()?.titles ?? []; track title.id) {
+              <option [value]="title.id">{{ title.id }}</option>
+            }
+          </select>
+        </div>
       </div>
-      <div>
-        <label class="label" for="role">Role</label>
-        <input id="role" formControlName="role" class="field" placeholder="Front-End Developer" />
-      </div>
-    </div>
 
-    <div>
-      <label class="label" for="variant">Title variant</label>
-      <select id="variant" formControlName="title_variant" class="field cursor-pointer">
-        <option value="">Let the selector choose</option>
-        @for (title of profile.value()?.titles ?? []; track title.id) {
-          <option [value]="title.id">{{ title.id }} — {{ title.text }}</option>
+      <p class="text-fg-subtle mt-1.5 text-[11px]">
+        @if (variantText()) {
+          <span class="text-fg-muted">{{ variantText() }}</span>
+          <br />
         }
-      </select>
+        The headline under your name, which also swaps the summary paragraph. Company and role are
+        extracted from the posting if you leave them blank.
+      </p>
       @if (profile.error()) {
         <p class="text-warn mt-1 text-[11px]">
           Profile did not load, so variants are unavailable. The selector will pick one.
         </p>
       }
-    </div>
 
-    <div class="flex gap-2">
-      <button type="submit" class="btn btn-primary flex-1" [disabled]="gen.generating()">
-        @if (gen.generating()) {
-          <app-icon name="refresh" [size]="15" class="animate-spin" />
-          Generating
-        } @else {
-          <app-icon name="sparkles" [size]="15" />
-          Generate
+      <div class="mt-4 flex gap-2">
+        <button type="submit" class="btn btn-primary flex-1" [disabled]="gen.generating()">
+          @if (gen.generating()) {
+            <app-icon name="refresh" [size]="15" class="animate-spin" />
+            Generating
+          } @else {
+            <app-icon name="sparkles" [size]="15" />
+            Generate
+          }
+        </button>
+        @if (gen.result()) {
+          <button type="button" class="btn btn-outline" (click)="reset()">Clear</button>
         }
-      </button>
-      @if (gen.result()) {
-        <button type="button" class="btn btn-outline" (click)="reset()">Clear</button>
-      }
-    </div>
-  </form>
-
-  <!-- ============ middle: fit, flags, bullets ============ -->
-  <div class="flex min-w-0 flex-col gap-3">
-    @if (gen.generating()) {
-      <div class="card p-3.5" aria-busy="true">
-        <div class="bg-surface h-4 w-32 animate-pulse rounded"></div>
-        <div class="bg-surface mt-3 h-3 w-full animate-pulse rounded"></div>
-        <div class="bg-surface mt-2 h-3 w-4/5 animate-pulse rounded"></div>
       </div>
-      @for (row of [1, 2, 3]; track row) {
-        <div class="card space-y-2 p-3.5">
-          <div class="bg-surface h-3 w-40 animate-pulse rounded"></div>
-          <div class="bg-surface h-3 w-full animate-pulse rounded"></div>
-          <div class="bg-surface h-3 w-2/3 animate-pulse rounded"></div>
+    </form>
+
+    @if (gen.generating()) {
+      <!-- One round trip, so this names the work rather than claiming a step. -->
+      <div class="card mt-3 flex items-start gap-3 p-4" aria-live="polite" aria-busy="true">
+        <app-icon name="refresh" [size]="16" class="text-fg-muted mt-0.5 animate-spin" />
+        <div class="text-[13px]">
+          <p class="font-medium">Working</p>
+          <ul class="text-fg-muted mt-1 space-y-0.5">
+            <li>Parsing the posting into structured requirements</li>
+            <li>Selecting bullet ids from your pool</li>
+            <li>Checking every claim against its boundary</li>
+          </ul>
         </div>
-      }
-    } @else if (gen.result(); as result) {
-      <!-- fit score -->
-      <section class="card p-3.5">
-        <div class="flex items-start gap-4">
-          <div class="text-center">
-            <p class="tabular text-3xl leading-none font-semibold" [class]="scoreTone(result.fit.score)">
-              {{ result.fit.score }}<span class="text-fg-subtle text-base">/10</span>
-            </p>
-            <p class="text-fg-subtle mt-1 text-[10px] tracking-wide uppercase">Fit</p>
-          </div>
-          <div class="min-w-0 flex-1">
-            <p class="text-[13px] leading-relaxed">{{ result.fit.reasoning }}</p>
-            @if (result.fit.gaps.length) {
-              <p class="mt-2 flex flex-wrap items-center gap-1.5">
-                <span class="text-fg-subtle text-[11px]">Gaps</span>
-                @for (gap of result.fit.gaps; track gap) {
-                  <span class="chip border-warn/40 text-warn">{{ gap }}</span>
-                }
-              </p>
-            }
-          </div>
+      </div>
+    } @else if (!editing()) {
+      <!-- The thesis. It is the only interesting engineering here, so say it. -->
+      <section class="mt-8 grid gap-4 sm:grid-cols-3">
+        <div>
+          <p class="text-fg text-[13px] font-medium">Bullet ids, not prose</p>
+          <p class="text-fg-muted mt-0.5 text-[12px]">
+            The model returns bullet ids from a fixed pool. It cannot write a claim that is not
+            already in your profile.
+          </p>
+        </div>
+        <div>
+          <p class="text-fg text-[13px] font-medium">Boundaries per project</p>
+          <p class="text-fg-muted mt-0.5 text-[12px]">
+            Each project lists what it can and cannot claim. Anything the posting wants outside that
+            comes back as a gap, not a stretched bullet.
+          </p>
+        </div>
+        <div>
+          <p class="text-fg text-[13px] font-medium">One page, measured</p>
+          <p class="text-fg-muted mt-0.5 text-[12px]">
+            The renderer prints, counts pages and drops the lowest-priority bullet until it fits.
+            No asking the model nicely.
+          </p>
         </div>
       </section>
-
-      <!-- what the posting asked for, against what is actually on the page -->
-      @if (coverage().length) {
-        <section class="card p-3.5">
-          <div class="mb-2 flex items-baseline gap-2">
-            <h2 class="section-title">Requirement coverage</h2>
-            <span
-              class="tabular ml-auto text-[11px]"
-              [class]="requiredCovered().hit === requiredCovered().total ? 'text-accent' : 'text-warn'"
-            >
-              {{ requiredCovered().evidenced }}/{{ requiredCovered().total }} required backed by a
-              bullet
-            </span>
-          </div>
-          <ul class="flex flex-wrap gap-1.5">
-            @for (item of coverage(); track item.name) {
-              <li
-                class="chip"
-                [class]="
-                  item.evidenced
-                    ? 'border-accent/40 text-accent'
-                    : item.covered
-                      ? 'border-warn/40 text-warn'
-                      : item.required
-                        ? 'border-danger/40 text-danger'
-                        : 'border-line text-fg-subtle'
-                "
-                [title]="
-                  (item.required ? 'Required' : 'Preferred') +
-                  ', importance ' +
-                  item.importance +
-                  (item.evidenced
-                    ? '. Backed by a bullet on the page.'
-                    : item.covered
-                      ? '. On the skills line, but no bullet backs it.'
-                      : '. Not on the page at all.')
-                "
-              >
-                <app-icon
-                  [name]="item.evidenced ? 'check' : item.covered ? 'alert' : 'x'"
-                  [size]="11"
-                />
-                {{ item.name }}
-                @if (!item.required) {
-                  <span class="text-fg-subtle text-[10px]">pref</span>
-                }
-              </li>
-            }
-          </ul>
-          <p class="text-fg-subtle mt-2 text-[11px]">
-            <span class="text-accent">Green</span> is backed by a bullet.
-            <span class="text-warn">Amber</span> is on the skills line with nothing behind it, which
-            is the question you do not want to be asked cold.
-            <span class="text-danger">Red</span> is a requirement the page never mentions.
-            @if (unbacked().length) {
-              <br />
-              {{ unbacked().length }} listed without evidence. Selecting a bullet that mentions one
-              turns it green.
-            }
-          </p>
-        </section>
-      }
-
-      <!-- flags: impossible to miss, above the bullets -->
-      @if (blockers().length || warnings().length) {
-        <section class="flex flex-col gap-2" aria-label="Claim boundary flags">
-          @for (flag of blockers(); track flag.message) {
-            <p class="border-danger bg-danger-soft text-danger flex items-start gap-2 rounded-card border px-3 py-2 text-[13px]">
-              <app-icon name="ban" [size]="15" class="mt-0.5" />
-              <span><strong class="font-semibold">Blocked.</strong> {{ flag.message }}</span>
-            </p>
-          }
-          @for (flag of warnings(); track flag.message) {
-            <p class="border-warn/40 bg-warn-soft text-warn flex items-start gap-2 rounded-card border px-3 py-2 text-[13px]">
-              <app-icon name="alert" [size]="15" class="mt-0.5" />
-              <span>{{ flag.message }}</span>
-            </p>
-          }
-        </section>
-      }
-
-      <!-- bullets -->
-      <div class="flex items-center gap-2 pt-1">
-        <h2 class="section-title">Selected bullets</h2>
-        <span class="tabular text-fg-subtle text-[11px]">{{ selectedCount() }} on the page</span>
-      </div>
-
-      <app-bullet-selector [(sections)]="sections" [(excluded)]="excluded" />
-    } @else {
-      <div class="card text-fg-muted flex flex-col items-center gap-2 px-6 py-16 text-center">
-        <app-icon name="sparkles" [size]="22" class="text-fg-subtle" />
-        <p class="text-[13px]">Paste a posting and hit Generate.</p>
-        <p class="text-fg-subtle max-w-sm text-[12px]">
-          The selector returns bullet ids from your existing pool. It never writes a new claim,
-          and anything the posting asks for that no bullet covers is surfaced as a gap.
-        </p>
-      </div>
     }
   </div>
+}
 
-  <!-- ============ right: preview and export ============ -->
-  <aside class="sticky top-16 flex max-h-[calc(100dvh-4.5rem)] flex-col gap-3 overflow-y-auto">
-    <div class="flex items-center gap-2">
-      <h2 class="section-title">Preview</h2>
-      <span class="tabular ml-auto text-[11px]" [class]="pageLoad() > 100 ? 'text-danger' : 'text-fg-subtle'">
-        {{ pageLoad() }}% of one page
-      </span>
+<!-- ============================================================
+     Phase 2: the result owns the screen. The posting collapses
+     to a header, because you never read it again.
+     ============================================================ -->
+@if (gen.result(); as result) {
+  <div [class.hidden]="showForm()">
+    <!-- what this application is -->
+    <div class="border-line bg-raised border-b px-4 py-2.5">
+      <div class="mx-auto flex max-w-[86rem] flex-wrap items-center gap-x-3 gap-y-1">
+        <h1 class="text-[15px] font-semibold">{{ result.parsed_jd.company }}</h1>
+        <span class="text-fg-muted text-[13px]">{{ result.parsed_jd.role }}</span>
+        @if (result.parsed_jd.location) {
+          <span class="chip">{{ result.parsed_jd.location }}</span>
+        }
+        @if (result.parsed_jd.work_mode) {
+          <span class="chip">{{ result.parsed_jd.work_mode }}</span>
+        }
+        <span class="chip min-w-0 max-w-full" [title]="result.cv.title">
+          <span class="truncate">{{ result.cv.title }}</span>
+        </span>
+
+        <div class="ml-auto flex gap-2">
+          <button type="button" class="btn btn-ghost !min-h-8" (click)="startEdit()">
+            Edit posting
+          </button>
+          <button type="button" class="btn btn-ghost !min-h-8" (click)="reset()">Clear</button>
+        </div>
+      </div>
     </div>
 
-    <div class="bg-surface border-line rounded-card h-1.5 overflow-hidden border" role="presentation">
-      <div
-        class="h-full transition-[width] duration-300"
-        [class]="pageLoad() > 100 ? 'bg-danger' : 'bg-accent'"
-        [style.width.%]="pageLoad() > 100 ? 100 : pageLoad()"
-      ></div>
-    </div>
-
-    @if (finalCv(); as cv) {
-      <!-- ponytail: an HTML approximation, not the printed artefact. The PDF comes
-           from the server Jinja template, so this is swapped for an iframe of that
-           render once Phase 2 lands. -->
-      <article
-        class="max-h-[60vh] overflow-y-auto rounded-card border border-line-strong bg-white p-5 text-[11px] leading-snug text-slate-900 shadow-sm"
-      >
-        <h3 class="text-[15px] font-bold">{{ profile.value()?.identity?.name ?? 'Your name' }}</h3>
-        <p class="text-slate-600">{{ cv.title }}</p>
-        <p class="mt-0.5 text-slate-500">
-          {{ profile.value()?.identity?.location }} · {{ profile.value()?.identity?.email }}
+    <!-- the numbers that decide whether to send it, always in view -->
+    <div class="border-line bg-surface sticky top-12 z-20 border-b px-4 py-2">
+      <div class="mx-auto flex max-w-[86rem] flex-wrap items-center gap-x-5 gap-y-2">
+        <p class="flex items-baseline gap-1.5">
+          <span class="tabular text-lg leading-none font-semibold" [class]="scoreTone(result.fit.score)">
+            {{ result.fit.score }}<span class="text-fg-subtle text-[11px]">/10</span>
+          </span>
+          <span class="text-fg-subtle text-[11px] tracking-wide uppercase">fit</span>
         </p>
 
-        <p class="mt-3 border-t border-slate-200 pt-2">{{ cv.summary }}</p>
+        <p class="flex items-baseline gap-1.5">
+          <span
+            class="tabular text-[13px] font-semibold"
+            [class]="requiredCovered().evidenced === requiredCovered().total ? 'text-accent' : 'text-warn'"
+          >
+            {{ requiredCovered().evidenced }}/{{ requiredCovered().total }}
+          </span>
+          <span class="text-fg-subtle text-[11px]">required backed by a bullet</span>
+        </p>
 
-        <div class="mt-3">
-          @for (line of cv.skills_lines; track line.line) {
-            <p><strong class="font-semibold">{{ line.line }}:</strong> {{ line.items.join(', ') }}</p>
+        <p class="flex items-baseline gap-1.5">
+          <span class="tabular text-[13px] font-semibold" [class]="pageLoad() > 100 ? 'text-danger' : 'text-fg'">
+            {{ pageLoad() }}%
+          </span>
+          <span class="text-fg-subtle text-[11px]">of one page</span>
+        </p>
+
+        <p class="flex items-baseline gap-1.5">
+          <span class="tabular text-[13px] font-semibold">{{ selectedCount() }}</span>
+          <span class="text-fg-subtle text-[11px]">bullets</span>
+        </p>
+
+        <div class="ml-auto flex items-center gap-2">
+          @if (blockers().length) {
+            <span class="text-danger text-[11px]">Blocked by the claim guard</span>
+          }
+          <button
+            type="button"
+            class="btn btn-outline !min-h-8"
+            (click)="regenerateSummary()"
+            title="Regenerate the summary without redoing bullet selection"
+          >
+            <app-icon name="refresh" [size]="14" />
+            Summary
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary !min-h-8"
+            [disabled]="!canExport()"
+            (click)="export()"
+          >
+            @if (gen.exporting()) {
+              <app-icon name="refresh" [size]="14" class="animate-spin" />
+              Exporting
+            } @else {
+              <app-icon name="download" [size]="14" />
+              Export PDF
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="mx-auto grid max-w-[86rem] gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_34rem] xl:items-start">
+      <!-- ---------- decisions ---------- -->
+      <div class="flex min-w-0 flex-col gap-3">
+        <section class="card p-3.5">
+          <h2 class="section-title mb-1.5">Why this score</h2>
+          <p class="text-[13px] leading-relaxed">{{ result.fit.reasoning }}</p>
+          @if (result.fit.gaps.length) {
+            <p class="mt-2 flex flex-wrap items-center gap-1.5">
+              <span class="text-fg-subtle text-[11px]">Gaps</span>
+              @for (gap of result.fit.gaps; track gap) {
+                <span class="chip border-warn/50 text-warn">{{ gap }}</span>
+              }
+            </p>
+          }
+        </section>
+
+        @if (coverage().length) {
+          <section class="card p-3.5">
+            <h2 class="section-title mb-2">Requirement coverage</h2>
+            <ul class="flex flex-wrap gap-1.5">
+              @for (item of coverage(); track item.name) {
+                <li
+                  class="chip"
+                  [class]="
+                    item.evidenced
+                      ? 'border-accent/50 text-accent'
+                      : item.covered
+                        ? 'border-warn/50 text-warn'
+                        : item.required
+                          ? 'border-danger/50 text-danger'
+                          : 'text-fg-subtle'
+                  "
+                  [title]="
+                    (item.required ? 'Required' : 'Preferred') +
+                    ', importance ' +
+                    item.importance +
+                    (item.evidenced
+                      ? '. Backed by a bullet on the page.'
+                      : item.covered
+                        ? '. On the skills line, but no bullet backs it.'
+                        : '. Not on the page at all.')
+                  "
+                >
+                  <app-icon
+                    [name]="item.evidenced ? 'check' : item.covered ? 'alert' : 'x'"
+                    [size]="11"
+                  />
+                  {{ item.name }}
+                  @if (!item.required) {
+                    <span class="text-fg-subtle text-[10px]">pref</span>
+                  }
+                </li>
+              }
+            </ul>
+            <p class="text-fg-subtle mt-2 text-[11px]">
+              <span class="text-accent">Green</span> is backed by a bullet.
+              <span class="text-warn">Amber</span> is on the skills line with nothing behind it,
+              which is the question you do not want to be asked cold.
+              <span class="text-danger">Red</span> is a requirement the page never mentions.
+            </p>
+          </section>
+        }
+
+        @if (blockers().length || warnings().length) {
+          <section class="flex flex-col gap-2" aria-label="Claim boundary flags">
+            @for (flag of blockers(); track flag.message) {
+              <p class="border-danger bg-danger-soft text-danger rounded-card flex items-start gap-2 border px-3 py-2 text-[13px]">
+                <app-icon name="ban" [size]="15" class="mt-0.5" />
+                <span><strong class="font-semibold">Blocked.</strong> {{ flag.message }}</span>
+              </p>
+            }
+            @for (flag of warnings(); track flag.message) {
+              <p class="border-warn/50 bg-warn-soft text-warn rounded-card flex items-start gap-2 border px-3 py-2 text-[13px]">
+                <app-icon name="alert" [size]="15" class="mt-0.5" />
+                <span>{{ flag.message }}</span>
+              </p>
+            }
+          </section>
+        }
+
+        <div class="flex items-center gap-2 pt-1">
+          <h2 class="section-title">Selected bullets</h2>
+          @if (edited()) {
+            <button type="button" class="btn btn-ghost ml-auto !min-h-7 !py-0 !text-[11px]" (click)="resetSelection()">
+              <app-icon name="refresh" [size]="12" />
+              Reset to suggested
+            </button>
           }
         </div>
 
-        @for (section of cv.sections; track section.project_id) {
-          <div class="mt-3">
-            <p class="font-semibold">
-              {{ section.project_name }}
-              <span class="font-normal text-slate-600">· {{ section.stack.join(' · ') }}</span>
-            </p>
-            <p class="text-slate-500 italic">{{ section.label }}</p>
-            <ul class="mt-1 list-disc pl-4">
-              @for (bullet of section.bullets; track bullet.id) {
-                <li class="mb-0.5">{{ bullet.text }}</li>
+        <app-bullet-selector [(sections)]="sections" [(excluded)]="excluded" />
+      </div>
+
+      <!-- ---------- the sheet ---------- -->
+      <aside class="sticky top-24 flex min-w-0 flex-col gap-2">
+        <div class="flex items-center gap-2">
+          <h2 class="section-title">Preview</h2>
+          <span class="text-fg-subtle text-[11px]">Letter, 8.5 × 11 in</span>
+          <div class="ml-auto flex gap-1">
+            <button
+              type="button"
+              class="chip cursor-pointer"
+              [class]="zoom() === 'fit' ? 'border-ink text-fg' : ''"
+              [attr.aria-pressed]="zoom() === 'fit'"
+              (click)="zoom.set('fit')"
+            >
+              Fit 62%
+            </button>
+            <button
+              type="button"
+              class="chip cursor-pointer"
+              [class]="zoom() === 'actual' ? 'border-ink text-fg' : ''"
+              [attr.aria-pressed]="zoom() === 'actual'"
+              (click)="zoom.set('actual')"
+            >
+              Actual size
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-surface border-line rounded-card h-1.5 overflow-hidden border" role="presentation">
+          <div
+            class="h-full transition-[width] duration-300"
+            [class]="pageLoad() > 100 ? 'bg-danger' : 'bg-accent'"
+            [style.width.%]="pageLoad() > 100 ? 100 : pageLoad()"
+          ></div>
+        </div>
+
+        @if (finalCv(); as cv) {
+          <!-- ponytail: an HTML approximation at Letter width, not the printed
+               artefact. Swapped for an iframe of the Jinja render in Phase 2.
+               zoom, not transform: the parent box shrinks with it, so no height
+               compensation is needed. -->
+          <div class="rounded-card border-line max-h-[calc(100dvh-11rem)] overflow-auto border">
+            <article
+              class="w-[816px] bg-white p-12 text-[13px] leading-snug text-slate-900"
+              [style.zoom]="sheetScale()"
+            >
+              <h3 class="text-[19px] font-bold">
+                {{ profile.value()?.identity?.name ?? 'Your name' }}
+              </h3>
+              <p class="text-slate-700">{{ cv.title }}</p>
+              <p class="mt-0.5 text-slate-500">
+                {{ profile.value()?.identity?.location }} ·
+                {{ profile.value()?.identity?.email }} ·
+                {{ profile.value()?.identity?.phone }}
+              </p>
+
+              <p class="mt-4 border-t border-slate-200 pt-3">{{ cv.summary }}</p>
+
+              <div class="mt-4">
+                @for (line of cv.skills_lines; track line.line) {
+                  <p><strong class="font-semibold">{{ line.line }}:</strong> {{ line.items.join(', ') }}</p>
+                }
+              </div>
+
+              @for (section of cv.sections; track section.project_id) {
+                <div class="mt-4">
+                  <p class="font-semibold">
+                    {{ section.project_name }}
+                    <span class="font-normal text-slate-600">· {{ section.stack.join(' · ') }}</span>
+                  </p>
+                  <p class="text-slate-500 italic">{{ section.label }}</p>
+                  <ul class="mt-1 list-disc pl-5">
+                    @for (bullet of section.bullets; track bullet.id) {
+                      <li class="mb-1">{{ bullet.text }}</li>
+                    }
+                  </ul>
+                </div>
               }
-            </ul>
+            </article>
+          </div>
+        } @else {
+          <div class="card text-fg-subtle px-4 py-12 text-center text-[12px]">
+            Every bullet is deselected, so there is nothing to print.
           </div>
         }
-      </article>
-
-      <div class="flex gap-2">
-        <button
-          type="button"
-          class="btn btn-primary flex-1"
-          [disabled]="!canExport()"
-          (click)="export()"
-        >
-          @if (gen.exporting()) {
-            <app-icon name="refresh" [size]="15" class="animate-spin" />
-            Exporting
-          } @else {
-            <app-icon name="download" [size]="15" />
-            Export PDF
-          }
-        </button>
-        <button
-          type="button"
-          class="btn btn-outline"
-          (click)="regenerateSummary()"
-          title="Regenerate the summary without redoing bullet selection"
-        >
-          <app-icon name="refresh" [size]="15" />
-        </button>
-      </div>
-
-      @if (blockers().length) {
-        <p class="text-danger text-[11px]">Export is blocked until the claim guard passes.</p>
-      }
-    } @else {
-      <div class="card text-fg-subtle px-4 py-12 text-center text-[12px]">
-        The preview appears once a posting is generated.
-      </div>
-    }
-  </aside>
-</div>
+      </aside>
+    </div>
+  </div>
+}
