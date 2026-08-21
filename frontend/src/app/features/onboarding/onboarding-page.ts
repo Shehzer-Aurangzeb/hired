@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { Router } from '@angular/router';
 
 import { MAX_BYTES } from '../../core/api';
-import { openClaude } from '../../core/claude-draft';
+import { copyPrompt, openClaude } from '../../core/claude-draft';
 import { ProfileService } from '../../core/profile.service';
 import { ToastService } from '../../core/toast.service';
 import { ProfileIssue, ValidationResult } from '../../core/models';
@@ -28,6 +28,9 @@ export class OnboardingPage {
   readonly saving = signal(false);
   readonly loadError = signal<string | null>(null);
   readonly fileName = signal<string | null>(null);
+  /** Backend config, fetched with the template it belongs to. */
+  readonly prompt = signal('');
+  readonly copied = signal(false);
 
   readonly lines = computed(() => this.text().split('\n'));
   readonly canSave = computed(
@@ -41,8 +44,9 @@ export class OnboardingPage {
 
     if (source === 'template') {
       this.profile.template().subscribe({
-        next: (text) => {
+        next: ({ text, claude_prompt }) => {
           this.text.set(text);
+          this.prompt.set(claude_prompt);
           this.check();
         },
         error: () => this.loadError.set('Could not load the template. Try pasting instead.'),
@@ -112,20 +116,20 @@ export class OnboardingPage {
     });
   }
 
-  /**
-   * Hands the template to Claude and drops you into the paste box, which is
-   * where the answer comes back to.
-   */
-  draftWithClaude(): void {
-    this.loadError.set(null);
-    this.profile.template().subscribe({
-      next: (template) => {
-        openClaude(template);
-        this.source.set('paste');
-        this.toast.ok('Prompt copied. Paste Claude\'s answer back into the box here.');
-      },
-      error: () => this.loadError.set('Could not load the template. Try pasting instead.'),
-    });
+  openClaude(): void {
+    openClaude(this.prompt());
+    this.toast.ok('Paste what Claude gives you back over the file below.');
+  }
+
+  async copyPrompt(): Promise<void> {
+    const ok = await copyPrompt(this.prompt());
+    this.copied.set(ok);
+    if (ok) {
+      // A tick on the button says it better than a toast that covers the page.
+      setTimeout(() => this.copied.set(false), 2000);
+    } else {
+      this.loadError.set('Could not reach the clipboard. Select the prompt and copy it by hand.');
+    }
   }
 
   restart(): void {

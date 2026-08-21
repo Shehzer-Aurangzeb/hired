@@ -879,3 +879,31 @@ a human pressing Save.
 
 **Next:** the repair endpoint (broken source in, fixed source out) needs an
 Anthropic API key, which the generate and selector phases need anyway.
+
+## Template and Claude prompt moved to the backend
+
+Both are content, not code, and both get reworded far more often than the code
+around them. `app/profile_template.py` holds the defaults so a fresh checkout
+needs no config; `HIRED_PROFILE_TEMPLATE` and `HIRED_CLAUDE_BRIEFING` override
+them, so a reword is an environment change and a restart.
+
+The briefing may contain `{template}` to place the starter file; without the
+placeholder the template is appended instead, so a rewritten briefing cannot
+silently drop the file it is about. There is a test for exactly that.
+
+`GET /api/profile/template` is now real, returning `{ text, claude_prompt }` in
+one call. The frontend copy of the template is deleted along with its mock
+route.
+
+**Draft with Claude folded into "Start from a template".** It was never a fourth
+way in — it produces the same file the template describes, so it belongs where
+the template is. The template view now carries two buttons:
+
+- **Copy prompt** — the route that always works, with a `document.execCommand`
+  fallback for any context where the clipboard API is missing, and a tick on the
+  button instead of a toast over the page.
+- **Open in Claude** — `claude.ai/new?q=`, about 6 KB of URL. Convenient when it
+  works, and not something the flow depends on.
+
+Same pair sits in the profile editor footer for a rewrite rather than a first
+draft.

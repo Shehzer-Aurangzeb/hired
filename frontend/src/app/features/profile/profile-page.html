@@ -619,9 +619,13 @@
             }
           </p>
 
-          <button type="button" class="btn btn-ghost" (click)="draftWithClaude()">
-            <app-icon name="sparkles" [size]="15" />
-            Draft with Claude
+          <button type="button" class="btn btn-ghost" (click)="draftWithClaude(false)">
+            <app-icon [name]="copied() ? 'check' : 'sparkles'" [size]="15" />
+            {{ copied() ? 'Prompt copied' : 'Copy Claude prompt' }}
+          </button>
+          <button type="button" class="btn btn-ghost" (click)="draftWithClaude(true)">
+            Open in Claude
+            <app-icon name="chevron-right" [size]="15" />
           </button>
 
           @if (dirty()) {

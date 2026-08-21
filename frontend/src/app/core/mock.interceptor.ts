@@ -4,7 +4,6 @@ import { Observable, delay, of, throwError } from 'rxjs';
 import { MOCK_PASSWORD, USE_MOCKS } from './api';
 import { Application } from './models';
 import { MOCK_APPLICATIONS, MOCK_GENERATE, mockGenerate } from './mock-data';
-import { PROFILE_TEMPLATE } from '../features/onboarding/template';
 import { ProfileIssue, ValidationResult } from './models';
 
 // ponytail: module-level array, not a service. Mock state lives exactly as long
@@ -50,7 +49,7 @@ if (USE_MOCKS) {
 
 /**
  * Answers the routes that have no backend yet (Phases 5, 6 and 9).
- * GET /api/profile is real and always falls through.
+ * Everything under /api/profile except the source is real and falls through.
  */
 export const mockInterceptor: HttpInterceptorFn = (req, next) => {
   if (!USE_MOCKS) {
@@ -102,10 +101,6 @@ function route(method: string, path: string, body: unknown): Observable<HttpResp
       { text: text ?? '', exists: !!text, updated_at: sessionStorage.getItem(PROFILE_AT_KEY) },
       300,
     );
-  }
-
-  if (method === 'GET' && path === '/api/profile/template') {
-    return respond({ text: PROFILE_TEMPLATE }, 200);
   }
 
   if (method === 'POST' && path === '/api/profile/validate') {

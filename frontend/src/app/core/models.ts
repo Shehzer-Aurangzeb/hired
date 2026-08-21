@@ -121,6 +121,12 @@ export interface ProfileSource {
   updated_at: string | null;
 }
 
+/** GET /api/profile/template. Both strings are backend config, not code. */
+export interface ProfileTemplate {
+  text: string;
+  claude_prompt: string;
+}
+
 export interface ProfileIssue {
   /** 1-indexed, or null when the problem is not tied to a line. */
   line: number | null;

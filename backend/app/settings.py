@@ -33,6 +33,12 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:4200"]
 
+    # Content, not code. Empty means "use the default in app/profile_template.py",
+    # so a fresh checkout needs no config and a reword needs no deploy of code.
+    profile_template: str = ""
+    claude_briefing: str = ""
+
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -8,6 +8,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from .db import SessionDep, init_db
 from .models import Profile
 from .profile_parser import parse_text
+from .profile_template import claude_prompt, template
 from .settings import get_settings
 from .tables import ProfileSource
 
@@ -41,6 +42,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/api/profile/template")
+def get_template() -> dict[str, str]:
+    """The starter file, and the briefing that hands it to Claude."""
+    return {"text": template(), "claude_prompt": claude_prompt()}
 
 
 @app.get("/api/profile", response_model=Profile)

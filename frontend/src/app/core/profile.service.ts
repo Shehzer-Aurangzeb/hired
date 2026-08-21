@@ -4,7 +4,7 @@ import { Observable, catchError, map, of, shareReplay, tap } from 'rxjs';
 
 import { API } from './api';
 import { AuthService } from './auth.service';
-import { Profile, ProfileSource, ValidationResult } from './models';
+import { Profile, ProfileSource, ProfileTemplate, ValidationResult } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class ProfileService {
@@ -44,10 +44,8 @@ export class ProfileService {
     return this.http.get<ProfileSource>(`${API}/api/profile/source`);
   }
 
-  template(): Observable<string> {
-    return this.http
-      .get<{ text: string }>(`${API}/api/profile/template`)
-      .pipe(map((res) => res.text));
+  template(): Observable<ProfileTemplate> {
+    return this.http.get<ProfileTemplate>(`${API}/api/profile/template`);
   }
 
   validate(text: string): Observable<ValidationResult> {

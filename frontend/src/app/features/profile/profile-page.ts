@@ -10,7 +10,7 @@ import {
 import { ActivatedRoute, CanDeactivateFn, Router } from '@angular/router';
 
 import { MAX_BYTES, USE_MOCKS } from '../../core/api';
-import { openClaude } from '../../core/claude-draft';
+import { copyPrompt, openClaude } from '../../core/claude-draft';
 import { ago } from '../../core/dates';
 import { Bullet, Project, ProfileIssue, ValidationResult } from '../../core/models';
 import { ProfileService } from '../../core/profile.service';
@@ -259,14 +259,29 @@ export class ProfilePage {
       .catch(() => this.editError.set('Could not read that file.'));
   }
 
-  /** Same briefing as first-run setup, for a rewrite rather than a first draft. */
-  draftWithClaude(): void {
+  readonly copied = signal(false);
+
+  /**
+   * Same briefing as first-run setup, for a rewrite rather than a first draft.
+   * Fetched on use: the prompt is backend config and this is not the hot path.
+   */
+  draftWithClaude(open: boolean): void {
     this.service.template().subscribe({
-      next: (template) => {
-        openClaude(template);
-        this.toast.ok('Prompt copied. Paste Claude\'s answer over the source here.');
+      next: async ({ claude_prompt }) => {
+        if (open) {
+          openClaude(claude_prompt);
+          this.toast.ok('Paste what Claude gives you back over the source here.');
+          return;
+        }
+        const ok = await copyPrompt(claude_prompt);
+        this.copied.set(ok);
+        if (ok) {
+          setTimeout(() => this.copied.set(false), 2000);
+        } else {
+          this.editError.set('Could not reach the clipboard.');
+        }
       },
-      error: () => this.editError.set('Could not load the template.'),
+      error: () => this.editError.set('Could not load the Claude prompt.'),
     });
   }
 
