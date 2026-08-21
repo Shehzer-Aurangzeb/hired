@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -9,7 +10,13 @@ class Settings(BaseSettings):
     See .env.example for how to produce the two secrets.
     """
 
-    model_config = SettingsConfigDict(env_prefix="HIRED_", env_file=".env", extra="ignore")
+    # The path is absolute on purpose: a relative env_file resolves against the
+    # working directory, so the app would only start when launched from backend/.
+    model_config = SettingsConfigDict(
+        env_prefix="HIRED_",
+        env_file=Path(__file__).resolve().parents[1] / ".env",
+        extra="ignore",
+    )
 
     # sqlite:///./hired.db locally. A Postgres URL works unchanged, which is the
     # whole reason this is a setting and not a constant.

@@ -2,7 +2,6 @@ import { ChangeDetectionStrategy, Component, ElementRef, inject, signal, viewChi
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { MOCK_PASSWORD, USE_MOCKS } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
 import { Icon } from '../../shared/icon';
 
@@ -28,9 +27,6 @@ export class LockPage {
   readonly error = signal<string | null>(null);
   readonly lockedFor = signal(0);
   readonly reveal = signal(false);
-
-  /** The demo needs something to type. Never shown once mocks are off. */
-  readonly demoPassword = USE_MOCKS ? MOCK_PASSWORD : null;
 
   submit(): void {
     if (this.form.invalid || this.busy() || this.lockedFor()) {

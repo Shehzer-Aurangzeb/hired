@@ -1,7 +1,7 @@
 import { HttpErrorResponse, HttpInterceptorFn, HttpResponse } from '@angular/common/http';
 import { Observable, delay, of, throwError } from 'rxjs';
 
-import { MOCK_PASSWORD, USE_MOCKS } from './api';
+import { USE_MOCKS } from './api';
 import { Application } from './models';
 import { MOCK_APPLICATIONS, MOCK_GENERATE, mockGenerate } from './mock-data';
 import { ProfileIssue, ValidationResult } from './models';
@@ -10,27 +10,10 @@ import { ProfileIssue, ValidationResult } from './models';
 // as the tab does, which is the point. Delete this file when the backend lands.
 let applications: Application[] = MOCK_APPLICATIONS.map((a) => ({ ...a }));
 
-// The real session is an httpOnly cookie and survives a reload, so the stand-in
-// has to as well or every refresh signs you out. Lockout state is not persisted:
-// a page reload clearing it matches nothing real, but it keeps the demo usable.
-const SESSION_KEY = 'hired-mock-session';
+// The profile source still has no backend, so its stand-in outlives a reload the
+// way the real thing will.
 const PROFILE_KEY = 'hired-mock-profile';
 const PROFILE_AT_KEY = 'hired-mock-profile-at';
-const LOCKOUT_MS = 30_000;
-let failures = 0;
-let lockedUntil = 0;
-
-function signedIn(): boolean {
-  return sessionStorage.getItem(SESSION_KEY) === '1';
-}
-
-function setSignedIn(value: boolean): void {
-  if (value) {
-    sessionStorage.setItem(SESSION_KEY, '1');
-  } else {
-    sessionStorage.removeItem(SESSION_KEY);
-  }
-}
 
 /**
  * ?mock=<name> switches fixtures, so the states the happy path never reaches can
@@ -49,7 +32,7 @@ if (USE_MOCKS) {
 
 /**
  * Answers the routes that have no backend yet (Phases 5, 6 and 9).
- * Everything under /api/profile except the source is real and falls through.
+ * Auth, GET /api/profile and the template are real and fall through.
  */
 export const mockInterceptor: HttpInterceptorFn = (req, next) => {
   if (!USE_MOCKS) {
@@ -64,36 +47,6 @@ export const mockInterceptor: HttpInterceptorFn = (req, next) => {
 
 function route(method: string, path: string, body: unknown): Observable<HttpResponse<unknown>> | null {
   const idMatch = /^\/api\/applications\/(\d+)$/.exec(path);
-
-  if (method === 'GET' && path === '/api/auth/session') {
-    return respond({ authenticated: signedIn() }, 250);
-  }
-
-  if (method === 'POST' && path === '/api/auth/login') {
-    // Three misses and the real backend will rate limit, so the mock does too.
-    // The lockout has to expire on its own: a counter that only resets on a
-    // correct password locks you out of ever giving one.
-    const left = lockedUntil - Date.now();
-    if (left > 0) {
-      return failWith(429, 'Too many attempts. Wait a moment before trying again.', path, {
-        retry_after: Math.ceil(left / 1000),
-      });
-    }
-    if ((body as { password: string }).password === MOCK_PASSWORD) {
-      setSignedIn(true);
-      failures = 0;
-      return respond({ authenticated: true }, 600);
-    }
-    failures += 1;
-    if (failures >= 3) {
-      failures = 0;
-      lockedUntil = Date.now() + LOCKOUT_MS;
-      return failWith(429, 'Too many attempts. Wait a moment before trying again.', path, {
-        retry_after: LOCKOUT_MS / 1000,
-      });
-    }
-    return failWith(401, 'That password is not right.', path);
-  }
 
   if (method === 'GET' && path === '/api/profile/source') {
     const text = sessionStorage.getItem(PROFILE_KEY);
@@ -130,11 +83,6 @@ function route(method: string, path: string, body: unknown): Observable<HttpResp
     sessionStorage.setItem(PROFILE_KEY, text);
     sessionStorage.setItem(PROFILE_AT_KEY, at);
     return respond({ text, exists: true, updated_at: at }, 500);
-  }
-
-  if (method === 'POST' && path === '/api/auth/logout') {
-    setSignedIn(false);
-    return respond({ authenticated: false }, 150);
   }
 
   if (method === 'POST' && path === '/api/generate') {

@@ -153,12 +153,6 @@
         </button>
       </form>
 
-      @if (demoPassword) {
-        <p class="border-line bg-surface text-fg-muted rounded-card mt-4 px-3 py-2 text-[12px]">
-          Demo build. The password is <code class="mono text-fg">{{ demoPassword }}</code
-          >. A real deployment hashes it server-side and this hint disappears.
-        </p>
-      }
 
       <p class="text-fg-subtle mt-6 text-[11px] leading-relaxed">
         The session is an httpOnly cookie, so the browser never holds anything readable by script.

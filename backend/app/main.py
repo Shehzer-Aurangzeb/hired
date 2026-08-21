@@ -1,10 +1,11 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import select
 from starlette.middleware.sessions import SessionMiddleware
 
+from . import auth
 from .db import SessionDep, init_db
 from .models import Profile
 from .profile_parser import parse_text
@@ -44,13 +45,18 @@ app.add_middleware(
 )
 
 
-@app.get("/api/profile/template")
+# One dependency on the router rather than one per route: a route added later
+# cannot forget to be protected, because there is nowhere unprotected to put it.
+api = APIRouter(prefix="/api", dependencies=[Depends(auth.require_session)])
+
+
+@api.get("/profile/template")
 def get_template() -> dict[str, str]:
     """The starter file, and the briefing that hands it to Claude."""
     return {"text": template(), "claude_prompt": claude_prompt()}
 
 
-@app.get("/api/profile", response_model=Profile)
+@api.get("/profile", response_model=Profile)
 def get_profile(session: SessionDep) -> Profile:
     # ponytail: re-parsed per request. A 30KB document is sub-millisecond, so
     # there is no cache and therefore no cache to invalidate on save.
@@ -58,3 +64,7 @@ def get_profile(session: SessionDep) -> Profile:
     if row is None:
         raise HTTPException(404, "No profile saved yet.")
     return parse_text(row.text)
+
+
+app.include_router(auth.router)
+app.include_router(api)
