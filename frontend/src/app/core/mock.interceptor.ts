@@ -17,7 +17,9 @@ let applications: Application[] = MOCK_APPLICATIONS.map((a) => ({ ...a }));
 const SESSION_KEY = 'hired-mock-session';
 const PROFILE_KEY = 'hired-mock-profile';
 const PROFILE_AT_KEY = 'hired-mock-profile-at';
+const LOCKOUT_MS = 30_000;
 let failures = 0;
+let lockedUntil = 0;
 
 function signedIn(): boolean {
   return sessionStorage.getItem(SESSION_KEY) === '1';
@@ -42,7 +44,7 @@ function scenario(): string {
 
 if (USE_MOCKS) {
   console.info(
-    '[hired] mocks on. Scenarios: ?mock=weak | blocked | overflow | error | empty',
+    '[hired] mocks on. Scenarios: ?mock=weak | blocked | overflow | error | empty | conflict',
   );
 }
 
@@ -70,9 +72,12 @@ function route(method: string, path: string, body: unknown): Observable<HttpResp
 
   if (method === 'POST' && path === '/api/auth/login') {
     // Three misses and the real backend will rate limit, so the mock does too.
-    if (failures >= 3) {
+    // The lockout has to expire on its own: a counter that only resets on a
+    // correct password locks you out of ever giving one.
+    const left = lockedUntil - Date.now();
+    if (left > 0) {
       return failWith(429, 'Too many attempts. Wait a moment before trying again.', path, {
-        retry_after: 30,
+        retry_after: Math.ceil(left / 1000),
       });
     }
     if ((body as { password: string }).password === MOCK_PASSWORD) {
@@ -81,6 +86,13 @@ function route(method: string, path: string, body: unknown): Observable<HttpResp
       return respond({ authenticated: true }, 600);
     }
     failures += 1;
+    if (failures >= 3) {
+      failures = 0;
+      lockedUntil = Date.now() + LOCKOUT_MS;
+      return failWith(429, 'Too many attempts. Wait a moment before trying again.', path, {
+        retry_after: LOCKOUT_MS / 1000,
+      });
+    }
     return failWith(401, 'That password is not right.', path);
   }
 
@@ -101,7 +113,20 @@ function route(method: string, path: string, body: unknown): Observable<HttpResp
   }
 
   if (method === 'PUT' && path === '/api/profile/source') {
-    const { text } = body as { text: string };
+    const { text, expected_updated_at } = body as {
+      text: string;
+      expected_updated_at: string | null;
+    };
+    const stored = sessionStorage.getItem(PROFILE_AT_KEY);
+    // A save composed against an older copy would silently overwrite whatever
+    // landed in between, so it is refused with the current text attached.
+    const stale = stored && expected_updated_at && expected_updated_at !== stored;
+    if (stale || scenario() === 'conflict') {
+      return failWith(409, 'This profile changed somewhere else since you opened it.', path, {
+        text: sessionStorage.getItem(PROFILE_KEY) ?? '',
+        updated_at: stored,
+      });
+    }
     const result = checkProfile(text);
     if (!result.ok) {
       return failWith(422, 'The profile did not parse.', path, { errors: result.errors });

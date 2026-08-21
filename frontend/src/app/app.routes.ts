@@ -42,6 +42,10 @@ export const routes: Routes = [
     canActivate: [authGuard, profileGuard],
     title: 'Profile · hired',
     loadComponent: () => import('./features/profile/profile-page').then((m) => m.ProfilePage),
+    // The profile is the only copy of the CV data, so leaving mid-edit asks first.
+    canDeactivate: [
+      (page: import('./features/profile/profile-page').ProfilePage) => page.confirmLeave(),
+    ],
   },
   { path: '', pathMatch: 'full', redirectTo: 'generate' },
   { path: '**', redirectTo: 'generate' },

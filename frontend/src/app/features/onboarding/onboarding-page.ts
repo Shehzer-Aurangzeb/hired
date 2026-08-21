@@ -1,15 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 
+import { MAX_BYTES } from '../../core/api';
 import { ProfileService } from '../../core/profile.service';
 import { ToastService } from '../../core/toast.service';
 import { ProfileIssue, ValidationResult } from '../../core/models';
 import { Icon } from '../../shared/icon';
 
 type Source = 'paste' | 'upload' | 'template';
-
-/** Rejected before it reaches the server. A profile is text, and not a big one. */
-const MAX_BYTES = 512 * 1024;
 
 @Component({
   selector: 'app-onboarding-page',

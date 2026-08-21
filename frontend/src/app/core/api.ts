@@ -16,3 +16,9 @@ export const USE_MOCKS = true;
  * and never reaches the browser; this exists so the demo has something to type.
  */
 export const MOCK_PASSWORD = 'hired';
+
+/**
+ * Cap on an uploaded profile, enforced before the bytes leave the browser.
+ * A profile is plain text and a big one is a mistake, not a large CV.
+ */
+export const MAX_BYTES = 512 * 1024;

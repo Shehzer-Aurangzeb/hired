@@ -1,4 +1,4 @@
-<div class="mx-auto max-w-4xl p-4">
+<div class="mx-auto max-w-6xl p-4">
   @if (resource.isLoading()) {
     <div class="card space-y-3 p-4" aria-busy="true">
       <div class="bg-surface h-5 w-56 animate-pulse rounded"></div>
@@ -12,10 +12,9 @@
         Could not load the profile.
       </p>
       <p class="text-fg-muted mt-2 text-[12px]">
-        Check that the backend is running on port 8000 and that
-        <span class="mono">backend/profile/master.md</span> exists and is valid YAML. Section
-        bodies are parsed as YAML, so a list item that starts with a quote must be quoted end
-        to end.
+        Check that the backend is running on port 8000 and that the saved profile is valid YAML.
+        Section bodies are parsed as YAML, so a list item that starts with a quote must be quoted
+        end to end.
       </p>
       <button type="button" class="btn btn-outline mt-3" (click)="reload()">
         <app-icon name="refresh" [size]="15" />
@@ -23,10 +22,10 @@
       </button>
     </div>
   } @else if (resource.value(); as profile) {
-    <!-- identity -->
-    <header class="mb-4 flex flex-wrap items-start gap-4">
+    <!-- ============ who ============ -->
+    <header class="mb-3 flex flex-wrap items-start gap-x-4 gap-y-2">
       <div class="min-w-0">
-        <h1 class="text-lg font-semibold">{{ profile.identity.name }}</h1>
+        <h1 class="truncate text-lg font-semibold tracking-tight">{{ profile.identity.name }}</h1>
         <p class="text-fg-muted text-[13px]">
           {{ profile.identity.location }} · {{ profile.identity.email }} ·
           {{ profile.identity.phone }}
@@ -39,209 +38,534 @@
         </p>
       </div>
 
-      <div class="ml-auto flex items-center gap-2">
-        <span class="chip tabular">{{ total() }} bullets</span>
-        @if (blocked()) {
-          <span class="chip border-danger/40 text-danger tabular">{{ blocked() }} blocked</span>
+      <div class="ml-auto flex flex-wrap items-center gap-2">
+        @if (updatedLabel()) {
+          <span class="text-fg-subtle text-[12px]">Saved {{ updatedLabel() }}</span>
         }
+        <button type="button" class="btn btn-outline" (click)="export()">
+          <app-icon name="download" [size]="15" />
+          Export
+        </button>
+        <label class="btn btn-outline">
+          <app-icon name="download" [size]="15" class="rotate-180" />
+          Import
+          <input
+            type="file"
+            accept=".md,.markdown,text/markdown,text/plain"
+            class="sr-only"
+            (change)="onFile($event)"
+          />
+        </label>
         <button
           type="button"
           class="btn btn-ghost !px-2"
           (click)="reload()"
-          aria-label="Re-read master.md from disk"
-          title="Re-read master.md from disk"
+          aria-label="Re-read the parsed profile"
+          title="Re-read the parsed profile"
         >
           <app-icon name="refresh" [size]="15" />
         </button>
       </div>
     </header>
 
-    <!-- titles and summaries -->
-    <div class="mb-3 grid gap-3 md:grid-cols-2 md:items-start">
-      <section class="card p-3.5">
-        <h2 class="section-title mb-2">Title variants</h2>
-        @for (title of profile.titles; track title.id) {
-          <p class="mb-1.5 text-[13px]">
-            <span class="mono text-fg-subtle mr-1">{{ title.id }}</span>
-            {{ title.text }}
-          </p>
-        }
-      </section>
-
-      <section class="card p-3.5">
-        <h2 class="section-title mb-2">Summaries</h2>
-        @for (summary of profile.summaries; track summary.id) {
-          <div class="mb-2.5">
-            <p class="mb-0.5 flex items-baseline gap-2">
-              <span class="mono text-fg-subtle">{{ summary.id }}</span>
-              <span
-                class="tabular text-[11px]"
-                [class]="summary.text.length > summary.max_chars ? 'text-danger' : 'text-fg-subtle'"
-              >
-                {{ summary.text.length }}/{{ summary.max_chars }}
-              </span>
-            </p>
-            <p class="text-[13px] leading-relaxed">{{ summary.text }}</p>
-          </div>
-        }
-      </section>
+    <!-- ============ health ============ -->
+    <div class="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div class="stat-lg">
+        <p class="stat-value text-fg">{{ health().projects }}</p>
+        <p class="stat-label">Projects</p>
+      </div>
+      <div class="stat-lg">
+        <p class="stat-value text-fg">{{ health().bullets }}</p>
+        <p class="stat-label">Bullets</p>
+      </div>
+      <div class="stat-lg" [class]="health().blocked ? 'border-danger/40 bg-danger-soft' : ''">
+        <p class="stat-value" [class]="health().blocked ? 'text-danger' : 'text-fg-subtle'">
+          {{ health().blocked }}
+        </p>
+        <p class="stat-label">Blocked</p>
+      </div>
+      <div class="stat-lg" [class]="health().missing ? 'border-warn/50 bg-warn-soft' : ''">
+        <p class="stat-value" [class]="health().missing ? 'text-warn' : 'text-fg-subtle'">
+          {{ health().missing }}
+        </p>
+        <p class="stat-label">No boundary</p>
+      </div>
     </div>
 
-    <!-- skills -->
-    <section class="card mb-3 p-3.5">
-      <h2 class="section-title mb-2">Skills</h2>
-      @for (line of profile.skills; track line.line) {
-        <div class="mb-2 flex flex-wrap items-baseline gap-1.5">
-          <span class="w-20 shrink-0 text-[12px] font-medium">{{ line.line }}</span>
-          @for (item of line.items; track item) {
-            <span class="chip" [class]="line.gated.includes(item) ? 'border-warn/50 text-warn' : ''">
-              {{ item }}
-              @if (line.gated.includes(item)) {
-                <app-icon name="alert" [size]="11" />
+    <!-- ============ tabs ============ -->
+    <div class="border-line mb-4 flex items-center gap-1 border-b" role="tablist">
+      <button
+        type="button"
+        role="tab"
+        [attr.aria-selected]="tab() === 'browse'"
+        class="-mb-px cursor-pointer border-b-2 px-3 py-2 text-[13px] font-medium transition-colors duration-150"
+        [class]="
+          tab() === 'browse'
+            ? 'border-ink text-fg'
+            : 'text-fg-muted hover:text-fg border-transparent'
+        "
+        (click)="setTab('browse')"
+      >
+        Browse
+      </button>
+      <button
+        type="button"
+        role="tab"
+        [attr.aria-selected]="tab() === 'edit'"
+        class="-mb-px flex cursor-pointer items-center gap-1.5 border-b-2 px-3 py-2 text-[13px] font-medium transition-colors duration-150"
+        [class]="
+          tab() === 'edit' ? 'border-ink text-fg' : 'text-fg-muted hover:text-fg border-transparent'
+        "
+        (click)="setTab('edit')"
+      >
+        Edit source
+        @if (dirty()) {
+          <span class="bg-warn size-1.5 rounded-full" aria-label="Unsaved changes"></span>
+        }
+      </button>
+    </div>
+
+    @switch (tab()) {
+      <!-- ================================================================ -->
+      <!-- Browse                                                            -->
+      <!-- ================================================================ -->
+      @case ('browse') {
+        <div class="mb-3 flex flex-wrap items-center gap-3">
+          <h2 class="section-title">Experience</h2>
+          <span class="tabular text-fg-subtle text-[11px]">
+            {{ shown() }} of {{ health().projects }} projects
+          </span>
+          <label class="relative ml-auto w-full sm:w-64">
+            <span class="sr-only">Filter projects and bullets</span>
+            <app-icon
+              name="search"
+              [size]="15"
+              class="text-fg-subtle pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
+            />
+            <input
+              type="search"
+              class="search"
+              placeholder="Filter by tag, stack or text"
+              [value]="query()"
+              (input)="query.set($any($event.target).value)"
+            />
+            @if (query()) {
+              <button
+                type="button"
+                class="text-fg-subtle hover:text-fg absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer"
+                (click)="query.set('')"
+                aria-label="Clear filter"
+              >
+                <app-icon name="x" [size]="14" />
+              </button>
+            }
+          </label>
+        </div>
+
+        <div class="lg:grid lg:grid-cols-[190px_minmax(0,1fr)] lg:gap-5">
+          <!-- index -->
+          <nav class="hidden self-start lg:sticky lg:top-4 lg:block" aria-label="Projects">
+            @for (company of experience(); track company.name) {
+              <p class="text-fg-subtle mt-3 mb-1 text-[10px] tracking-wide uppercase first:mt-0">
+                {{ company.name }}
+              </p>
+              @for (project of company.projects; track project.id) {
+                <button
+                  type="button"
+                  class="text-fg-muted hover:bg-surface hover:text-fg block w-full truncate rounded px-2 py-1 text-left text-[12px] transition-colors duration-150"
+                  (click)="jump(project.id)"
+                >
+                  {{ project.name }}
+                </button>
               }
-            </span>
-          }
+            }
+          </nav>
+
+          <div class="min-w-0">
+            <!-- titles and summaries -->
+            <div class="mb-3 grid gap-3 md:grid-cols-2 md:items-start">
+              <section class="card p-3.5">
+                <h3 class="section-title mb-2">Title variants</h3>
+                @for (title of profile.titles; track title.id) {
+                  <p class="mb-1.5 text-[13px]">
+                    <span class="mono text-fg-subtle mr-1">{{ title.id }}</span>
+                    {{ title.text }}
+                  </p>
+                }
+              </section>
+
+              <section class="card p-3.5">
+                <h3 class="section-title mb-2">Summaries</h3>
+                @for (summary of profile.summaries; track summary.id) {
+                  <div class="mb-2.5">
+                    <p class="mb-0.5 flex items-baseline gap-2">
+                      <span class="mono text-fg-subtle">{{ summary.id }}</span>
+                      <span
+                        class="tabular text-[11px]"
+                        [class]="
+                          summary.text.length > summary.max_chars ? 'text-danger' : 'text-fg-subtle'
+                        "
+                      >
+                        {{ summary.text.length }}/{{ summary.max_chars }}
+                      </span>
+                    </p>
+                    <p class="text-[13px] leading-relaxed">{{ summary.text }}</p>
+                  </div>
+                }
+              </section>
+            </div>
+
+            <!-- skills -->
+            <section class="card mb-3 p-3.5">
+              <h3 class="section-title mb-2">Skills</h3>
+              @for (line of profile.skills; track line.line) {
+                <div class="mb-2 flex flex-wrap items-baseline gap-1.5">
+                  <span class="w-20 shrink-0 text-[12px] font-medium">{{ line.line }}</span>
+                  @for (item of line.items; track item) {
+                    <span
+                      class="chip"
+                      [class]="line.gated.includes(item) ? 'border-warn/50 text-warn' : ''"
+                    >
+                      {{ item }}
+                      @if (line.gated.includes(item)) {
+                        <app-icon name="alert" [size]="11" />
+                      }
+                    </span>
+                  }
+                </div>
+              }
+              <p class="text-fg-subtle mt-2 text-[11px]">
+                Amber chips are gated: they go on the page only when their evidence project does.
+              </p>
+            </section>
+
+            <!-- projects -->
+            @for (company of experience(); track company.name) {
+              <section class="mb-4">
+                <h3 class="mb-2 flex flex-wrap items-baseline gap-2">
+                  <span class="text-[14px] font-semibold">{{ company.name }}</span>
+                  <span class="text-fg-muted text-[12px]">{{ company.role }}</span>
+                  <span class="tabular text-fg-subtle text-[11px]">
+                    {{ company.start }} to {{ company.end }}
+                  </span>
+                </h3>
+
+                <div class="flex flex-col gap-2">
+                  @for (project of company.projects; track project.id) {
+                    <article class="card overflow-hidden" [id]="'project-' + project.id">
+                      <header class="border-line bg-surface border-b px-3 py-2">
+                        <div class="flex items-start gap-2">
+                          <div class="min-w-0">
+                            <p class="flex flex-wrap items-baseline gap-2">
+                              <span class="text-[13px] font-semibold">{{ project.name }}</span>
+                              <span class="mono text-fg-subtle">{{ project.id }}</span>
+                              <span class="text-fg-muted text-[12px]">{{ project.label }}</span>
+                            </p>
+                            <p class="mt-1 flex flex-wrap gap-1">
+                              @for (tech of project.stack; track tech) {
+                                <span class="chip">{{ tech }}</span>
+                              }
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            class="btn btn-ghost ml-auto shrink-0 !px-2 !py-1"
+                            (click)="editProject(project.name)"
+                            [attr.aria-label]="'Edit ' + project.name + ' in the source'"
+                            title="Jump to this project in the source"
+                          >
+                            <app-icon name="file-text" [size]="14" />
+                            Edit
+                          </button>
+                        </div>
+                      </header>
+
+                      <div class="p-3">
+                        @if (project.disclosure) {
+                          <p
+                            class="border-warn/40 bg-warn-soft text-warn rounded-card mb-2 flex items-start gap-2 border px-2.5 py-1.5 text-[12px]"
+                          >
+                            <app-icon name="alert" [size]="13" class="mt-0.5" />
+                            {{ project.disclosure }}
+                          </p>
+                        }
+
+                        <ul class="flex flex-col gap-2">
+                          @for (bullet of project.bullets; track bullet.id) {
+                            <li
+                              class="flex items-start gap-2"
+                              [class.opacity-50]="bullet.status === 'blocked'"
+                            >
+                              <span class="tabular text-fg-subtle mt-0.5 shrink-0 text-[11px]">
+                                p{{ bullet.priority }}
+                              </span>
+                              <div class="min-w-0">
+                                <p class="text-[13px] leading-relaxed">{{ bullet.text }}</p>
+                                <p class="mt-0.5 flex flex-wrap items-center gap-1.5">
+                                  <span class="mono text-fg-subtle">{{ bullet.id }}</span>
+                                  @if (bullet.status === 'blocked') {
+                                    <span class="badge bg-danger-soft text-danger">
+                                      <app-icon name="ban" [size]="10" />
+                                      blocked
+                                    </span>
+                                  }
+                                  @for (tag of bullet.tags; track tag) {
+                                    <span class="text-fg-subtle text-[11px]">#{{ tag }}</span>
+                                  }
+                                </p>
+                              </div>
+                            </li>
+                          } @empty {
+                            <li class="text-fg-subtle text-[12px]">No bullets on this project.</li>
+                          }
+                        </ul>
+
+                        <!-- The boundary is the reason this tool is trustworthy, so it
+                             is on the card rather than behind a disclosure. -->
+                        @if (hasBoundary(project)) {
+                          <div class="border-line mt-3 grid gap-3 border-t pt-2.5 text-[12px] sm:grid-cols-3">
+                            <div>
+                              <p class="text-fg-subtle mb-1 text-[10px] tracking-wide uppercase">
+                                Can claim
+                              </p>
+                              <ul class="list-disc pl-4">
+                                @for (claim of project.claim_boundary.can_claim; track claim) {
+                                  <li class="mb-0.5">{{ claim }}</li>
+                                } @empty {
+                                  <li class="text-fg-subtle list-none pl-0">—</li>
+                                }
+                              </ul>
+                            </div>
+                            <div>
+                              <p class="text-fg-subtle mb-1 text-[10px] tracking-wide uppercase">
+                                Cannot claim
+                              </p>
+                              <ul class="text-danger list-disc pl-4">
+                                @for (claim of project.claim_boundary.cannot_claim; track claim) {
+                                  <li class="mb-0.5">{{ claim }}</li>
+                                } @empty {
+                                  <li class="text-fg-subtle list-none pl-0">—</li>
+                                }
+                              </ul>
+                            </div>
+                            <div>
+                              <p class="text-fg-subtle mb-1 text-[10px] tracking-wide uppercase">
+                                Required qualifiers
+                              </p>
+                              <ul class="text-warn list-disc pl-4">
+                                @for (q of project.claim_boundary.required_qualifiers; track q) {
+                                  <li class="mb-0.5">{{ q }}</li>
+                                } @empty {
+                                  <li class="text-fg-subtle list-none pl-0">—</li>
+                                }
+                              </ul>
+                            </div>
+                          </div>
+                        } @else {
+                          <p
+                            class="border-warn/40 bg-warn-soft text-warn rounded-card mt-3 flex items-center gap-1.5 border px-2.5 py-1.5 text-[12px]"
+                          >
+                            <app-icon name="alert" [size]="13" />
+                            No claim boundary. The guard cannot protect what has no boundary.
+                          </p>
+                        }
+                      </div>
+                    </article>
+                  }
+                </div>
+              </section>
+            } @empty {
+              <div class="card text-fg-muted px-6 py-12 text-center text-[13px]">
+                Nothing matches “{{ query() }}”.
+                <button
+                  type="button"
+                  class="text-fg ml-1 cursor-pointer underline"
+                  (click)="query.set('')"
+                >
+                  Clear the filter
+                </button>
+              </div>
+            }
+          </div>
         </div>
       }
-      <p class="text-fg-subtle mt-2 text-[11px]">
-        Amber chips are gated: they go on the page only when their evidence project does.
-      </p>
-    </section>
 
-    <!-- experience -->
-    <div class="mb-3 flex items-center gap-3">
-      <h2 class="section-title">Experience</h2>
-      <label class="relative ml-auto w-56">
-        <span class="sr-only">Filter projects and bullets</span>
-        <app-icon
-          name="search"
-          [size]="14"
-          class="text-fg-subtle pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2"
-        />
-        <input
-          type="search"
-          class="field pl-8"
-          placeholder="Filter by tag, stack or text"
-          [value]="query()"
-          (input)="query.set($any($event.target).value)"
-        />
-      </label>
-    </div>
+      <!-- ================================================================ -->
+      <!-- Edit source                                                       -->
+      <!-- ================================================================ -->
+      @case ('edit') {
+        @if (mocked) {
+          <p class="border-line bg-surface text-fg-muted rounded-card mb-3 flex items-start gap-2 px-3 py-2 text-[12px]">
+            <app-icon name="alert" [size]="14" class="mt-0.5 shrink-0" />
+            Demo build. Saving here writes to the mock, so the Browse tab keeps showing the file
+            the backend parses off disk. The two join up when the source routes land.
+          </p>
+        }
 
-    @for (company of experience(); track company.name) {
-      <section class="mb-4">
-        <h3 class="mb-2 flex flex-wrap items-baseline gap-2">
-          <span class="text-[14px] font-semibold">{{ company.name }}</span>
-          <span class="text-fg-muted text-[12px]">{{ company.role }}</span>
-          <span class="tabular text-fg-subtle text-[11px]">
-            {{ company.start }} to {{ company.end }}
-          </span>
-        </h3>
+        @if (conflict()) {
+          <div class="border-warn/50 bg-warn-soft rounded-card mb-3 border px-3 py-2.5" role="alert">
+            <p class="text-warn flex items-center gap-2 text-[13px] font-medium">
+              <app-icon name="alert" [size]="15" />
+              Changed somewhere else
+            </p>
+            <p class="text-fg-muted mt-1 text-[12px] leading-relaxed">
+              The stored profile moved on after you opened this one, so saving would overwrite it.
+              Take the stored copy and lose your edits, or keep yours and overwrite theirs.
+            </p>
+            <div class="mt-2.5 flex flex-wrap gap-2">
+              <button type="button" class="btn btn-outline" (click)="takeTheirs()">
+                <app-icon name="download" [size]="15" />
+                Load theirs
+              </button>
+              <button type="button" class="btn btn-outline" (click)="keepMine()">
+                Keep mine and overwrite
+              </button>
+            </div>
+          </div>
+        }
 
-        <div class="flex flex-col gap-2">
-          @for (project of company.projects; track project.id) {
-            <article class="card overflow-hidden">
-              <header class="border-line bg-surface border-b px-3 py-2">
-                <p class="flex flex-wrap items-baseline gap-2">
-                  <span class="text-[13px] font-semibold">{{ project.name }}</span>
-                  <span class="mono text-fg-subtle">{{ project.id }}</span>
-                  <span class="text-fg-muted text-[12px]">{{ project.label }}</span>
-                </p>
-                <p class="mt-1 flex flex-wrap gap-1">
-                  @for (tech of project.stack; track tech) {
-                    <span class="chip">{{ tech }}</span>
-                  }
-                </p>
-              </header>
+        @if (editError()) {
+          <div
+            class="border-danger/50 bg-danger-soft text-danger rounded-card mb-3 flex flex-wrap items-center gap-2 border px-3 py-2 text-[12px]"
+            role="alert"
+          >
+            <app-icon name="alert" [size]="14" class="shrink-0" />
+            {{ editError() }}
+            <button type="button" class="btn btn-outline ml-auto !py-1" (click)="load()">
+              <app-icon name="refresh" [size]="14" />
+              Try again
+            </button>
+          </div>
+        }
 
-              <div class="p-3">
-                @if (project.disclosure) {
-                  <p class="border-warn/40 bg-warn-soft text-warn rounded-card mb-2 flex items-start gap-2 border px-2.5 py-1.5 text-[12px]">
-                    <app-icon name="alert" [size]="13" class="mt-0.5" />
-                    {{ project.disclosure }}
-                  </p>
+        @if (result(); as result) {
+          @for (issue of result.errors; track issue.message + issue.line) {
+            <p
+              class="border-danger/50 bg-danger-soft text-danger rounded-card mb-2 flex items-start gap-2 border px-3 py-2 text-[12px]"
+              role="alert"
+            >
+              <app-icon name="ban" [size]="14" class="mt-0.5 shrink-0" />
+              <span class="min-w-0">
+                @if (issue.line) {
+                  <strong class="font-semibold">Line {{ issue.line }}.</strong>
                 }
+                {{ issue.message }}
+                @if (issue.line) {
+                  <br />
+                  <code class="mono break-all">{{ lineText(issue) }}</code>
+                }
+              </span>
+            </p>
+          }
+          @for (issue of result.warnings; track issue.message) {
+            <p
+              class="border-warn/50 bg-warn-soft text-warn rounded-card mb-2 flex items-start gap-2 border px-3 py-2 text-[12px]"
+            >
+              <app-icon name="alert" [size]="14" class="mt-0.5 shrink-0" />
+              {{ issue.message }}
+            </p>
+          }
+          @if (result.ok && !result.warnings.length) {
+            <p
+              class="border-accent/50 bg-accent-soft text-accent rounded-card mb-2 flex items-start gap-2 border px-3 py-2 text-[12px]"
+            >
+              <app-icon name="check" [size]="14" class="mt-0.5 shrink-0" />
+              Parses cleanly.
+            </p>
+          }
+        }
 
-                <ul class="flex flex-col gap-2">
-                  @for (bullet of project.bullets; track bullet.id) {
-                    <li class="flex items-start gap-2" [class.opacity-50]="bullet.status === 'blocked'">
-                      <span class="tabular text-fg-subtle mt-0.5 shrink-0 text-[11px]">
-                        p{{ bullet.priority }}
-                      </span>
-                      <div class="min-w-0">
-                        <p class="text-[13px] leading-relaxed">{{ bullet.text }}</p>
-                        <p class="mt-0.5 flex flex-wrap items-center gap-1.5">
-                          <span class="mono text-fg-subtle">{{ bullet.id }}</span>
-                          @if (bullet.status === 'blocked') {
-                            <span class="badge bg-danger-soft text-danger">
-                              <app-icon name="ban" [size]="10" />
-                              blocked
-                            </span>
-                          }
-                          @for (tag of bullet.tags; track tag) {
-                            <span class="text-fg-subtle text-[11px]">#{{ tag }}</span>
-                          }
-                        </p>
-                      </div>
-                    </li>
-                  } @empty {
-                    <li class="text-fg-subtle text-[12px]">No bullets on this project.</li>
-                  }
-                </ul>
+        <section class="card overflow-hidden">
+          <header class="card-head">
+            <h2 class="section-title">master.md</h2>
+            @if (dirty()) {
+              <span class="badge bg-warn-soft text-warn">Unsaved</span>
+            }
+            <span class="tabular text-fg-subtle ml-auto text-[11px]">
+              {{ lines().length }} lines · {{ text().length }} chars
+            </span>
+          </header>
 
-                @if (
-                  project.claim_boundary.can_claim.length ||
-                  project.claim_boundary.cannot_claim.length ||
-                  project.claim_boundary.required_qualifiers.length
-                ) {
-                  <details class="border-line mt-3 border-t pt-2">
-                    <summary class="text-fg-muted hover:text-fg cursor-pointer text-[12px]">
-                      Claim boundary
-                    </summary>
-                    <div class="mt-2 grid gap-3 text-[12px] sm:grid-cols-3">
-                      <div>
-                        <p class="text-fg-subtle mb-1 text-[10px] tracking-wide uppercase">Can claim</p>
-                        <ul class="list-disc pl-4">
-                          @for (claim of project.claim_boundary.can_claim; track claim) {
-                            <li class="mb-0.5">{{ claim }}</li>
-                          }
-                        </ul>
-                      </div>
-                      <div>
-                        <p class="text-fg-subtle mb-1 text-[10px] tracking-wide uppercase">Cannot claim</p>
-                        <ul class="text-danger list-disc pl-4">
-                          @for (claim of project.claim_boundary.cannot_claim; track claim) {
-                            <li class="mb-0.5">{{ claim }}</li>
-                          }
-                        </ul>
-                      </div>
-                      <div>
-                        <p class="text-fg-subtle mb-1 text-[10px] tracking-wide uppercase">
-                          Required qualifiers
-                        </p>
-                        <ul class="text-warn list-disc pl-4">
-                          @for (q of project.claim_boundary.required_qualifiers; track q) {
-                            <li class="mb-0.5">{{ q }}</li>
-                          }
-                        </ul>
-                      </div>
-                    </div>
-                  </details>
-                } @else {
-                  <p class="text-warn mt-3 flex items-center gap-1.5 text-[12px]">
-                    <app-icon name="alert" [size]="13" />
-                    No claim boundary on this project.
-                  </p>
+          @if (loading()) {
+            <div class="space-y-2 p-3.5" aria-busy="true">
+              @for (n of [1, 2, 3, 4, 5, 6, 7, 8]; track n) {
+                <div class="bg-surface h-3 animate-pulse rounded" [style.width.%]="90 - n * 6"></div>
+              }
+            </div>
+          } @else {
+            <!-- Gutter and textarea scroll as one. Both are 19px lines so the
+                 numbers stay next to their line without measuring anything. -->
+            <div class="flex max-h-[60vh] min-h-[320px] overflow-hidden">
+              <div
+                #gutter
+                class="mono border-line bg-surface text-fg-subtle shrink-0 overflow-hidden border-r py-3 text-right leading-[19px] select-none"
+                aria-hidden="true"
+              >
+                @for (n of lineNumbers(); track n) {
+                  <div class="px-2" [class]="errorLines().has(n) ? 'text-danger font-semibold' : ''">
+                    {{ n }}
+                  </div>
                 }
               </div>
-            </article>
+              <textarea
+                #editor
+                class="mono w-full resize-none border-0 bg-transparent px-3 py-3 !text-[12px] leading-[19px] focus:outline-none"
+                spellcheck="false"
+                placeholder="# Identity&#10;name: Your Name&#10;..."
+                [value]="text()"
+                (input)="update($any($event.target).value)"
+                (scroll)="gutter.scrollTop = editor.scrollTop"
+                aria-label="Profile markdown"
+              ></textarea>
+            </div>
           }
+        </section>
+
+        <div class="mt-3 flex flex-wrap items-center gap-2">
+          <p class="text-fg-subtle text-[12px]">
+            @if (!dirty()) {
+              No changes.
+            } @else if (!result()) {
+              Check it before saving.
+            } @else if (!result()?.ok) {
+              Fix the errors above, then check again.
+            } @else {
+              Ready to save.
+            }
+          </p>
+
+          @if (dirty()) {
+            <button type="button" class="btn btn-ghost" (click)="revert()">
+              <app-icon name="arrow-left" [size]="15" />
+              Revert
+            </button>
+          }
+
+          <button
+            type="button"
+            class="btn btn-outline ml-auto"
+            [disabled]="checking() || !text().trim()"
+            (click)="check()"
+          >
+            @if (checking()) {
+              <app-icon name="refresh" [size]="15" class="animate-spin" />
+              Checking
+            } @else {
+              <app-icon name="check" [size]="15" />
+              Check it
+            }
+          </button>
+
+          <button type="button" class="btn btn-primary" [disabled]="!canSave()" (click)="save()">
+            @if (saving()) {
+              <app-icon name="refresh" [size]="15" class="animate-spin" />
+              Saving
+            } @else {
+              Save
+            }
+          </button>
         </div>
-      </section>
-    } @empty {
-      <div class="card text-fg-muted px-6 py-12 text-center text-[13px]">
-        Nothing matches that filter.
-      </div>
+      }
     }
   }
 </div>

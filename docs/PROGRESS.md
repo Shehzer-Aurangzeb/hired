@@ -754,3 +754,41 @@ All six scenarios verified: contrast passes AA and nothing overflows at 375.
 the reply-rate charts aggregate over twenty-plus saved applications. With an
 empty database they are charts of nothing, and the plan gates them behind real
 volume.
+
+## Profile screen
+
+Two tabs on one route, `?tab=` in the URL so reload and back behave.
+
+- **Browse** — the parsed profile. Sticky project index at `lg+`, a filter that
+  reports "3 of 12 projects", and the claim boundary promoted out of a
+  `<details>` onto the card, because it is the reason the tool is trustworthy.
+  Each card has an Edit button that switches tabs and drops the caret on that
+  project's `###` heading in the source.
+- **Edit source** — raw markdown with a scroll-synced line gutter that reddens
+  the lines the validator complained about. Same validate-before-save flow as
+  onboarding. Save is disabled until validation passes and the buffer is dirty.
+- Health row above the tabs: projects, bullets, blocked, no boundary. Blocked
+  and no-boundary are the only two that can be wrong, so they are the only two
+  that get colour.
+
+Protecting the only copy of the CV data:
+
+1. `canDeactivate` + `beforeunload` on unsaved edits.
+2. `expected_updated_at` on PUT; a 409 raises a conflict panel offering "load
+   theirs" or "keep mine and overwrite" instead of silently clobbering. The mock
+   implements the 409, and `?mock=conflict` forces it so the branch is reachable.
+3. Export to `master.md` from the header, always available.
+
+Two bugs found by testing rather than by reading:
+
+- `/profile?tab=edit` entered directly never loaded the source, so the editor
+  rendered empty and one Save would have wiped the profile. The source now loads
+  in the constructor, which also makes the "Saved 2 hours ago" label true on
+  both tabs.
+- The mock login lockout counted failures but only reset them on a *successful*
+  login, which the lockout itself blocks. Three wrong guesses and the correct
+  password was refused forever. Now a `lockedUntil` timestamp that expires.
+
+Skipped: structured/form editor (the markdown is the format), version history
+(needs backend storage; export covers it), syntax highlighting (a CodeMirror
+dependency for one textarea).
