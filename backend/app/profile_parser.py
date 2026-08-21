@@ -1,4 +1,4 @@
-"""master.md -> Profile.
+"""The master profile markdown -> Profile.
 
 The file is markdown headings wrapping YAML bodies, so the parser is a heading
 split plus yaml.safe_load. No hand-rolled tokenizer.
@@ -23,10 +23,12 @@ _H3 = re.compile(r"^### (.+)$", re.M)
 
 
 def parse(path: Path) -> Profile:
-    sections = {
-        name.strip().lower(): body
-        for name, body in _split(path.read_text(encoding="utf-8"), _H1)
-    }
+    """Convenience for tests and fixtures. The app parses a database row."""
+    return parse_text(path.read_text(encoding="utf-8"))
+
+
+def parse_text(text: str) -> Profile:
+    sections = {name.strip().lower(): body for name, body in _split(text, _H1)}
     return Profile.model_validate(
         {
             "identity": _yaml(sections.get("identity", "")),

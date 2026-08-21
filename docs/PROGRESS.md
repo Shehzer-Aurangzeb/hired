@@ -29,11 +29,10 @@ As each route lands, set `USE_MOCKS = false` in `frontend/src/app/core/api.ts`.
 **Restart the two servers**
 
 ```
-cd backend  && HIRED_MASTER=tests/fixtures/master.md .venv/bin/uvicorn app.main:app --port 8000
+cp backend/.env.example backend/.env      # then fill HIRED_SECRET_KEY
+cd backend  && .venv/bin/uvicorn app.main:app --port 8000
 cd frontend && npx ng serve
 ```
-
-Drop the `HIRED_MASTER=` prefix once `backend/profile/master.md` exists.
 
 ---
 
@@ -148,17 +147,8 @@ meant it to.
 
 **`HIRED_MASTER` env var** added to `backend/app/main.py`, so the backend can
 run against `tests/fixtures/master.md` while the real `master.md` is still
-being written.
-
-**Run both**
-
-```
-cd backend && HIRED_MASTER=tests/fixtures/master.md .venv/bin/uvicorn app.main:app --port 8000
-cd frontend && npx ng serve
-```
-
-Then open http://localhost:4200. Drop the `HIRED_MASTER=` prefix once
-`backend/profile/master.md` exists.
+being written. *(Superseded: the profile moved into the database. See the
+storage section below.)*
 
 **Next:** still Phase 2, and it needs the current CV in the repo.
 
@@ -792,3 +782,45 @@ Two bugs found by testing rather than by reading:
 Skipped: structured/form editor (the markdown is the format), version history
 (needs backend storage; export covers it), syntax highlighting (a CodeMirror
 dependency for one textarea).
+
+
+## Storage: SQLite, two tables
+
+SQLite over NoSQL, because the "we will add features" argument is already
+answered by JSON columns — `jd_parsed`, `gaps`, `selected_bullet_ids` and
+`selected_bullets` are all JSON — while `ORDER BY created_at` and
+`WHERE status = ?` still work. NoSQL would be a service to run for a few
+hundred rows and one user. SQLModel is SQLAlchemy, so a Postgres URL is the
+only change needed if the deploy target has no persistent disk.
+
+`app/tables.py`
+
+- **`profile_source`** — the master markdown, one row, `CHECK (id = 1)`. On disk
+  it would not survive a redeploy, and it is the only copy of the CV data.
+- **`application`** — the plan's table plus `selected_bullets` (the printed text,
+  not a join against today's profile) and `pdf` as **bytes rather than a path**.
+  A hundred applications is about 8 MB, which removes the second reason to need
+  a writable disk and makes a backup one file. `CHECK` on `status`.
+
+`app/db.py` — engine, `SessionDep`, `create_all` on startup. No Alembic: two
+tables and one user means a schema change is a hand-written `ALTER TABLE`.
+WAL and `foreign_keys` pragmas on SQLite, because "database is locked" is
+reachable with one user and two tabs.
+
+`app/settings.py` — pydantic-settings, `HIRED_` prefix, `.env` locally.
+`secret_key` has **no default**: a shipped default signs forged sessions.
+The password is `HIRED_PASSWORD_HASH` (scrypt, stdlib) rather than a table —
+there is no change-password screen to justify one, and a table needs a seeding
+path. Sessions are a signed cookie via Starlette's `SessionMiddleware`, so
+there is no session table either.
+
+`GET /api/profile` now parses the database row and 404s when none exists.
+
+**One frontend fix this forced:** `ProfileService.profile` was an unconditional
+`httpResource`, so the shell fetched the parsed profile on the *lock screen* —
+a 404 toast today and a 401 redirect once auth lands. The URL is now conditional
+on `authenticated() && exists()`, which leaves the resource idle until there is
+something to fetch and someone allowed to fetch it.
+
+**Next:** auth routes, then the profile source routes, which together take
+`USE_MOCKS` from "everything" down to generate and export.

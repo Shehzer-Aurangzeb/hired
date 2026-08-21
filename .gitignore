@@ -5,3 +5,4 @@ __pycache__/
 backend/profile/master.md
 backend/storage/
 .gstack/
+backend/hired.db*

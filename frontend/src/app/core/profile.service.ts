@@ -3,18 +3,26 @@ import { Injectable, inject, signal } from '@angular/core';
 import { Observable, catchError, map, of, shareReplay, tap } from 'rxjs';
 
 import { API } from './api';
+import { AuthService } from './auth.service';
 import { Profile, ProfileSource, ValidationResult } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class ProfileService {
   private readonly http = inject(HttpClient);
-
-  // ponytail: httpResource gives value/error/isLoading signals in one line. It is
-  // experimental in v20; swap for toSignal + catchError if the API churns.
-  readonly profile = httpResource<Profile>(() => `${API}/api/profile`);
+  private readonly auth = inject(AuthService);
 
   /** Null until the first check. The guard and the shell share one call. */
   readonly exists = signal<boolean | null>(null);
+
+  // ponytail: httpResource gives value/error/isLoading signals in one line. It is
+  // experimental in v20; swap for toSignal + catchError if the API churns.
+  //
+  // The URL is conditional so the resource stays idle until there is something to
+  // fetch and someone allowed to fetch it. Unconditional, it fired on the lock
+  // screen, where the answer is a 401 once auth lands and a 404 before then.
+  readonly profile = httpResource<Profile>(() =>
+    this.auth.authenticated() && this.exists() ? `${API}/api/profile` : undefined,
+  );
 
   private probe?: Observable<boolean>;
 
