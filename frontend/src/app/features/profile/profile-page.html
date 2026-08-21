@@ -620,12 +620,12 @@
           </p>
 
           <button type="button" class="btn btn-ghost" (click)="draftWithClaude(false)">
-            <app-icon [name]="copied() ? 'check' : 'sparkles'" [size]="15" />
+            <app-icon [name]="copied() ? 'check' : 'claude'" [size]="15" />
             {{ copied() ? 'Prompt copied' : 'Copy Claude prompt' }}
           </button>
-          <button type="button" class="btn btn-ghost" (click)="draftWithClaude(true)">
+          <button type="button" class="btn btn-claude" (click)="draftWithClaude(true)">
+            <app-icon name="claude" [size]="15" />
             Open in Claude
-            <app-icon name="chevron-right" [size]="15" />
           </button>
 
           @if (dirty()) {

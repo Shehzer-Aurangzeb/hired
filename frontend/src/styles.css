@@ -28,6 +28,11 @@
   --color-danger: #9b2c21;
   --color-danger-soft: #f6ded9;
 
+  /* Claude's coral, deepened until white text clears AA on it. The brand value
+     (#d97757) only reaches 3.1:1, and every other button on this site passes. */
+  --color-claude: #b85a38;
+  --color-claude-hover: #a34d2e;
+
   --radius-card: 0.5rem;
 }
 
@@ -85,6 +90,10 @@
      highest-contrast thing on the page should be the thing you press. */
   .btn-primary {
     @apply bg-ink text-ink-fg border-ink hover:bg-fg-muted hover:border-fg-muted;
+  }
+
+  .btn-claude {
+    @apply bg-claude border-claude text-white hover:bg-claude-hover hover:border-claude-hover;
   }
 
   .btn-ghost {

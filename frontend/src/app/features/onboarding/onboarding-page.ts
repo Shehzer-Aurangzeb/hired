@@ -33,6 +33,10 @@ export class OnboardingPage {
   readonly copied = signal(false);
 
   readonly lines = computed(() => this.text().split('\n'));
+  readonly lineNumbers = computed(() => this.lines().map((_, i) => i + 1));
+  readonly errorLines = computed(
+    () => new Set((this.result()?.errors ?? []).map((e) => e.line).filter(Boolean)),
+  );
   readonly canSave = computed(
     () => !!this.result()?.ok && !this.saving() && this.text().trim().length > 0,
   );

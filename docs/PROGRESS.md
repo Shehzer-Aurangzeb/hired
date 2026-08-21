@@ -907,3 +907,34 @@ the template is. The template view now carries two buttons:
 
 Same pair sits in the profile editor footer for a rewrite rather than a first
 draft.
+
+## Setup screen: one scroll region, and a Claude-coloured button
+
+The review step used to be a long scrolling page: intro copy, a toolbar, a
+Claude panel, four big stat tiles, the problem list, a 22-row textarea and a
+footer, all stacked. From `md` up it is now a fixed-height flex column, so the
+page itself never scrolls and the editor takes whatever height is left. What
+went, and why:
+
+- The intro copy stays on the chooser, where you read it. It is not needed again
+  once you are editing.
+- "Check it" appeared in both the toolbar and the footer. The footer is gone and
+  both actions live in the top bar, which also puts Save where you can see it
+  without scrolling.
+- The four `stat-lg` tiles became chips in that bar, so the counts stay on
+  screen while you edit instead of scrolling away above the file. Blocked and
+  no-boundary only appear when non-zero.
+- The problem list is capped at 26vh and scrolls; its count is a chip in the
+  bar, because the count cannot live in the thing that scrolls away.
+- The editor gained the line gutter from the profile page. Errors say "Line 62",
+  so there needed to be a line 62 to look at.
+
+Below `md` the page scrolls normally and the editor is a fixed 60vh. A phone
+with a screenful of errors would otherwise have left a hundred-pixel editor.
+Measured: 1440x900 gives a 631px editor and no page scroll, 434px with twelve
+errors on screen, still no page scroll.
+
+**Open in Claude** is `--color-claude: #b85a38` with white text and the burst
+mark. That is Claude's coral deepened until white clears AA on it: the brand
+value `#d97757` only reaches 3.1:1 against white, and every other button here
+passes. Copy prompt stays a plain outline button beside it.

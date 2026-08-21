@@ -1,19 +1,18 @@
-<div class="mx-auto max-w-3xl px-4 py-10">
-  <!-- ============ what and why ============ -->
-  <header class="mb-6">
-    <span class="border-line bg-surface text-fg-muted mb-3 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]">
-      Step 1 of 1 · one-time setup
-    </span>
-    <h1 class="text-2xl font-semibold tracking-tight">Add your master profile</h1>
-    <p class="text-fg-muted mt-2 max-w-xl text-[14px] leading-relaxed">
-      hired works from one Markdown file listing your projects, the bullets you would actually put
-      on a CV, and the boundary of what each project lets you claim. Nothing in it is generated.
-      The selector only ever picks from what you write here.
-    </p>
-  </header>
+@if (!source()) {
+  <!-- ============ pick a way in ============ -->
+  <div class="mx-auto max-w-3xl px-4 py-10">
+    <header class="mb-6">
+      <span class="border-line bg-surface text-fg-muted mb-3 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]">
+        Step 1 of 1 · one-time setup
+      </span>
+      <h1 class="text-2xl font-semibold tracking-tight">Add your master profile</h1>
+      <p class="text-fg-muted mt-2 max-w-xl text-[14px] leading-relaxed">
+        hired works from one Markdown file listing your projects, the bullets you would actually
+        put on a CV, and the boundary of what each project lets you claim. Nothing in it is
+        generated. The selector only ever picks from what you write here.
+      </p>
+    </header>
 
-  @if (!source()) {
-    <!-- ============ pick a way in ============ -->
     <div class="grid gap-3 sm:grid-cols-3">
       <button
         type="button"
@@ -52,7 +51,7 @@
         </span>
         <p class="text-[13px] font-medium">Start from a template</p>
         <p class="text-fg-muted mt-0.5 text-[12px] leading-relaxed">
-          A commented skeleton explaining every section.
+          A commented skeleton, or let Claude fill it in for you.
         </p>
       </button>
     </div>
@@ -68,149 +67,180 @@
       Not sure what goes in it? Take the template. It comes with a prompt that has Claude
       interview you and fill it in. Nothing is saved until it parses and you press Save.
     </p>
-  } @else {
-    <!-- ============ review and save ============ -->
-    <div class="mb-3 flex flex-wrap items-center gap-2">
+  </div>
+} @else {
+  <!-- ============ review and save ============
+       One screen, one scroll region. The editor takes the height that is left,
+       so the file scrolls and the page does not. -->
+  <div class="mx-auto flex max-w-5xl flex-col gap-2.5 p-4 md:h-[calc(100dvh-3rem)]">
+    <div class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
       <button type="button" class="btn btn-ghost !px-2" (click)="restart()">
         <app-icon name="arrow-left" [size]="15" />
         Start over
       </button>
+
       @if (fileName()) {
         <span class="chip mono">{{ fileName() }}</span>
       }
-      <button type="button" class="btn btn-outline ml-auto" [disabled]="checking()" (click)="check()">
-        @if (checking()) {
-          <app-icon name="refresh" [size]="15" class="animate-spin" />
-          Checking
-        } @else {
-          <app-icon name="check" [size]="15" />
-          Check it
+
+      <!-- Counts live in the bar rather than in tiles: they stay on screen while
+           you edit, and the error list below scrolls so its count cannot. -->
+      @if (result()?.errors?.length; as errors) {
+        <span class="chip tabular border-danger/40 text-danger">
+          <app-icon name="ban" [size]="11" />
+          <strong class="font-semibold">{{ errors }}</strong>
+          {{ errors === 1 ? 'error' : 'errors' }}
+        </span>
+      }
+
+      @if (result()?.summary; as summary) {
+        <span class="chip tabular">
+          <strong class="text-fg font-semibold">{{ summary.projects }}</strong>
+          {{ summary.projects === 1 ? 'project' : 'projects' }}
+        </span>
+        <span class="chip tabular">
+          <strong class="text-fg font-semibold">{{ summary.bullets }}</strong>
+          {{ summary.bullets === 1 ? 'bullet' : 'bullets' }}
+        </span>
+        @if (summary.blocked) {
+          <span class="chip tabular border-danger/40 text-danger">
+            <strong class="font-semibold">{{ summary.blocked }}</strong> blocked
+          </span>
         }
-      </button>
+        @if (summary.missing_boundaries) {
+          <span class="chip tabular border-warn/50 text-warn">
+            <strong class="font-semibold">{{ summary.missing_boundaries }}</strong> without a
+            boundary
+          </span>
+        }
+      }
+
+      <div class="ml-auto flex items-center gap-2">
+        <button type="button" class="btn btn-outline" [disabled]="checking() || !text().trim()" (click)="check()">
+          @if (checking()) {
+            <app-icon name="refresh" [size]="15" class="animate-spin" />
+            Checking
+          } @else {
+            <app-icon name="check" [size]="15" />
+            Check it
+          }
+        </button>
+        <button type="button" class="btn btn-primary" [disabled]="!canSave()" (click)="save()">
+          @if (saving()) {
+            <app-icon name="refresh" [size]="15" class="animate-spin" />
+            Saving
+          } @else {
+            Save and start
+          }
+        </button>
+      </div>
     </div>
 
     @if (source() === 'template' && prompt()) {
-      <div class="border-line bg-surface rounded-card mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 px-3.5 py-3">
-        <app-icon name="sparkles" [size]="16" class="text-fg-muted shrink-0" />
-        <div class="min-w-0 flex-1">
-          <p class="text-[13px] font-medium">Would rather not fill this in by hand?</p>
-          <p class="text-fg-muted text-[12px] leading-relaxed">
-            This prompt has Claude interview you and return the file filled in. Paste the
-            answer over the template.
-          </p>
-        </div>
-        <button type="button" class="btn btn-outline" (click)="copyPrompt()">
-          <app-icon [name]="copied() ? 'check' : 'file-text'" [size]="15" />
+      <div class="border-line bg-surface rounded-card flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
+        <app-icon name="claude" [size]="16" class="text-claude shrink-0" />
+        <p class="text-fg-muted min-w-0 flex-1 text-[12px]">
+          <span class="text-fg font-medium">Rather not fill this in by hand?</span>
+          Claude can interview you and return the file, ready to paste over the template.
+        </p>
+        <button type="button" class="btn btn-outline !min-h-8 !py-1" (click)="copyPrompt()">
+          <app-icon [name]="copied() ? 'check' : 'file-text'" [size]="14" />
           {{ copied() ? 'Copied' : 'Copy prompt' }}
         </button>
-        <button type="button" class="btn btn-primary" (click)="openClaude()">
+        <button type="button" class="btn btn-claude !min-h-8 !py-1" (click)="openClaude()">
+          <app-icon name="claude" [size]="14" />
           Open in Claude
-          <app-icon name="chevron-right" [size]="15" />
         </button>
       </div>
     }
 
-    <!-- summary, once we know something -->
-    @if (result()?.summary; as summary) {
-      <div class="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <div class="stat-lg">
-          <p class="stat-value text-fg">{{ summary.projects }}</p>
-          <p class="stat-label">Projects</p>
-        </div>
-        <div class="stat-lg">
-          <p class="stat-value text-fg">{{ summary.bullets }}</p>
-          <p class="stat-label">Bullets</p>
-        </div>
-        <div class="stat-lg">
-          <p class="stat-value" [class]="summary.blocked ? 'text-danger' : 'text-fg-subtle'">
-            {{ summary.blocked }}
+    <!-- Capped, so a file with twenty errors cannot push the editor off screen. -->
+    @if (result() || loadError()) {
+      <div class="max-h-[26vh] shrink-0 space-y-2 overflow-y-auto">
+        @if (loadError()) {
+          <p class="border-danger/50 bg-danger-soft text-danger rounded-card flex items-start gap-2 border px-3 py-2 text-[12px]" role="alert">
+            <app-icon name="alert" [size]="14" class="mt-0.5 shrink-0" />
+            {{ loadError() }}
           </p>
-          <p class="stat-label">Blocked</p>
-        </div>
-        <div class="stat-lg" [class]="summary.missing_boundaries ? 'border-warn/50 bg-warn-soft' : ''">
-          <p class="stat-value" [class]="summary.missing_boundaries ? 'text-warn' : 'text-fg-subtle'">
-            {{ summary.missing_boundaries }}
-          </p>
-          <p class="stat-label">No boundary</p>
-        </div>
+        }
+        @if (result(); as result) {
+          @for (issue of result.errors; track issue.message + issue.line) {
+            <p class="border-danger/50 bg-danger-soft text-danger rounded-card flex items-start gap-2 border px-3 py-2 text-[12px]" role="alert">
+              <app-icon name="ban" [size]="14" class="mt-0.5 shrink-0" />
+              <span class="min-w-0">
+                @if (issue.line) {
+                  <strong class="font-semibold">Line {{ issue.line }}.</strong>
+                }
+                {{ issue.message }}
+                @if (issue.line) {
+                  <br />
+                  <code class="mono break-all">{{ lineText(issue) }}</code>
+                }
+              </span>
+            </p>
+          }
+          @for (issue of result.warnings; track issue.message) {
+            <p class="border-warn/50 bg-warn-soft text-warn rounded-card flex items-start gap-2 border px-3 py-2 text-[12px]">
+              <app-icon name="alert" [size]="14" class="mt-0.5 shrink-0" />
+              {{ issue.message }}
+            </p>
+          }
+          @if (result.ok && !result.warnings.length) {
+            <p class="border-accent/50 bg-accent-soft text-accent rounded-card flex items-center gap-2 border px-3 py-2 text-[12px]">
+              <app-icon name="check" [size]="14" class="shrink-0" />
+              Parses cleanly. Save it and the app is ready.
+            </p>
+          }
+        }
       </div>
-    }
-
-    <!-- problems -->
-    @if (result(); as result) {
-      @for (issue of result.errors; track issue.message + issue.line) {
-        <p class="border-danger/50 bg-danger-soft text-danger rounded-card mb-2 flex items-start gap-2 border px-3 py-2 text-[12px]" role="alert">
-          <app-icon name="ban" [size]="14" class="mt-0.5 shrink-0" />
-          <span>
-            @if (issue.line) {
-              <strong class="font-semibold">Line {{ issue.line }}.</strong>
-            }
-            {{ issue.message }}
-            @if (issue.line) {
-              <br />
-              <code class="mono">{{ lineText(issue) }}</code>
-            }
-          </span>
-        </p>
-      }
-      @for (issue of result.warnings; track issue.message) {
-        <p class="border-warn/50 bg-warn-soft text-warn rounded-card mb-2 flex items-start gap-2 border px-3 py-2 text-[12px]">
-          <app-icon name="alert" [size]="14" class="mt-0.5 shrink-0" />
-          {{ issue.message }}
-        </p>
-      }
-      @if (result.ok && !result.warnings.length) {
-        <p class="border-accent/50 bg-accent-soft text-accent rounded-card mb-2 flex items-start gap-2 border px-3 py-2 text-[12px]">
-          <app-icon name="check" [size]="14" class="mt-0.5 shrink-0" />
-          Parses cleanly. Save it and the app is ready.
-        </p>
-      }
-    }
-
-    @if (loadError()) {
-      <p class="border-danger/50 bg-danger-soft text-danger rounded-card mb-2 flex items-start gap-2 border px-3 py-2 text-[12px]" role="alert">
-        <app-icon name="alert" [size]="14" class="mt-0.5 shrink-0" />
-        {{ loadError() }}
-      </p>
     }
 
     <!-- the file -->
-    <section class="card overflow-hidden">
-      <header class="card-head">
+    <!-- The single-scroll layout is a desktop one. Below md the page scrolls
+         normally, because a phone with a screen of errors would otherwise leave
+         a hundred-pixel editor nobody can work in. -->
+    <section class="card flex h-[60vh] flex-col overflow-hidden md:h-auto md:min-h-0 md:flex-1">
+      <header class="card-head shrink-0">
         <h2 class="section-title">master.md</h2>
+        <span class="text-fg-subtle text-[11px]">
+          @if (!result()) {
+            Check it before saving
+          } @else if (!result()?.ok) {
+            Fix the errors above, then check again
+          } @else {
+            Editable later from the Profile tab
+          }
+        </span>
         <span class="tabular text-fg-subtle ml-auto text-[11px]">
           {{ lines().length }} lines · {{ text().length }} chars
         </span>
       </header>
-      <textarea
-        rows="22"
-        class="mono w-full resize-y border-0 bg-transparent p-3.5 !text-[12px] leading-relaxed focus:outline-none"
-        spellcheck="false"
-        placeholder="# Identity&#10;name: Your Name&#10;..."
-        [value]="text()"
-        (input)="update($any($event.target).value)"
-        aria-label="Profile markdown"
-      ></textarea>
-    </section>
 
-    <div class="mt-3 flex flex-wrap items-center gap-2">
-      <p class="text-fg-subtle text-[12px]">
-        @if (!result()) {
-          Check it before saving.
-        } @else if (!result()?.ok) {
-          Fix the errors above, then check again.
-        } @else {
-          You can edit all of this later from the Profile tab.
-        }
-      </p>
-      <button type="button" class="btn btn-primary ml-auto" [disabled]="!canSave()" (click)="save()">
-        @if (saving()) {
-          <app-icon name="refresh" [size]="15" class="animate-spin" />
-          Saving
-        } @else {
-          Save and start
-        }
-      </button>
-    </div>
-  }
-</div>
+      <!-- Gutter and textarea scroll as one. Both are 19px lines, so the numbers
+           stay beside their line without measuring anything. -->
+      <div class="flex min-h-0 flex-1 overflow-hidden">
+        <div
+          #gutter
+          class="mono border-line bg-surface text-fg-subtle shrink-0 overflow-hidden border-r py-3 text-right leading-[19px] select-none"
+          aria-hidden="true"
+        >
+          @for (n of lineNumbers(); track n) {
+            <div class="px-2" [class]="errorLines().has(n) ? 'text-danger font-semibold' : ''">
+              {{ n }}
+            </div>
+          }
+        </div>
+        <textarea
+          #editor
+          class="mono min-h-0 w-full flex-1 resize-none border-0 bg-transparent px-3 py-3 !text-[12px] leading-[19px] focus:outline-none"
+          spellcheck="false"
+          placeholder="# Identity&#10;name: Your Name&#10;..."
+          [value]="text()"
+          (input)="update($any($event.target).value)"
+          (scroll)="gutter.scrollTop = editor.scrollTop"
+          aria-label="Profile markdown"
+        ></textarea>
+      </div>
+    </section>
+  </div>
+}

@@ -17,11 +17,12 @@ export type IconName =
   | 'lock'
   | 'log-out'
   | 'eye'
-  | 'eye-off';
+  | 'eye-off'
+  | 'claude';
 
 /**
  * Inline SVG from the Lucide set, drawn with @switch.
- * ponytail: 17 icons do not justify a dependency, and inlining avoids the
+ * ponytail: 18 icons do not justify a dependency, and inlining avoids the
  * DomSanitizer dance that a path-map version would need.
  */
 @Component({
@@ -42,6 +43,22 @@ export type IconName =
       focusable="false"
     >
       @switch (name()) {
+        @case ('claude') {
+          <!-- The Claude burst, drawn with the shared stroke settings rather
+               than dropped in as brand artwork. -->
+          <path d="M14.2 12.0L21.6 12.0" />
+          <path d="M13.9 13.1L20.3 16.8" />
+          <path d="M13.1 13.9L16.8 20.3" />
+          <path d="M12.0 14.2L12.0 21.6" />
+          <path d="M10.9 13.9L7.2 20.3" />
+          <path d="M10.1 13.1L3.7 16.8" />
+          <path d="M9.8 12.0L2.4 12.0" />
+          <path d="M10.1 10.9L3.7 7.2" />
+          <path d="M10.9 10.1L7.2 3.7" />
+          <path d="M12.0 9.8L12.0 2.4" />
+          <path d="M13.1 10.1L16.8 3.7" />
+          <path d="M13.9 10.9L20.3 7.2" />
+        }
         @case ('sparkles') {
           <path
             d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"
