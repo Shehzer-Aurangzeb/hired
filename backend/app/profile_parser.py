@@ -1,25 +1,47 @@
 """The master profile markdown -> Profile.
 
-The file is markdown headings wrapping YAML bodies, so the parser is a heading
-split plus yaml.safe_load. No hand-rolled tokenizer.
+The document is markdown headings wrapping YAML bodies, so the parser is a
+heading split plus yaml.safe_load. No hand-rolled tokenizer.
 
-  # Section        -> top-level section
+  # Section        -> a top-level section, and only the known names below
   ## Company       -> an Experience entry
   ### Project      -> a Project inside that company
+
+Every failure raises ProfileError carrying the line in the file the person
+actually typed, because "line 62" is a fix and "mapping values are not allowed
+here" is a puzzle.
 """
 
+import difflib
 import re
 from pathlib import Path
 
 import yaml
+from pydantic import ValidationError
 
 from .models import Profile
 
-# ponytail: headings must start at column 0. A "# " line inside a YAML body
-# would be read as a section heading. Indent YAML comments, which is normal anyway.
-_H1 = re.compile(r"^# (.+)$", re.M)
-_H2 = re.compile(r"^## (.+)$", re.M)
-_H3 = re.compile(r"^### (.+)$", re.M)
+SECTIONS = (
+    "identity",
+    "titles",
+    "summaries",
+    "skills",
+    "experience",
+    "education",
+    "certifications",
+    "languages",
+)
+
+_LIST_SECTIONS = ("titles", "summaries", "skills", "education", "certifications", "languages")
+
+
+class ProfileError(Exception):
+    """A parse failure, with the file line that caused it when there is one."""
+
+    def __init__(self, message: str, line: int | None = None):
+        super().__init__(message)
+        self.message = message
+        self.line = line
 
 
 def parse(path: Path) -> Profile:
@@ -28,46 +50,134 @@ def parse(path: Path) -> Profile:
 
 
 def parse_text(text: str) -> Profile:
-    sections = {name.strip().lower(): body for name, body in _split(text, _H1)}
-    return Profile.model_validate(
-        {
-            "identity": _yaml(sections.get("identity", "")),
-            "titles": _yaml(sections.get("titles", "")),
-            "summaries": _yaml(sections.get("summaries", "")),
-            "skills": _yaml(sections.get("skills", "")),
-            "experience": [
-                _company(name, body)
-                for name, body in _split(sections.get("experience", ""), _H2)
-            ],
-        }
-    )
+    lines = _normalize(text).split("\n")
+    chunks, rejected = _chunks(lines, 0, level=1, accept=set(SECTIONS))
+    _check_misspelled(rejected)
+
+    sections: dict[str, tuple[str, int]] = {}
+    for title, body, start in chunks:
+        name = title.strip().lower()
+        if name in sections:
+            raise ProfileError(f'"# {title}" appears twice. Merge the two into one.', start - 1)
+        sections[name] = (body, start)
+
+    if "identity" not in sections:
+        raise ProfileError('No "# Identity" section. Every profile needs one.')
+
+    data: dict = {}
+    for name in SECTIONS:
+        if name == "experience":
+            continue
+        body, start = sections.get(name, ("", 1))
+        loaded = _yaml(body, start, f"# {name.title()}")
+        # A section that holds a list must not silently accept a mapping: it
+        # would parse and then come back empty, which reads as "I wrote nothing".
+        if name in _LIST_SECTIONS and loaded and not isinstance(loaded, list):
+            raise ProfileError(
+                f'"# {name.title()}" must be a list. Start each entry with "- ".', start
+            )
+        data[name] = loaded or ([] if name in _LIST_SECTIONS else {})
+
+    body, start = sections.get("experience", ("", 1))
+    companies, _ = _chunks(body.split("\n"), start - 1, level=2)
+    data["experience"] = [_company(name, body, at) for name, body, at in companies]
+
+    try:
+        return Profile.model_validate(data)
+    except ValidationError as error:
+        raise ProfileError(_readable(error)) from error
 
 
-def _company(name: str, body: str) -> dict:
-    parts = _H3.split(body)
+def _company(name: str, body: str, start: int) -> dict:
+    lines = body.split("\n")
+    projects, _ = _chunks(lines, start - 1, level=3)
+    # Everything above the first ### belongs to the company itself.
+    head = lines[: (projects[0][2] - start - 1) if projects else len(lines)]
     return {
-        **_yaml(parts[0]),
+        **_yaml("\n".join(head), start, f"## {name.strip()}"),
         "name": name.strip(),
-        "projects": [
-            _project(parts[i], parts[i + 1]) for i in range(1, len(parts), 2)
-        ],
+        "projects": [_project(n, b, at) for n, b, at in projects],
     }
 
 
-def _project(name: str, body: str) -> dict:
+def _project(name: str, body: str, start: int) -> dict:
     name = name.strip()
     # An explicit `id:` in the body wins over the slugged heading.
-    return {"id": _slug(name), "name": name, **_yaml(body)}
+    return {"id": _slug(name), "name": name, **_yaml(body, start, f"### {name}")}
 
 
-def _split(text: str, heading: re.Pattern) -> list[tuple[str, str]]:
-    """[(heading, body), ...]. re.split with one group yields [pre, h, b, h, b...]."""
-    parts = heading.split(text)
-    return [(parts[i], parts[i + 1]) for i in range(1, len(parts), 2)]
+def _normalize(text: str) -> str:
+    # A BOM makes the first "# Identity" invisible to the heading match, and CRLF
+    # leaves a \r on every parsed value. Both come free with a Windows editor.
+    return text.lstrip("﻿").replace("\r\n", "\n").replace("\r", "\n")
 
 
-def _yaml(text: str):
-    return yaml.safe_load(text) or {}
+def _chunks(
+    lines: list[str], offset: int, level: int, accept: set[str] | None = None
+) -> tuple[list[tuple[str, str, int]], list[tuple[str, int]]]:
+    """
+    Split on headings of exactly `level`, returning (title, body, body_start_line)
+    plus the headings that were not accepted.
+
+    `offset` is the file line number of lines[0] minus one, so every line number
+    that comes out of here points into the file the person typed.
+
+    Headings the caller does not accept stay in the body on purpose: "# TODO fix
+    this" at column zero is a YAML comment, and promoting it to a section would
+    silently orphan everything under it.
+    """
+    heading = re.compile(rf"^#{{{level}}} +(.+?)\s*$")
+    marks: list[tuple[int, str]] = []
+    rejected: list[tuple[str, int]] = []
+
+    for i, line in enumerate(lines):
+        match = heading.match(line)
+        if not match:
+            continue
+        title = match.group(1)
+        if accept is not None and title.strip().lower() not in accept:
+            rejected.append((title, offset + i + 1))
+            continue
+        marks.append((i, title))
+
+    chunks = []
+    for n, (i, title) in enumerate(marks):
+        end = marks[n + 1][0] if n + 1 < len(marks) else len(lines)
+        chunks.append((title, "\n".join(lines[i + 1 : end]), offset + i + 2))
+    return chunks, rejected
+
+
+def _check_misspelled(rejected: list[tuple[str, int]]) -> None:
+    """
+    "# Experiance" would otherwise be treated as a YAML comment and the entire
+    work history would vanish without a word. A near miss is a typo, not a note.
+    """
+    for title, line in rejected:
+        near = difflib.get_close_matches(title.strip().lower(), SECTIONS, n=1, cutoff=0.75)
+        if near:
+            raise ProfileError(
+                f'Unknown section "# {title}". Did you mean "# {near[0].title()}"?', line
+            )
+
+
+def _yaml(text: str, start: int, what: str):
+    try:
+        return yaml.safe_load(text) or {}
+    except yaml.YAMLError as error:
+        mark = getattr(error, "problem_mark", None)
+        problem = getattr(error, "problem", None) or str(error)
+        # mark.line is zero-based within this section; start is the file line of
+        # the section's first body line.
+        raise ProfileError(
+            f"{what} is not valid YAML: {problem}.",
+            start + mark.line if mark else None,
+        ) from error
+
+
+def _readable(error: ValidationError) -> str:
+    first = error.errors()[0]
+    where = " -> ".join(str(p) for p in first["loc"])
+    return f"{where}: {first['msg']}" if where else first["msg"]
 
 
 def _slug(text: str) -> str:

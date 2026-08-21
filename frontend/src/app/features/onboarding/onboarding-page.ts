@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { Router } from '@angular/router';
 
 import { MAX_BYTES } from '../../core/api';
+import { openClaude } from '../../core/claude-draft';
 import { ProfileService } from '../../core/profile.service';
 import { ToastService } from '../../core/toast.service';
 import { ProfileIssue, ValidationResult } from '../../core/models';
@@ -108,6 +109,22 @@ export class OnboardingPage {
         this.router.navigate(['/generate']);
       },
       error: () => this.saving.set(false),
+    });
+  }
+
+  /**
+   * Hands the template to Claude and drops you into the paste box, which is
+   * where the answer comes back to.
+   */
+  draftWithClaude(): void {
+    this.loadError.set(null);
+    this.profile.template().subscribe({
+      next: (template) => {
+        openClaude(template);
+        this.source.set('paste');
+        this.toast.ok('Prompt copied. Paste Claude\'s answer back into the box here.');
+      },
+      error: () => this.loadError.set('Could not load the template. Try pasting instead.'),
     });
   }
 

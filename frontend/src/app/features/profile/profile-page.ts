@@ -10,6 +10,7 @@ import {
 import { ActivatedRoute, CanDeactivateFn, Router } from '@angular/router';
 
 import { MAX_BYTES, USE_MOCKS } from '../../core/api';
+import { openClaude } from '../../core/claude-draft';
 import { ago } from '../../core/dates';
 import { Bullet, Project, ProfileIssue, ValidationResult } from '../../core/models';
 import { ProfileService } from '../../core/profile.service';
@@ -99,6 +100,11 @@ export class ProfilePage {
   readonly shown = computed(() => this.experience().reduce((n, c) => n + c.projects.length, 0));
 
   hasBoundary = hasBoundary;
+
+  /** Profiles are written "github.com/you", which a bare href reads as relative. */
+  href(url: string): string {
+    return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+  }
 
   jump(id: string): void {
     document.getElementById(`project-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -251,6 +257,17 @@ export class ProfilePage {
         this.toast.ok(`Loaded ${file.name}. Nothing is saved until you check it and press Save.`);
       })
       .catch(() => this.editError.set('Could not read that file.'));
+  }
+
+  /** Same briefing as first-run setup, for a rewrite rather than a first draft. */
+  draftWithClaude(): void {
+    this.service.template().subscribe({
+      next: (template) => {
+        openClaude(template);
+        this.toast.ok('Prompt copied. Paste Claude\'s answer over the source here.');
+      },
+      error: () => this.editError.set('Could not load the template.'),
+    });
   }
 
   /** A local copy before you break something. Exports the buffer on screen. */

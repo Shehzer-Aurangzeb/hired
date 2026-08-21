@@ -7,6 +7,11 @@ phone: +1 514 000 0000
 linkedin: linkedin.com/in/test
 portfolio: example.com
 github: github.com/test
+links:
+  - label: Dribbble
+    url: dribbble.com/test
+  - Stack Overflow: stackoverflow.com/users/1/test
+  - https://www.medium.com/@test
 authorization: Authorized to work in Canada, no sponsorship required
 
 # Titles
@@ -42,6 +47,9 @@ label: VC-backed asset management platform
 stack: [Next.js, React, TypeScript]
 priority: 1
 tags: [frontend, react, nextjs]
+links:
+  - Live: dedicate.example.com
+  - Case study: example.com/case/dedicate
 
 claim_boundary:
   can_claim:
@@ -105,3 +113,23 @@ bullets:
     priority: 3
     tags: [backend, php]
     text: Built CRUD modules and reporting views in PHP and Laravel.
+
+# Education
+- school: Concordia University
+  degree: BEng
+  field: Software Engineering
+  location: Montreal, QC
+  start: 2018-09
+  end: 2022-05
+
+# Certifications
+- name: AWS Certified Cloud Practitioner
+  issuer: Amazon Web Services
+  date: 2023-04
+  url: credly.com/badges/test
+
+# Languages
+- name: English
+  level: Native
+- name: French
+  level: Professional working

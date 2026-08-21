@@ -1,6 +1,7 @@
-"""Pydantic models mirroring profile/master.md. These are the API contract."""
+"""Pydantic models mirroring the master profile. These are the API contract."""
 
-from typing import Annotated
+from typing import Annotated, Any
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, BeforeValidator, model_validator
 
@@ -8,14 +9,46 @@ from pydantic import BaseModel, BeforeValidator, model_validator
 Str = Annotated[str, BeforeValidator(str)]
 
 
+def _as_link(value: Any) -> Any:
+    """
+    People write links three ways and all three are unambiguous, so all three
+    parse:
+
+        - label: Repo
+          url: github.com/me/thing
+        - Repo: github.com/me/thing
+        - github.com/me/thing
+    """
+    if isinstance(value, str):
+        host = urlparse(value if "//" in value else f"//{value}").netloc
+        return {"label": host.removeprefix("www.") or value, "url": value}
+    if isinstance(value, dict) and "url" not in value and len(value) == 1:
+        label, url = next(iter(value.items()))
+        return {"label": str(label), "url": str(url)}
+    return value
+
+
+class Link(BaseModel):
+    label: str
+    url: str
+
+
+Links = Annotated[list[Link], BeforeValidator(lambda v: [_as_link(x) for x in v or []])]
+
+
 class Identity(BaseModel):
+    # Only the name is required. A profile missing a phone number is incomplete,
+    # not unparseable, and refusing to load it helps nobody.
     name: str
-    location: str
-    email: str
-    phone: Str
-    linkedin: str
-    github: str
+    location: str = ""
+    email: str = ""
+    phone: Str = ""
+    linkedin: str = ""
+    github: str = ""
     portfolio: str = ""
+    # Anything else in the header: Dribbble, Stack Overflow, a paper, a talk.
+    # A fixed field per site would need a code change per site.
+    links: Links = []
     relocation: str = ""
     authorization: str = ""
 
@@ -60,18 +93,43 @@ class Project(BaseModel):
     priority: int = 3
     tags: list[str] = []
     disclosure: str = ""
+    # Repo, live demo, case study, app store listing.
+    links: Links = []
     claim_boundary: ClaimBoundary = ClaimBoundary()
     bullets: list[Bullet] = []
 
 
 class Experience(BaseModel):
     name: str
-    role: str
-    start: Str
-    end: Str
+    role: str = ""
+    start: Str = ""
+    end: Str = ""
     location: str = ""
     priority: int = 3
     projects: list[Project] = []
+
+
+class Education(BaseModel):
+    school: str
+    degree: str = ""
+    field: str = ""
+    location: str = ""
+    start: Str = ""
+    end: Str = ""
+    notes: str = ""
+    links: Links = []
+
+
+class Certification(BaseModel):
+    name: str
+    issuer: str = ""
+    date: Str = ""
+    url: str = ""
+
+
+class Language(BaseModel):
+    name: str
+    level: str = ""
 
 
 class Profile(BaseModel):
@@ -80,15 +138,24 @@ class Profile(BaseModel):
     summaries: list[Summary] = []
     skills: list[SkillLine] = []
     experience: list[Experience] = []
+    education: list[Education] = []
+    certifications: list[Certification] = []
+    languages: list[Language] = []
 
     @model_validator(mode="after")
-    def unique_bullet_ids(self):
-        # A duplicate id means the selector can point at the wrong claim. Catch it at parse.
-        seen = set()
+    def unique_ids(self):
+        # A duplicate id means the selector can point at the wrong claim, and a
+        # duplicate project id means a section of the CV renders twice. Both are
+        # cheaper to catch here than to debug in a generated PDF.
+        bullets: set[str] = set()
+        projects: set[str] = set()
         for exp in self.experience:
             for proj in exp.projects:
+                if proj.id in projects:
+                    raise ValueError(f"duplicate project id: {proj.id}")
+                projects.add(proj.id)
                 for b in proj.bullets:
-                    if b.id in seen:
+                    if b.id in bullets:
                         raise ValueError(f"duplicate bullet id: {b.id}")
-                    seen.add(b.id)
+                    bullets.add(b.id)
         return self

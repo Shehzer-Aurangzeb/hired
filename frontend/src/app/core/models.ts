@@ -4,6 +4,12 @@
 
 // ---------- profile (GET /api/profile, live) ----------
 
+/** Anything in a CV header that is not one of the named fields below. */
+export interface Link {
+  label: string;
+  url: string;
+}
+
 export interface Identity {
   name: string;
   location: string;
@@ -12,6 +18,7 @@ export interface Identity {
   linkedin: string;
   github: string;
   portfolio: string;
+  links: Link[];
   relocation: string;
   authorization: string;
 }
@@ -56,6 +63,8 @@ export interface Project {
   priority: number;
   tags: string[];
   disclosure: string;
+  /** Repo, live demo, case study, app store listing. */
+  links: Link[];
   claim_boundary: ClaimBoundary;
   bullets: Bullet[];
 }
@@ -70,12 +79,38 @@ export interface Experience {
   projects: Project[];
 }
 
+export interface Education {
+  school: string;
+  degree: string;
+  field: string;
+  location: string;
+  start: string;
+  end: string;
+  notes: string;
+  links: Link[];
+}
+
+export interface Certification {
+  name: string;
+  issuer: string;
+  date: string;
+  url: string;
+}
+
+export interface Language {
+  name: string;
+  level: string;
+}
+
 export interface Profile {
   identity: Identity;
   titles: Title[];
   summaries: Summary[];
   skills: SkillLine[];
   experience: Experience[];
+  education: Education[];
+  certifications: Certification[];
+  languages: Language[];
 }
 
 // ---------- profile source (the raw markdown, not built yet) ----------

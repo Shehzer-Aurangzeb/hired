@@ -824,3 +824,58 @@ something to fetch and someone allowed to fetch it.
 
 **Next:** auth routes, then the profile source routes, which together take
 `USE_MOCKS` from "everything" down to generate and export.
+
+## Parser: hardened, and widened to a whole CV
+
+Deliberately still deterministic. Claude is used at *write* time, not read time:
+if the model parsed `master.md`, the claim guard would be checking Claude
+against Claude, and that is the one place in this app where determinism is
+load-bearing.
+
+**Hardening.** Every failure now raises `ProfileError` with the line in the file
+you typed, which is what makes a real `/api/profile/validate` possible:
+
+- A column-0 `# comment` is a YAML comment again, not a section. It used to end
+  the section it sat in and silently orphan everything below.
+- A near-miss section name is an error with a suggestion, not silence.
+  `# Experiance` used to make the entire work history disappear.
+- YAML errors carry a translated absolute line: `line 62: ### Dedicate is not
+  valid YAML: expected <block end>...` rather than an offset into a fragment.
+- A list section given a mapping says so instead of coming back empty.
+- Duplicate `# Section`, duplicate project id, BOM, and CRLF all handled.
+- Only `name` is required on Identity. A missing phone number is incomplete, not
+  unparseable.
+
+**This caught a live bug.** The shipped starter template contains four column-0
+`#` comment lines. Under the old rule they were section boundaries, so the
+template every new user starts from parsed to **empty titles and zero bullets**
+— the claim boundary and the entire bullets block fell into a nonexistent
+section. It looked fine only because the mock validator counted lines with a
+regex instead of parsing. It now round-trips: 2 titles, 1 project, 2 bullets.
+
+**Widened.** `Link {label, url}` accepts three shapes, because people write
+links three ways and all three are unambiguous:
+
+```yaml
+links:
+  - label: Repo
+    url: github.com/me/thing
+  - Repo: github.com/me/thing
+  - github.com/me/thing        # label taken from the host
+```
+
+On `identity` for anything not already a named field (Dribbble, Stack Overflow,
+a paper), and on `project` for repo / live / case study. Plus three new optional
+sections: `# Education`, `# Certifications`, `# Languages`. All optional, so
+existing profiles keep parsing.
+
+**Draft it with Claude.** A fourth way in on first-run setup, and a button on
+the profile editor. Builds a briefing — never invent a metric, `cannot_claim` is
+the important half, the YAML quoting rule — appends the template, copies it to
+the clipboard and opens `claude.ai/new?q=`. About 4 KB of prompt in a 6 KB URL.
+The clipboard copy is the one that always works; the query parameter is not ours
+to rely on. Nothing generated reaches the profile without passing validation and
+a human pressing Save.
+
+**Next:** the repair endpoint (broken source in, fixed source out) needs an
+Anthropic API key, which the generate and selector phases need anyway.

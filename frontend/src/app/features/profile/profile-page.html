@@ -30,10 +30,14 @@
           {{ profile.identity.location }} · {{ profile.identity.email }} ·
           {{ profile.identity.phone }}
         </p>
-        <p class="text-fg-subtle text-[12px]">
-          {{ profile.identity.linkedin }} · {{ profile.identity.github }}
+        <p class="text-fg-subtle flex flex-wrap items-center gap-x-1.5 text-[12px]">
+          <span>{{ profile.identity.linkedin }}</span>
+          <span>· {{ profile.identity.github }}</span>
           @if (profile.identity.portfolio) {
-            · {{ profile.identity.portfolio }}
+            <span>· {{ profile.identity.portfolio }}</span>
+          }
+          @for (link of profile.identity.links; track link.url) {
+            <span>· {{ link.label }}: {{ link.url }}</span>
           }
         </p>
       </div>
@@ -265,6 +269,17 @@
                               @for (tech of project.stack; track tech) {
                                 <span class="chip">{{ tech }}</span>
                               }
+                              @for (link of project.links; track link.url) {
+                                <a
+                                  class="chip border-ink/30 text-fg hover:bg-surface"
+                                  [href]="href(link.url)"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {{ link.label }}
+                                  <app-icon name="chevron-right" [size]="10" />
+                                </a>
+                              }
                             </p>
                           </div>
                           <button
@@ -374,7 +389,77 @@
                   }
                 </div>
               </section>
-            } @empty {
+            }
+
+            @if (!query()) {
+              <div class="grid gap-3 md:grid-cols-2 md:items-start">
+                @if (profile.education.length) {
+                  <section class="card p-3.5">
+                    <h3 class="section-title mb-2">Education</h3>
+                    @for (item of profile.education; track item.school + item.degree) {
+                      <div class="mb-2 last:mb-0">
+                        <p class="flex flex-wrap items-baseline gap-x-2 text-[13px]">
+                          <span class="font-medium">{{ item.school }}</span>
+                          <span class="tabular text-fg-subtle text-[11px]">
+                            {{ item.start }}@if (item.end) { to {{ item.end }} }
+                          </span>
+                        </p>
+                        <p class="text-fg-muted text-[12px]">
+                          {{ item.degree }}@if (item.field) { , {{ item.field }} }
+                          @if (item.location) { · {{ item.location }} }
+                        </p>
+                        @if (item.notes) {
+                          <p class="text-fg-subtle text-[12px]">{{ item.notes }}</p>
+                        }
+                      </div>
+                    }
+                  </section>
+                }
+
+                @if (profile.certifications.length || profile.languages.length) {
+                  <section class="card p-3.5">
+                    @if (profile.certifications.length) {
+                      <h3 class="section-title mb-2">Certifications</h3>
+                      @for (cert of profile.certifications; track cert.name) {
+                        <p class="mb-1.5 text-[13px]">
+                          @if (cert.url) {
+                            <a
+                              class="underline decoration-line-strong underline-offset-2"
+                              [href]="href(cert.url)"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              >{{ cert.name }}</a
+                            >
+                          } @else {
+                            {{ cert.name }}
+                          }
+                          <span class="text-fg-muted text-[12px]">
+                            @if (cert.issuer) { · {{ cert.issuer }} }
+                            @if (cert.date) { · {{ cert.date }} }
+                          </span>
+                        </p>
+                      }
+                    }
+
+                    @if (profile.languages.length) {
+                      <h3 class="section-title mt-3 mb-2 first:mt-0">Languages</h3>
+                      <p class="flex flex-wrap gap-1">
+                        @for (lang of profile.languages; track lang.name) {
+                          <span class="chip">
+                            {{ lang.name }}
+                            @if (lang.level) {
+                              <span class="text-fg-subtle">· {{ lang.level }}</span>
+                            }
+                          </span>
+                        }
+                      </p>
+                    }
+                  </section>
+                }
+              </div>
+            }
+
+            @if (!experience().length) {
               <div class="card text-fg-muted px-6 py-12 text-center text-[13px]">
                 Nothing matches “{{ query() }}”.
                 <button
@@ -533,6 +618,11 @@
               Ready to save.
             }
           </p>
+
+          <button type="button" class="btn btn-ghost" (click)="draftWithClaude()">
+            <app-icon name="sparkles" [size]="15" />
+            Draft with Claude
+          </button>
 
           @if (dirty()) {
             <button type="button" class="btn btn-ghost" (click)="revert()">

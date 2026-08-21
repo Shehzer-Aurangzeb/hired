@@ -11,8 +11,12 @@ relocation: Open to relocation
 email: you@example.com
 phone: +1 000 000 0000
 linkedin: linkedin.com/in/you
-portfolio: yoursite.com
 github: github.com/you
+portfolio: yoursite.com
+# Anything else you would put in a CV header. A bare URL is fine, or give it a label.
+links:
+  - Dribbble: dribbble.com/you
+  - Stack Overflow: stackoverflow.com/users/0/you
 authorization: Authorized to work in X, no sponsorship required
 
 # Titles
@@ -57,6 +61,9 @@ label: One line on what the product is
 stack: [React, TypeScript]
 priority: 1
 tags: [frontend, react]
+links:
+  - Live: product.example.com
+  - Repo: github.com/you/project
 
 # The claim boundary is the point of this file. Write it before the bullets.
 claim_boundary:
@@ -76,4 +83,22 @@ bullets:
     priority: 2
     tags: [react]
     text: A second bullet. Keep every claim inside the boundary above.
+
+# Education
+- school: University Name
+  degree: BSc
+  field: Computer Science
+  location: City, Country
+  start: 2018-09
+  end: 2022-05
+
+# Certifications
+- name: Certification Name
+  issuer: Who issued it
+  date: 2023-04
+  url: credly.com/badges/you
+
+# Languages
+- name: English
+  level: Native
 `;

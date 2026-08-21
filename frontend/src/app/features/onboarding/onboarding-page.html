@@ -14,7 +14,7 @@
 
   @if (!source()) {
     <!-- ============ pick a way in ============ -->
-    <div class="grid gap-3 sm:grid-cols-3">
+    <div class="grid gap-3 sm:grid-cols-2">
       <button
         type="button"
         class="card hover:border-line-strong hover:bg-surface cursor-pointer p-4 text-left transition-colors duration-150"
@@ -55,6 +55,20 @@
           A commented skeleton explaining every section.
         </p>
       </button>
+
+      <button
+        type="button"
+        class="card hover:border-line-strong hover:bg-surface cursor-pointer p-4 text-left transition-colors duration-150"
+        (click)="draftWithClaude()"
+      >
+        <span class="bg-ink text-ink-fg mb-2 flex size-8 items-center justify-center rounded-md">
+          <app-icon name="sparkles" [size]="16" />
+        </span>
+        <p class="text-[13px] font-medium">Draft it with Claude</p>
+        <p class="text-fg-muted mt-0.5 text-[12px] leading-relaxed">
+          Opens a chat that interviews you, then hand the answer back.
+        </p>
+      </button>
     </div>
 
     @if (loadError()) {
@@ -65,8 +79,9 @@
     }
 
     <p class="text-fg-subtle mt-6 text-[12px] leading-relaxed">
-      Not sure what goes in it? Take the template. It is the fastest way to see the shape, and you
-      can replace every line of it later.
+      Not sure what goes in it? Take the template, or let Claude interview you and paste the
+      answer back. Nothing is saved until it parses and you press Save, and you can replace
+      every line of it later.
     </p>
   } @else {
     <!-- ============ review and save ============ -->
