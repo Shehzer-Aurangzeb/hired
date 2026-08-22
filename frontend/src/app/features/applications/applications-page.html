@@ -4,7 +4,7 @@
     <div>
       <h1 class="text-xl font-semibold tracking-tight">Applications</h1>
       <p class="text-fg-muted mt-0.5 text-[13px]">
-        Every CV this tool has produced, and what came back.
+        Every posting you kept, applied to or not, and what came back.
       </p>
     </div>
 
@@ -104,8 +104,8 @@
                 [style.flex-basis.%]="segment.pct"
                 [style.flex-grow]="segment.count"
                 [style.background]="
-                  segment.hatched
-                    ? 'repeating-linear-gradient(45deg, ' + segment.color + ' 0 4px, transparent 4px 8px)'
+                  segment.hatch
+                    ? 'repeating-linear-gradient(' + segment.hatch + 'deg, ' + segment.color + ' 0 4px, transparent 4px 8px)'
                     : segment.color
                 "
                 [style.box-shadow]="filter() === segment.key ? 'inset 0 0 0 2px var(--color-fg)' : ''"
@@ -134,11 +134,11 @@
                 <span
                   class="size-2.5 shrink-0 rounded-full"
                   [style.background]="
-                    segment.hatched
-                      ? 'repeating-linear-gradient(45deg, ' + segment.color + ' 0 3px, transparent 3px 6px)'
+                    segment.hatch
+                      ? 'repeating-linear-gradient(' + segment.hatch + 'deg, ' + segment.color + ' 0 3px, transparent 3px 6px)'
                       : segment.color
                   "
-                  [style.outline]="segment.hatched ? '1px solid ' + segment.color : ''"
+                  [style.outline]="segment.hatch ? '1px solid ' + segment.color : ''"
                 ></span>
                 {{ segment.label }}
                 <span class="tabular font-semibold">{{ segment.count }}</span>

@@ -2,12 +2,7 @@ import { HttpErrorResponse, HttpInterceptorFn, HttpResponse } from '@angular/com
 import { Observable, delay, of, throwError } from 'rxjs';
 
 import { USE_MOCKS } from './api';
-import { Application } from './models';
-import { MOCK_APPLICATIONS, MOCK_GENERATE, mockGenerate } from './mock-data';
-
-// ponytail: module-level array, not a service. Mock state lives exactly as long
-// as the tab does, which is the point. Delete this file when the backend lands.
-let applications: Application[] = MOCK_APPLICATIONS.map((a) => ({ ...a }));
+import { MOCK_GENERATE, mockGenerate } from './mock-data';
 
 
 /**
@@ -21,13 +16,13 @@ function scenario(): string {
 
 if (USE_MOCKS) {
   console.info(
-    '[hired] mocks on. Scenarios: ?mock=weak | blocked | overflow | error | empty | conflict',
+    '[hired] mocks on. Scenarios: ?mock=weak | blocked | overflow | error',
   );
 }
 
 /**
- * Answers generate, export and applications, which have no backend yet.
- * Everything under /api/auth and /api/profile is real and falls through.
+ * Answers generate and export, the last two routes with no backend.
+ * Auth, the profile and applications are real and fall through.
  */
 export const mockInterceptor: HttpInterceptorFn = (req, next) => {
   if (!USE_MOCKS) {
@@ -41,7 +36,6 @@ export const mockInterceptor: HttpInterceptorFn = (req, next) => {
 };
 
 function route(method: string, path: string, body: unknown): Observable<HttpResponse<unknown>> | null {
-  const idMatch = /^\/api\/applications\/(\d+)$/.exec(path);
 
   if (method === 'POST' && path === '/api/generate') {
     if (scenario() === 'error') {
@@ -59,7 +53,6 @@ function route(method: string, path: string, body: unknown): Observable<HttpResp
   if (method === 'POST' && path === '/api/export') {
     return respond(
       {
-        pdf_path: 'storage/output/Shehzar_Abbasi_AirCanada_FrontEndDeveloper_2026-08-16.pdf',
         filename: 'Shehzar_Abbasi_AirCanada_FrontEndDeveloper_2026-08-16.pdf',
         page_count: 1,
       },
@@ -67,47 +60,11 @@ function route(method: string, path: string, body: unknown): Observable<HttpResp
     );
   }
 
-  if (method === 'GET' && path === '/api/applications') {
-    if (scenario() === 'empty') {
-      return respond([], 400);
-    }
-    return respond([...applications].sort((a, b) => b.created_at.localeCompare(a.created_at)), 400);
-  }
-
-  if (method === 'GET' && idMatch) {
-    const found = applications.find((a) => a.id === Number(idMatch[1]));
-    return found ? respond(found, 300) : notFound(path);
-  }
-
-  if (method === 'PATCH' && idMatch) {
-    const id = Number(idMatch[1]);
-    const changes = body as Partial<Application>;
-    applications = applications.map((a) =>
-      a.id === id
-        ? {
-            ...a,
-            ...changes,
-            // Leaving 'generated' is the moment it was actually sent.
-            applied_at:
-              changes.status && changes.status !== 'generated'
-                ? (a.applied_at ?? new Date().toISOString().slice(0, 19))
-                : a.applied_at,
-          }
-        : a,
-    );
-    const updated = applications.find((a) => a.id === id);
-    return updated ? respond(updated, 250) : notFound(path);
-  }
-
   return null;
 }
 
 function respond<T>(body: T, ms: number): Observable<HttpResponse<T>> {
   return of(new HttpResponse({ status: 200, body })).pipe(delay(ms));
-}
-
-function notFound(path: string): Observable<never> {
-  return fail(404, 'Not found', path);
 }
 
 function fail(status: number, detail: string, path: string): Observable<never> {

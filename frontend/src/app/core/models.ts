@@ -217,15 +217,19 @@ export interface GenerateResponse {
 }
 
 export interface ExportResponse {
-  pdf_path: string;
   filename: string;
   page_count: number;
 }
 
 // ---------- applications (not built yet) ----------
 
+/**
+ * Where you are with an employer. Whether a CV exists is a separate fact
+ * (has_pdf), which is why there is no "generated" stage.
+ */
 export const APPLICATION_STATUSES = [
-  'generated',
+  'saved',
+  'skipped',
   'applied',
   'replied',
   'interview',
@@ -246,6 +250,11 @@ export interface SentBullet {
   project_name: string;
 }
 
+/**
+ * A job posting you decided to keep. Not "a CV you sent": the records worth the
+ * most are often the ones you did not apply to, kept for the gaps they exposed,
+ * so everything CV-shaped is nullable.
+ */
 export interface Application {
   id: number;
   company: string;
@@ -256,12 +265,13 @@ export interface Application {
   fit_score: number;
   fit_reasoning: string;
   gaps: string[];
-  title_variant: string;
+  title_variant: string | null;
+  summary_text: string | null;
   selected_bullet_ids: string[];
   selected_bullets: SentBullet[];
-  summary_text: string;
-  pdf_path: string;
-  filename: string;
+  /** The bytes come from /api/applications/{id}/pdf, never from this payload. */
+  has_pdf: boolean;
+  filename: string | null;
   status: ApplicationStatus;
   applied_at: string | null;
   created_at: string;

@@ -1,7 +1,7 @@
 // Fixtures for the routes that have no backend yet. Written to be the worked
 // example the backend must reproduce, so keep the shapes honest.
 
-import { Application, GenerateResponse, ParsedJd } from './models';
+import { GenerateResponse, ParsedJd } from './models';
 
 const AIR_CANADA_JD: ParsedJd = {
   company: 'Air Canada',
@@ -200,63 +200,4 @@ export function mockGenerate(scenario: string): GenerateResponse {
     default:
       return MOCK_GENERATE;
   }
-}
-
-export const MOCK_APPLICATIONS: Application[] = [
-  application(1, 'Air Canada', 'Front-End Developer', 8, 'interview', '2026-08-02', [
-    'Kubernetes',
-    'GraphQL federation',
-  ]),
-  application(2, 'Shopify', 'Senior Front-End Developer', 7, 'applied', '2026-08-09', [
-    'Ruby',
-    'GraphQL federation',
-  ]),
-  application(3, 'Lightspeed', 'Full-Stack Developer', 8, 'replied', '2026-08-05', ['Go']),
-  application(4, 'Coveo', 'Front-End Engineer', 6, 'rejected', '2026-07-21', [
-    'Angular',
-    'Java',
-    'Kubernetes',
-  ]),
-  application(5, 'Hopper', 'Mobile Engineer, React Native', 9, 'applied', '2026-08-12', ['Swift']),
-  application(6, 'Nuvei', 'Front-End Developer', 5, 'generated', '2026-08-15', [
-    '.NET',
-    'Azure',
-    'Kubernetes',
-  ]),
-];
-
-function application(
-  id: number,
-  company: string,
-  role: string,
-  score: number,
-  status: Application['status'],
-  created: string,
-  gaps: string[],
-): Application {
-  const slug = company.replace(/[^A-Za-z0-9]/g, '');
-  const roleSlug = role.replace(/[^A-Za-z0-9]/g, '');
-  return {
-    id,
-    company,
-    role,
-    source: id % 2 ? 'LinkedIn' : 'Company site',
-    jd_text: `${role} at ${company}. Full posting text saved with the record.`,
-    jd_parsed: { ...AIR_CANADA_JD, company, role },
-    fit_score: score,
-    fit_reasoning: MOCK_GENERATE.fit.reasoning,
-    gaps,
-    title_variant: score >= 8 ? 'frontend' : 'fullstack',
-    selected_bullet_ids: MOCK_GENERATE.cv.sections.flatMap((s) => s.bullets.map((b) => b.id)),
-    selected_bullets: MOCK_GENERATE.cv.sections.flatMap((s) =>
-      s.bullets.map((b) => ({ id: b.id, text: b.text, project_name: s.project_name })),
-    ),
-    summary_text: MOCK_GENERATE.cv.summary,
-    pdf_path: `storage/output/Shehzar_Abbasi_${slug}_${roleSlug}_${created}.pdf`,
-    filename: `Shehzar_Abbasi_${slug}_${roleSlug}_${created}.pdf`,
-    status,
-    applied_at: status === 'generated' ? null : `${created}T09:00:00`,
-    created_at: `${created}T08:30:00`,
-    notes: status === 'interview' ? 'Recruiter screen done. Technical round on the 21st.' : null,
-  };
 }

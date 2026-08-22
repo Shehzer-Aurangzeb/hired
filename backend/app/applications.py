@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from .db import SessionDep
+from .models import ParsedJd
 from .tables import SENT, STATUSES, Application, now, stamp
 
 router = APIRouter(prefix="/applications", tags=["applications"])
@@ -29,7 +30,7 @@ class ApplicationIn(BaseModel):
     source: str | None = None
 
     jd_text: str
-    jd_parsed: dict = {}
+    jd_parsed: ParsedJd = ParsedJd()
     fit_score: int
     fit_reasoning: str = ""
     gaps: list[str] = []
@@ -56,7 +57,7 @@ class ApplicationOut(BaseModel):
     source: str | None
 
     jd_text: str
-    jd_parsed: dict
+    jd_parsed: ParsedJd
     fit_score: int
     fit_reasoning: str
     gaps: list[str]

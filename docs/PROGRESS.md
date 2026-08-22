@@ -1095,3 +1095,40 @@ rows, and gets deleted when export becomes a real caller.
 **Next:** the frontend. New status vocabulary, a re-validated pipeline palette
 (two new segments), "no CV for this one" states on the detail page, and deleting
 `pdf_path`, which is in the contract and rendered nowhere.
+
+## Applications: the frontend catches up
+
+The mock is now down to **generate and export**. Auth, the profile and
+applications all come from the real backend.
+
+- `Application` mirrors the widened row: `title_variant`, `summary_text` and
+  `filename` are nullable, `pdf_path` is deleted (it was in the contract and
+  rendered nowhere), and `has_pdf` replaces it.
+- Two new pipeline segments. The six colours and their order are untouched, so
+  the CVD validation still holds — re-run to confirm, and the only failure is
+  still the deliberate one (`ghosted` below the chroma floor). The never-sent
+  stages share one neutral and are told apart by **hatch angle**, 45° for "Not
+  sent" and 135° for "Passed on", which is the texture channel rather than two
+  more hues the adjacency checks would have to survive.
+- `isSent()` in `core/pipeline.ts` mirrors `SENT` in `tables.py`. The "sent"
+  count used to be `status !== 'generated'`, which stops meaning anything once
+  a row can be saved without a CV.
+- The detail page handles a record with no CV: no View PDF button, a "No CV
+  generated" chip, and the card that describes the CV describes its absence
+  instead. **"Passed on" was unreachable** — the only terminal action was
+  Rejected, which is the employer's answer, not yours. It is now beside it, and
+  disabled once `applied_at` is set: passing on something already sent would be
+  a record of something that did not happen.
+
+**The bug worth writing down.** The backend typed `jd_parsed` as a bare `dict`
+while the frontend contract promised `ParsedJd`. The seed stored
+`{company, role}`, one computed called `.map` on an undefined
+`required_skills`, and Angular blanked *most of the page* — status track, score
+reasoning and job description all rendered as empty strips, with only a console
+error to show for it. Fixed at the contract: `ParsedJd` is a real model on the
+backend now, every field defaulted, so a sparse dict widens into a shape the UI
+can render instead of a shape it dies on. A partial payload can no longer be
+stored or served.
+
+`python -m app.seed_demo` now seeds the starter profile too, since the guards
+send you to `/setup` without one.

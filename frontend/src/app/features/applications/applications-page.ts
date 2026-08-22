@@ -18,6 +18,7 @@ import { ago } from '../../core/dates';
 import { Application, ApplicationStatus } from '../../core/models';
 import {
   SEGMENTS,
+  isSent,
   Segment,
   inSegment,
   scoreTone,
@@ -40,7 +41,8 @@ export class ApplicationsPage {
   private readonly router = inject(Router);
 
   readonly statuses: ApplicationStatus[] = [
-    'generated',
+    'saved',
+    'skipped',
     'applied',
     'replied',
     'interview',
@@ -83,7 +85,7 @@ export class ApplicationsPage {
   readonly rows = linkedSignal(() => this.loaded());
 
   readonly total = computed(() => (this.rows() ?? []).length);
-  readonly sent = computed(() => (this.rows() ?? []).filter((a) => a.status !== 'generated').length);
+  readonly sent = computed(() => (this.rows() ?? []).filter(isSent).length);
 
   /** Of everything actually sent, how much came back. */
   readonly replyRate = computed(() => {

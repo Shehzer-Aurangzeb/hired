@@ -27,24 +27,30 @@
           @if (application.source) {
             · via {{ application.source }}
           }
-          · <span class="mono">{{ application.title_variant }}</span> variant
+          @if (application.title_variant) {
+            · <span class="mono">{{ application.title_variant }}</span> variant
+          }
         </p>
       </div>
 
       <div class="ml-auto flex gap-2">
-        <button type="button" class="btn btn-primary" (click)="openPdf(pdfDialog)">
-          <app-icon name="file-text" [size]="15" />
-          View PDF
-        </button>
-        <a
-          [href]="pdfUrl(application.id)"
-          [attr.download]="application.filename"
-          class="btn btn-outline !px-2.5"
-          title="Download the file"
-          aria-label="Download the PDF"
-        >
-          <app-icon name="download" [size]="15" />
-        </a>
+        @if (application.has_pdf) {
+          <button type="button" class="btn btn-primary" (click)="openPdf(pdfDialog)">
+            <app-icon name="file-text" [size]="15" />
+            View PDF
+          </button>
+          <a
+            [href]="pdfUrl(application.id)"
+            [attr.download]="application.filename"
+            class="btn btn-outline !px-2.5"
+            title="Download the file"
+            aria-label="Download the PDF"
+          >
+            <app-icon name="download" [size]="15" />
+          </a>
+        } @else {
+          <span class="chip">No CV generated</span>
+        }
       </div>
     </header>
 
@@ -127,19 +133,40 @@
           }
         </div>
 
-        <button
-          type="button"
-          class="ml-auto cursor-pointer rounded-full border px-2.5 py-1 text-[12px] capitalize transition-colors duration-150"
-          [class]="
-            application.status === 'rejected'
-              ? 'border-danger bg-danger-soft text-danger font-semibold'
-              : 'border-line text-fg-subtle hover:border-danger/50 hover:text-danger'
-          "
-          [disabled]="saving()"
-          (click)="setStatus('rejected')"
-        >
-          Rejected
-        </button>
+        <!-- The two ways out. One is their answer, one is yours. -->
+        <div class="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            class="cursor-pointer rounded-full border px-2.5 py-1 text-[12px] transition-colors duration-150"
+            [class]="
+              application.status === 'skipped'
+                ? 'border-line-strong bg-surface text-fg font-semibold'
+                : 'border-line text-fg-subtle hover:border-line-strong hover:text-fg'
+            "
+            [disabled]="saving() || !!application.applied_at"
+            [title]="
+              application.applied_at
+                ? 'It already went out. Passing on it now would be a record of something that did not happen.'
+                : 'You decided not to apply. The posting and its gaps stay on file.'
+            "
+            (click)="setStatus('skipped')"
+          >
+            Passed on
+          </button>
+          <button
+            type="button"
+            class="cursor-pointer rounded-full border px-2.5 py-1 text-[12px] transition-colors duration-150"
+            [class]="
+              application.status === 'rejected'
+                ? 'border-danger bg-danger-soft text-danger font-semibold'
+                : 'border-line text-fg-subtle hover:border-danger/50 hover:text-danger'
+            "
+            [disabled]="saving()"
+            (click)="setStatus('rejected')"
+          >
+            Rejected
+          </button>
+        </div>
       </div>
     </section>
 
@@ -147,32 +174,50 @@
       <!-- ---------- what was sent ---------- -->
       <section class="card overflow-hidden">
         <header class="card-head">
-          <h2 class="section-title shrink-0">What was sent</h2>
-          <span class="mono text-fg-subtle ml-auto min-w-0 truncate" [title]="application.filename">
-            {{ application.filename }}
-          </span>
+          <h2 class="section-title shrink-0">
+            {{ application.has_pdf ? 'What was sent' : 'Nothing was sent' }}
+          </h2>
+          @if (application.filename) {
+            <span class="mono text-fg-subtle ml-auto min-w-0 truncate" [title]="application.filename">
+              {{ application.filename }}
+            </span>
+          }
         </header>
         <div class="p-3.5">
-          <p class="text-[13px] leading-relaxed">{{ application.summary_text }}</p>
+          @if (application.has_pdf) {
+            @if (application.summary_text) {
+              <p class="text-[13px] leading-relaxed">{{ application.summary_text }}</p>
+            }
 
-          <h3 class="text-fg-muted mt-3.5 mb-1.5 text-[11px] tracking-wide uppercase">
-            Bullets on the page ({{ application.selected_bullets.length }})
-          </h3>
+            <h3 class="text-fg-muted mt-3.5 mb-1.5 text-[11px] tracking-wide uppercase">
+              Bullets on the page ({{ application.selected_bullets.length }})
+            </h3>
 
-          <!-- The text as printed, stored on the record. Joining ids against the
-               live profile would show today's wording, not what they read. -->
-          @for (group of groups(); track group.project) {
-            <p class="mt-2.5 text-[12px] font-semibold">{{ group.project }}</p>
-            <ul class="mt-1 flex flex-col gap-1.5">
-              @for (bullet of group.bullets; track bullet.id) {
-                <li class="border-line border-l-2 pl-2.5">
-                  <p class="text-[13px] leading-relaxed">{{ bullet.text }}</p>
-                  <p class="mono text-fg-subtle">{{ bullet.id }}</p>
-                </li>
-              }
-            </ul>
-          } @empty {
-            <p class="text-fg-subtle text-[12px]">No bullet text stored on this record.</p>
+            <!-- The text as printed, stored on the record. Joining ids against the
+                 live profile would show today's wording, not what they read. -->
+            @for (group of groups(); track group.project) {
+              <p class="mt-2.5 text-[12px] font-semibold">{{ group.project }}</p>
+              <ul class="mt-1 flex flex-col gap-1.5">
+                @for (bullet of group.bullets; track bullet.id) {
+                  <li class="border-line border-l-2 pl-2.5">
+                    <p class="text-[13px] leading-relaxed">{{ bullet.text }}</p>
+                    <p class="mono text-fg-subtle">{{ bullet.id }}</p>
+                  </li>
+                }
+              </ul>
+            } @empty {
+              <p class="text-fg-subtle text-[12px]">No bullet text stored on this record.</p>
+            }
+          } @else {
+            <!-- Kept for the gaps, which is the whole reason this record exists. -->
+            <p class="text-fg-muted text-[13px] leading-relaxed">
+              No CV was generated for this posting.
+              {{
+                application.status === 'skipped'
+                  ? 'You kept it and decided not to apply.'
+                  : 'It is saved, waiting on a decision.'
+              }}
+            </p>
           }
         </div>
       </section>
@@ -289,7 +334,7 @@
       (close)="viewing.set(false)"
     >
       <div class="card-head sticky top-0">
-        <h2 class="section-title truncate">{{ application.filename }}</h2>
+        <h2 class="section-title truncate">{{ application.filename ?? 'CV' }}</h2>
         <button
           type="button"
           class="btn btn-ghost ml-auto !min-h-7 !px-2"
@@ -311,7 +356,7 @@
         <iframe
           [src]="safePdfUrl(application.id)"
           class="h-[calc(92dvh-2.5rem)] w-full border-0"
-          [title]="'PDF preview of ' + application.filename"
+          [title]="'PDF preview of ' + (application.filename ?? 'the CV')"
         ></iframe>
       }
     </dialog>

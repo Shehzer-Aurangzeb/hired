@@ -183,3 +183,32 @@ class ValidationResult(BaseModel):
     errors: list[ProfileIssue] = []
     warnings: list[ProfileIssue] = []
     summary: ProfileSummary | None = None
+
+
+# ---------- the parsed posting ----------
+
+
+class RequiredSkill(BaseModel):
+    name: str
+    importance: int = 2
+
+
+class ParsedJd(BaseModel):
+    """
+    What the JD parser pulls out, and what an application row stores.
+
+    Every field has a default so a sparse dict widens into a shape the UI can
+    render. Typed rather than left as a bare dict because the frontend contract
+    promises these arrays exist, and a missing one blanks the whole page.
+    """
+
+    company: str = ""
+    role: str = ""
+    seniority: str = ""
+    location: str = ""
+    work_mode: str = ""
+    required_skills: list[RequiredSkill] = []
+    preferred_skills: list[RequiredSkill] = []
+    keywords: list[str] = []
+    french_required: bool = False
+    years_required: int | None = None

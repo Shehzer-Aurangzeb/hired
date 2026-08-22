@@ -13,8 +13,11 @@ import { SEGMENTS, inSegment, scoreTone, statusClass, waitingDays } from '../../
 import { ToastService } from '../../core/toast.service';
 import { Icon } from '../../shared/icon';
 
-/** Progression, left to right. Rejected sits outside it as a terminal state. */
-const TRACK: ApplicationStatus[] = ['generated', 'applied', 'replied', 'interview', 'offer'];
+/**
+ * Progression, left to right. Rejected and skipped sit outside it: one is the
+ * employer's answer and the other is yours, and neither is a step forward.
+ */
+const TRACK: ApplicationStatus[] = ['saved', 'applied', 'replied', 'interview', 'offer'];
 
 /**
  * The interview-prep view. Months after applying this is where you see exactly

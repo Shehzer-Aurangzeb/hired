@@ -10,13 +10,14 @@ export const FOLLOW_UP_DAYS = 10;
  * state you actually care about and the schema has no column for it.
  */
 export type Segment =
-  | 'generated'
+  | 'saved'
   | 'waiting'
   | 'replied'
   | 'interview'
   | 'offer'
   | 'ghosted'
-  | 'rejected';
+  | 'rejected'
+  | 'skipped';
 
 /**
  * Validated with the dataviz palette checker against the beige card surface
@@ -26,17 +27,43 @@ export type Segment =
  *
  * ponytail: ghosted is intentionally below the chroma floor. "Nothing happened"
  * should read as absence of colour, and the legend carries the label anyway.
- * `generated` has no hue at all; it is hatched, so no seventh colour is needed.
+ *
+ * The two never-sent stages have no hue at all. They share one neutral and are
+ * told apart by hatch angle, which is the texture channel rather than a seventh
+ * and eighth colour the CVD checks would have to survive.
  */
-export const SEGMENTS: { key: Segment; label: string; color: string; hatched?: boolean }[] = [
-  { key: 'generated', label: 'Not sent', color: '#b9ae95', hatched: true },
+export const SEGMENTS: {
+  key: Segment;
+  label: string;
+  color: string;
+  /** Hatch angle in degrees. Absent means a solid fill. */
+  hatch?: number;
+}[] = [
+  { key: 'saved', label: 'Not sent', color: '#b9ae95', hatch: 45 },
   { key: 'waiting', label: 'Waiting', color: '#3a6ea8' },
   { key: 'replied', label: 'Replied', color: '#a86a08' },
   { key: 'interview', label: 'Interview', color: '#0a7f66' },
   { key: 'offer', label: 'Offer', color: '#6b4fa8' },
   { key: 'ghosted', label: 'Ghosted', color: '#8b8378' },
   { key: 'rejected', label: 'Rejected', color: '#b23b2c' },
+  { key: 'skipped', label: 'Passed on', color: '#b9ae95', hatch: 135 },
 ];
+
+/**
+ * Reaching any of these means it went out, whatever route it took. Mirrors
+ * SENT in backend/app/tables.py; both answer "did an employer see this".
+ */
+export const SENT_STATUSES: ApplicationStatus[] = [
+  'applied',
+  'replied',
+  'interview',
+  'rejected',
+  'offer',
+];
+
+export function isSent(application: Application): boolean {
+  return SENT_STATUSES.includes(application.status);
+}
 
 /** Whole days the application has been sitting since it was sent. */
 export function waitingDays(application: Application): number {
@@ -63,6 +90,9 @@ export function statusClass(status: ApplicationStatus): string {
       return 'bg-warn-soft text-warn';
     case 'rejected':
       return 'bg-danger-soft text-danger';
+    case 'skipped':
+      // A deliberate pass is not a failure, so it gets no colour.
+      return 'bg-surface text-fg-subtle';
     default:
       return 'bg-surface text-fg-muted';
   }
