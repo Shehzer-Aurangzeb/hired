@@ -3,9 +3,9 @@
 export const API = 'http://localhost:8000';
 
 /**
- * Generate, export, applications and the profile source have no backend yet.
- * While this is true, mock.interceptor.ts answers those calls from fixtures.
- * Auth, GET /api/profile and the template are real and are never mocked.
+ * Generate, export and applications have no backend yet. While this is true,
+ * mock.interceptor.ts answers those calls from fixtures. Auth and everything
+ * under /api/profile are real and are never mocked.
  *
  * Flip to false once the last of those routes lands.
  */

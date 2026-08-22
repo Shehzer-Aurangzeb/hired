@@ -4,13 +4,21 @@ import { catchError, throwError } from 'rxjs';
 
 import { ToastService } from './toast.service';
 
-/** One toast per failed call, then rethrow so the caller can still react. */
+/**
+ * One toast per failed call, then rethrow so the caller can still react.
+ *
+ * 401 is the exception: the login form shows a wrong password inline, and
+ * authInterceptor answers an expired session by sending you to the lock screen.
+ * A toast on top of either is the same news told twice.
+ */
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
 
   return next(req).pipe(
     catchError((error: HttpErrorResponse) => {
-      toast.error(describe(error, req.url));
+      if (error.status !== 401) {
+        toast.error(describe(error, req.url));
+      }
       return throwError(() => error);
     }),
   );

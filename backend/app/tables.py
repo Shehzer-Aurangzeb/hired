@@ -7,7 +7,12 @@ STATUSES = ("generated", "applied", "replied", "interview", "rejected", "offer")
 
 
 def now() -> datetime:
-    return datetime.now(timezone.utc)
+    """
+    Naive UTC. SQLite's DATETIME drops tzinfo on the way in, so storing an aware
+    value only hides that; app.api.stamp() puts the marker back on the way out.
+    A naive timestamp on the wire is read as local time by the browser.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class ProfileSource(SQLModel, table=True):

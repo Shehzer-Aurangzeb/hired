@@ -19,7 +19,7 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from .models import Profile
+from .models import Profile, ProfileIssue, ProfileSummary, ValidationResult
 
 SECTIONS = (
     "identity",
@@ -182,3 +182,63 @@ def _readable(error: ValidationError) -> str:
 
 def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+def validate_text(text: str) -> ValidationResult:
+    """
+    What the editor shows before you are allowed to save.
+
+    ponytail: one error at a time. The parser is fail-fast because YAML is, and
+    collecting more would mean re-parsing after each guessed fix. Warnings are
+    the things worth knowing that are not reasons to refuse the file.
+    """
+    try:
+        profile = parse_text(text)
+    except ProfileError as error:
+        return ValidationResult(
+            ok=False, errors=[ProfileIssue(line=error.line, message=error.message)]
+        )
+
+    projects = [project for exp in profile.experience for project in exp.projects]
+    bullets = [bullet for project in projects for bullet in project.bullets]
+    missing = [project for project in projects if not _has_boundary(project)]
+    warnings: list[ProfileIssue] = []
+
+    if missing:
+        names = ", ".join(project.name for project in missing[:3])
+        warnings.append(
+            ProfileIssue(
+                message=f"{len(missing)} project{'' if len(missing) == 1 else 's'} without a "
+                f"claim_boundary ({names}). The guard cannot protect what has no boundary."
+            )
+        )
+    if not projects:
+        warnings.append(
+            ProfileIssue(message="No projects yet, so there is nothing to select from.")
+        )
+    for summary in profile.summaries:
+        if len(summary.text) > summary.max_chars:
+            warnings.append(
+                ProfileIssue(
+                    message=f'Summary "{summary.id}" is {len(summary.text)} characters, over its '
+                    f"limit of {summary.max_chars}. It will not fit the layout."
+                )
+            )
+
+    return ValidationResult(
+        ok=True,
+        warnings=warnings,
+        summary=ProfileSummary(
+            projects=len(projects),
+            bullets=len(bullets),
+            blocked=sum(1 for bullet in bullets if bullet.status == "blocked"),
+            missing_boundaries=len(missing),
+        ),
+    )
+
+
+def _has_boundary(project) -> bool:
+    boundary = project.claim_boundary
+    return bool(
+        boundary.can_claim or boundary.cannot_claim or boundary.required_qualifiers
+    )

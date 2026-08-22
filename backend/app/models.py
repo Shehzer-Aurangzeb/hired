@@ -159,3 +159,27 @@ class Profile(BaseModel):
                         raise ValueError(f"duplicate bullet id: {b.id}")
                     bullets.add(b.id)
         return self
+
+
+# ---------- validation (POST /api/profile/validate) ----------
+
+
+class ProfileIssue(BaseModel):
+    """1-indexed line in the file the person typed, or None when not line-bound."""
+
+    line: int | None = None
+    message: str
+
+
+class ProfileSummary(BaseModel):
+    projects: int
+    bullets: int
+    blocked: int
+    missing_boundaries: int
+
+
+class ValidationResult(BaseModel):
+    ok: bool
+    errors: list[ProfileIssue] = []
+    warnings: list[ProfileIssue] = []
+    summary: ProfileSummary | None = None

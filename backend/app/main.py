@@ -1,17 +1,20 @@
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from sqlmodel import select
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import auth
 from .db import SessionDep, init_db
-from .models import Profile
-from .profile_parser import parse_text
+from .models import Profile, ValidationResult
+from .profile_parser import parse_text, validate_text
 from .profile_template import claude_prompt, template
 from .settings import get_settings
-from .tables import ProfileSource
+from .tables import ProfileSource, now
 
 settings = get_settings()
 
@@ -60,10 +63,91 @@ def get_template() -> dict[str, str]:
 def get_profile(session: SessionDep) -> Profile:
     # ponytail: re-parsed per request. A 30KB document is sub-millisecond, so
     # there is no cache and therefore no cache to invalidate on save.
-    row = session.exec(select(ProfileSource)).first()
+    row = _row(session)
     if row is None:
         raise HTTPException(404, "No profile saved yet.")
     return parse_text(row.text)
+
+
+# ---------- the profile source ----------
+
+
+class SourceBody(BaseModel):
+    text: str
+    # The updated_at the editor was opened with. None means "I believe there is
+    # nothing saved yet".
+    expected_updated_at: str | None = None
+
+
+class TextBody(BaseModel):
+    text: str
+
+
+def _row(session: SessionDep) -> ProfileSource | None:
+    return session.exec(select(ProfileSource)).first()
+
+
+def stamp(value: datetime | None) -> str | None:
+    """
+    UTC-marked ISO. SQLite hands back a naive datetime, and a naive timestamp on
+    the wire is read as local time by the browser, which shifts every "saved 2
+    hours ago" by the reader's offset. Used for the response and for the
+    concurrency token, so the value the client echoes back compares equal.
+    """
+    return value.replace(tzinfo=timezone.utc).isoformat() if value else None
+
+
+def _source(row: ProfileSource | None) -> dict:
+    return {
+        "text": row.text if row else "",
+        "exists": row is not None,
+        "updated_at": stamp(row.updated_at) if row else None,
+    }
+
+
+@api.get("/profile/source")
+def get_source(session: SessionDep) -> dict:
+    return _source(_row(session))
+
+
+@api.post("/profile/validate")
+def post_validate(body: TextBody) -> ValidationResult:
+    return validate_text(body.text)
+
+
+@api.put("/profile/source")
+def put_source(body: SourceBody, session: SessionDep):
+    result = validate_text(body.text)
+    if not result.ok:
+        return JSONResponse(
+            {
+                "detail": "The profile did not parse.",
+                "errors": [issue.model_dump() for issue in result.errors],
+            },
+            status_code=422,
+        )
+
+    row = _row(session)
+    # A save composed against an older copy would overwrite whatever landed in
+    # between. Sending no token while a profile exists is the same mistake made
+    # by a client that did not know there was one.
+    if row is not None and body.expected_updated_at != stamp(row.updated_at):
+        return JSONResponse(
+            {
+                "detail": "This profile changed somewhere else since you opened it.",
+                **_source(row),
+            },
+            status_code=409,
+        )
+
+    if row is None:
+        row = ProfileSource(text=body.text)
+    row.text = body.text
+    row.updated_at = now()
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    return _source(row)
 
 
 app.include_router(auth.router)

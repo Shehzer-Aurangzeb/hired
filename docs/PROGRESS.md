@@ -985,3 +985,56 @@ package now.
 **Next:** the profile source routes. Until they land, `GET /api/profile` reads a
 real row while `/api/profile/source` is still mocked, so the two disagree about
 whether a profile exists.
+
+## Profile source routes
+
+```
+GET  /api/profile/source     -> { text, exists, updated_at }
+POST /api/profile/validate   -> { ok, errors[], warnings[], summary }
+PUT  /api/profile/source     -> 422 when it will not parse, 409 when stale
+```
+
+`validate_text` lives beside the parser it wraps. Errors come straight from
+`ProfileError`, so the editor now shows what the app will actually do rather
+than what a line-scanning stand-in guessed. Warnings are the things worth
+knowing that are not reasons to refuse a save: projects without a
+`claim_boundary` (named, up to three), no projects at all, and a summary over
+its `max_chars`.
+
+One error at a time. The parser is fail-fast because YAML is, and collecting
+more would mean re-parsing after each guessed fix.
+
+**PUT refuses three ways.** It will not write a file that does not parse; it
+will not write over a copy that moved on; and it treats *no token at all* as the
+same mistake, so first-run setup cannot wipe an existing profile if a guard ever
+lets it through. A 409 hands back the current text so the editor can offer "load
+theirs" or "keep mine".
+
+**Timestamps.** SQLite's DATETIME silently drops `tzinfo`, so a stored UTC value
+came back naive and the browser read it as local time — every "saved 2 hours
+ago" was wrong by the reader's offset. The convention is now stated: naive UTC
+in the database, offset marked back on by `stamp()` on the way out. The same
+function produces the concurrency token, so what the client echoes back compares
+equal.
+
+The mock is down to generate, export and applications. `checkProfile`, the
+sessionStorage profile and the source routes are all deleted.
+
+**Two frontend bugs this exposed.**
+
+- Angular evaluates a route's canActivate guards *concurrently*, so `profileGuard`
+  was calling `/api/profile/source` before `authGuard` resolved — a guaranteed
+  401 on the lock screen, complete with a "Not signed in." toast. Both profile
+  guards now wait on the session and let authGuard's redirect win. The first fix
+  called `inject()` inside the `switchMap` callback, which is outside the
+  injection context; that broke every guarded navigation until it was flattened.
+- `errorInterceptor` toasted 401s on top of the two places that already handle
+  them: the login form shows a wrong password inline, and `authInterceptor`
+  answers an expired session with a redirect. It skips 401 now.
+
+Verified against the real backend in a browser: first run lands on `/setup`, the
+template validates through the real parser, breaking the quoting rule reports
+`Line 69` from `parse_text`, saving lands on `/generate`, and two tabs editing
+the same profile produce a real 409 with "load theirs" pulling the winner's text.
+
+**Next:** applications CRUD, the last unblocked chunk.
