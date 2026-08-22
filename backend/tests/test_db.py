@@ -28,12 +28,12 @@ def make_application(**overrides) -> Application:
         "fit_score": 8,
         "fit_reasoning": "Strong React overlap.",
         "gaps": ["Kubernetes"],
-        "title_variant": "frontend",
-        "summary_text": "Front-end engineer...",
         "selected_bullet_ids": ["dedicate-frontend-scratch"],
         "selected_bullets": [{"id": "dedicate-frontend-scratch", "text": "Built..."}],
         "pdf": b"%PDF-1.4 not really",
         "filename": "Shehzar_AirCanada.pdf",
+        "title_variant": "frontend",
+        "summary_text": "Front-end engineer...",
     }
     return Application(**{**fields, **overrides})
 
@@ -47,7 +47,7 @@ def test_json_columns_round_trip(session: Session):
     assert saved.jd_parsed["required_skills"][0]["importance"] == 3
     assert saved.selected_bullets[0]["id"] == "dedicate-frontend-scratch"
     assert saved.pdf == b"%PDF-1.4 not really"
-    assert saved.status == "generated"
+    assert saved.status == "saved"
     assert saved.applied_at is None
 
 
@@ -55,6 +55,16 @@ def test_status_is_constrained(session: Session):
     session.add(make_application(status="ghosted"))
     with pytest.raises(IntegrityError):
         session.commit()
+
+
+def test_a_kept_posting_needs_no_cv(session: Session):
+    """Nullable on purpose: a posting kept for its gaps never had one."""
+    session.add(make_application(pdf=None, filename=None, title_variant=None, summary_text=None))
+    session.commit()
+
+    saved = session.exec(select(Application)).one()
+    assert saved.pdf is None and saved.filename is None
+    assert saved.selected_bullet_ids == ["dedicate-frontend-scratch"]
 
 
 def test_profile_source_is_a_single_row(session: Session):

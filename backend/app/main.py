@@ -1,5 +1,4 @@
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,13 +7,13 @@ from pydantic import BaseModel
 from sqlmodel import select
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth
+from . import applications, auth
 from .db import SessionDep, init_db
 from .models import Profile, ValidationResult
 from .profile_parser import parse_text, validate_text
 from .profile_template import claude_prompt, template
 from .settings import get_settings
-from .tables import ProfileSource, now
+from .tables import ProfileSource, now, stamp
 
 settings = get_settings()
 
@@ -87,15 +86,6 @@ def _row(session: SessionDep) -> ProfileSource | None:
     return session.exec(select(ProfileSource)).first()
 
 
-def stamp(value: datetime | None) -> str | None:
-    """
-    UTC-marked ISO. SQLite hands back a naive datetime, and a naive timestamp on
-    the wire is read as local time by the browser, which shifts every "saved 2
-    hours ago" by the reader's offset. Used for the response and for the
-    concurrency token, so the value the client echoes back compares equal.
-    """
-    return value.replace(tzinfo=timezone.utc).isoformat() if value else None
-
 
 def _source(row: ProfileSource | None) -> dict:
     return {
@@ -149,6 +139,8 @@ def put_source(body: SourceBody, session: SessionDep):
     session.refresh(row)
     return _source(row)
 
+
+api.include_router(applications.router)
 
 app.include_router(auth.router)
 app.include_router(api)

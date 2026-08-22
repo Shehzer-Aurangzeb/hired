@@ -3,16 +3,29 @@ from datetime import datetime, timezone
 from sqlalchemy import CheckConstraint, Column, LargeBinary
 from sqlmodel import JSON, Field, SQLModel
 
-STATUSES = ("generated", "applied", "replied", "interview", "rejected", "offer")
+# Where you are with this employer. Whether a PDF exists is a separate fact
+# (pdf is not None), so "generated" is not a stage: it conflated the two.
+STATUSES = ("saved", "skipped", "applied", "replied", "interview", "rejected", "offer")
+
+# Reaching any of these means the application went out, whatever route it took.
+SENT = ("applied", "replied", "interview", "rejected", "offer")
 
 
 def now() -> datetime:
     """
     Naive UTC. SQLite's DATETIME drops tzinfo on the way in, so storing an aware
-    value only hides that; app.api.stamp() puts the marker back on the way out.
-    A naive timestamp on the wire is read as local time by the browser.
+    value only hides that. stamp() below puts the marker back on the way out.
     """
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def stamp(value: datetime | None) -> str | None:
+    """
+    UTC-marked ISO, the only way a timestamp should leave this app. A naive one
+    on the wire is read as local time by the browser, which shifts every
+    relative date by the reader's offset.
+    """
+    return value.replace(tzinfo=timezone.utc).isoformat() if value else None
 
 
 class ProfileSource(SQLModel, table=True):
@@ -34,8 +47,11 @@ class ProfileSource(SQLModel, table=True):
 
 class Application(SQLModel, table=True):
     """
-    One CV sent to one employer. Written once at export, then only status and
-    notes change.
+    One job posting you decided to keep.
+
+    Not "one CV sent": the records worth the most are often the ones you did not
+    apply to, kept for the gaps they exposed. So every CV-shaped column is
+    nullable, and only the posting, the fit and the gaps are always there.
     """
 
     __table_args__ = (
@@ -56,8 +72,9 @@ class Application(SQLModel, table=True):
     fit_reasoning: str
     gaps: list[str] = Field(default_factory=list, sa_column=Column(JSON))
 
-    title_variant: str
-    summary_text: str
+    # Null until a CV is generated for this posting, which may never happen.
+    title_variant: str | None = None
+    summary_text: str | None = None
     selected_bullet_ids: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     # The bullet text as it was printed, not a join against today's profile. The
     # profile keeps changing and this has to show what the employer actually read.
@@ -65,11 +82,11 @@ class Application(SQLModel, table=True):
 
     # The PDF itself, not a path. ~80 KB each, so a hundred applications is 8 MB,
     # and keeping it here means the whole app is one file to back up and no
-    # deployment needs a writable disk.
-    pdf: bytes = Field(sa_column=Column(LargeBinary))
-    filename: str
+    # deployment needs a writable disk. Null until export attaches one.
+    pdf: bytes | None = Field(default=None, sa_column=Column(LargeBinary, nullable=True))
+    filename: str | None = None
 
-    status: str = "generated"
+    status: str = "saved"
     applied_at: datetime | None = None
     created_at: datetime = Field(default_factory=now)
     notes: str | None = None

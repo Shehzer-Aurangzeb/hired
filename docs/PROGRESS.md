@@ -1038,3 +1038,60 @@ template validates through the real parser, breaking the quoting rule reports
 the same profile produce a real 409 with "load theirs" pulling the winner's text.
 
 **Next:** applications CRUD, the last unblocked chunk.
+
+## Applications: saving is its own decision
+
+The earlier plan had export create the record. That was backwards. The records
+worth the most are often the ones you did *not* apply to — kept because the fit
+check exposed a gap you cannot close yet — and those never had a PDF. So
+`POST /api/applications` is the primary create path, and export attaches a PDF
+to a row that already exists.
+
+```
+paste JD -> fit check
+  ├─ out of your league        -> close it. Discard is "do not press save".
+  ├─ worth keeping, not apply  -> POST /api/applications  status: skipped
+  └─ worth applying            -> generate -> export -> mark applied
+```
+
+**Schema.** `pdf`, `filename`, `title_variant` and `summary_text` are nullable:
+a kept posting never had a CV. What it always has is `jd_text`, `jd_parsed`,
+`fit_score` and `gaps`, which is the part worth keeping.
+
+**Statuses.** `generated` conflated two independent things — where you are with
+an employer, and whether a PDF exists. The second is now just `pdf is not None`,
+so the stage list is:
+
+`saved` · `skipped` · `applied` · `replied` · `interview` · `rejected` · `offer`
+
+`applied_at` is stamped the first time the status reaches one of the sent
+states, and never rewritten by a later stage: it records when the employer got
+it, not when you last touched the row.
+
+**Routes** (`app/applications.py`, mounted under the session-protected router):
+
+```
+POST   /api/applications        201
+GET    /api/applications        newest first, ordered by the database
+GET    /api/applications/{id}
+PATCH  /api/applications/{id}   status and notes, nothing else
+GET    /api/applications/{id}/pdf
+```
+
+- `ApplicationOut` omits the `pdf` column entirely and exposes `has_pdf`, so a
+  megabyte of base64 cannot leak into a list response by accident.
+- PATCH takes an explicit two-field model rather than a partial row. Everything
+  else is a record of what an employer actually received, and an API that can
+  rewrite it turns the archive into fiction. It reads `model_fields_set`, so an
+  explicit null clears the notes while a status change leaves them alone.
+- The PDF filename is scrubbed before it reaches `Content-Disposition`: a
+  newline in it would let the row write its own response headers. There is a
+  test that tries exactly that.
+
+`python -m app.seed_demo` inserts four postings covering the interesting states
+so the screens have something real to render. It refuses to run over existing
+rows, and gets deleted when export becomes a real caller.
+
+**Next:** the frontend. New status vocabulary, a re-validated pipeline palette
+(two new segments), "no CV for this one" states on the detail page, and deleting
+`pdf_path`, which is in the contract and rendered nowhere.
