@@ -7,7 +7,7 @@ decides where the template lands inside the briefing.
 import pytest
 
 from app import profile_template
-from app.profile_parser import parse_text
+from app.profile_parser import parse_text, validate_text
 from app.settings import Settings
 
 
@@ -26,8 +26,27 @@ def test_the_shipped_template_actually_parses():
     """It did not, once: four column-0 comments were read as section breaks."""
     profile = parse_text(profile_template.template())
     assert len(profile.titles) == 2
-    assert sum(len(p.bullets) for e in profile.experience for p in e.projects) == 2
-    assert profile.experience[0].projects[0].claim_boundary.cannot_claim
+    projects = [p for e in profile.experience for p in e.projects]
+    assert len(projects) == 3
+    assert sum(len(p.bullets) for p in projects) == 5
+    assert all(p.claim_boundary.cannot_claim for p in projects)
+
+
+def test_the_shipped_template_demonstrates_every_field():
+    """
+    It is the only documentation of the format, so a field the models support
+    and the template never shows is a field nobody will ever use.
+    """
+    result = validate_text(profile_template.template())
+    assert result.ok and not result.warnings
+    profile = parse_text(profile_template.template())
+    assert profile.identity.links and profile.education[0].links
+    assert profile.certifications and profile.languages
+    project = profile.experience[0].projects[0]
+    assert project.disclosure and project.links and project.stack
+    assert any(s.gated for s in profile.skills)
+    assert any(s.never_standalone for s in profile.skills)
+    assert any(b.status == "blocked" for b in project.bullets)
 
 
 def test_prompt_carries_the_template():
