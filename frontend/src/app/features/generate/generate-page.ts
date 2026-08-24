@@ -7,12 +7,13 @@ import {
   signal,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { of, switchMap, tap, finalize } from 'rxjs';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
 
-import { USE_MOCKS } from '../../core/api';
 import { GenerateService } from '../../core/generate.service';
-import { MOCK_JD_TEXT } from '../../core/mock-data';
 import { Coverage, computeCoverage } from '../../core/coverage';
+import { ApplicationsService } from '../../core/applications.service';
 import { CvSection, GeneratedCv } from '../../core/models';
 import { ProfileService } from '../../core/profile.service';
 import { ToastService } from '../../core/toast.service';
@@ -31,6 +32,8 @@ const PAGE_BUDGET = 3000;
 export class GeneratePage {
   private readonly fb = inject(FormBuilder);
   private readonly toast = inject(ToastService);
+  private readonly applications = inject(ApplicationsService);
+  private readonly router = inject(Router);
   readonly gen = inject(GenerateService);
   readonly profile = inject(ProfileService).profile;
 
@@ -40,21 +43,8 @@ export class GeneratePage {
 
   readonly form = this.fb.nonNullable.group({
     jd_text: ['', [Validators.required, Validators.minLength(80)]],
-    company: [''],
-    role: [''],
     title_variant: [''],
   });
-
-  constructor() {
-    // ?mock=<scenario> should show that state on load, not after you also paste
-    // text and press Generate. Guarded by USE_MOCKS, and the mock-data import
-    // breaks loudly when the fixtures are deleted, which is the cue to delete
-    // this block too.
-    if (USE_MOCKS && new URLSearchParams(location.search).has('mock') && !this.gen.result()) {
-      this.form.patchValue({ jd_text: MOCK_JD_TEXT });
-      this.generate();
-    }
-  }
 
   /**
    * linkedSignal, so a fresh generation resets the edits but the user can still
@@ -104,7 +94,7 @@ export class GeneratePage {
 
   /** Bullets carry the evidence; the skills line and stacks only make it visible. */
   readonly coverage = computed<Coverage[]>(() => {
-    const jd = this.gen.result()?.parsed_jd;
+    const jd = this.gen.fit()?.parsed_jd;
     const cv = this.finalCv();
     if (!jd || !cv) {
       return [];
@@ -161,8 +151,11 @@ export class GeneratePage {
     () => this.profile.value()?.titles.find((t) => t.id === this.variantId())?.text ?? '',
   );
 
-  /** Show the form full width until a result exists, or when reopened to edit. */
-  readonly showForm = computed(() => this.editing() || !this.gen.result());
+  /** The posting owns the screen until it has been scored, or when reopened. */
+  readonly showForm = computed(() => this.editing() || !this.gen.fit());
+
+  /** Scored, but no CV asked for yet. The decision point. */
+  readonly deciding = computed(() => !!this.gen.fit() && !this.gen.result());
 
   /** Has the selection drifted from what the selector suggested. */
   readonly edited = computed(() => {
@@ -195,49 +188,125 @@ export class GeneratePage {
     this.excluded.set(new Set());
   }
 
-  generate(): void {
+  checkFit(): void {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
     }
-    const raw = this.form.getRawValue();
-    this.gen
-      .generate({
-        jd_text: raw.jd_text,
-        company: raw.company || undefined,
-        role: raw.role || undefined,
-        title_variant: raw.title_variant || undefined,
-      })
-      .subscribe({
-        next: (res) => {
-          this.form.patchValue(
-            { company: res.parsed_jd.company, role: res.parsed_jd.role },
-            { emitEvent: false },
-          );
-          this.editing.set(false);
-        },
-        error: () => {
-          /* the error interceptor already raised a toast */
-        },
-      });
+    this.gen.checkFit(this.form.getRawValue().jd_text).subscribe({
+      next: () => this.editing.set(false),
+      error: () => {
+        /* the error interceptor already raised a toast */
+      },
+    });
   }
 
-  regenerateSummary(): void {
-    const variant = this.form.controls.title_variant.value || 'fullstack';
-    this.gen.regenerateSummary(variant).subscribe({
-      next: () => this.toast.ok('Summary regenerated.'),
+  /**
+   * Keep the posting without applying to it. Often the more valuable record:
+   * what it exposed is a gap you now know about, and no CV was ever needed.
+   */
+  keep(): void {
+    this.save('skipped').subscribe({
+      next: (row) => {
+        this.toast.ok(`Kept ${row.company}. No CV was made for it.`);
+        this.reset();
+      },
       error: () => {},
     });
   }
 
-  export(): void {
-    const cv = this.finalCv();
-    if (!cv) {
+  /**
+   * Ask for a CV. The row is created first so export has something to attach a
+   * PDF to, and so a generation you abandon still leaves the posting on record.
+   */
+  generate(): void {
+    const fit = this.gen.fit();
+    if (!fit) {
       return;
     }
-    this.gen.export(cv).subscribe({
-      next: (res) =>
-        this.toast.ok(`Exported ${res.filename} (${res.page_count} page).`),
+    const existing = this.gen.applicationId();
+    const row = existing ? of({ id: existing }) : this.save('saved');
+    row
+      .pipe(
+        tap((created) => this.gen.applicationId.set(created.id)),
+        switchMap(() =>
+          this.gen.generate({
+            jd_text: this.gen.jdText(),
+            parsed_jd: fit.parsed_jd,
+            title_variant: this.form.getRawValue().title_variant || undefined,
+          }),
+        ),
+      )
+      .subscribe({ error: () => {} });
+  }
+
+  private save(status: 'saved' | 'skipped') {
+    const fit = this.gen.fit();
+    this.gen.saving.set(true);
+    return this.applications
+      .create({
+        company: fit?.parsed_jd.company || 'Unknown',
+        role: fit?.parsed_jd.role || 'Unknown',
+        jd_text: this.gen.jdText(),
+        jd_parsed: fit?.parsed_jd,
+        fit_score: fit?.fit.score ?? 0,
+        fit_reasoning: fit?.fit.reasoning ?? '',
+        gaps: fit?.fit.gaps ?? [],
+        status,
+      })
+      .pipe(finalize(() => this.gen.saving.set(false)));
+  }
+
+  /** More than one framing to switch between. One is not a choice. */
+  readonly hasVariants = computed(() => (this.profile.value()?.titles.length ?? 0) > 1);
+
+  /**
+   * Cycle to the next headline and summary you wrote, keeping the pair together:
+   * they are written per framing and reading a front-end summary under a
+   * full-stack headline is worse than either alone. Nothing is generated.
+   */
+  nextVariant(): void {
+    const profile = this.profile.value();
+    const cv = this.gen.result()?.cv;
+    if (!profile || !cv || profile.titles.length < 2) {
+      return;
+    }
+    const at = profile.titles.findIndex((title) => title.text === cv.title);
+    const next = profile.titles[(at + 1) % profile.titles.length];
+    const summary = profile.summaries.find((s) => s.id === next.id);
+    this.gen.useVariant(next.text, summary?.text ?? cv.summary);
+    this.toast.ok(`Switched to the ${next.id} framing.`);
+  }
+
+  export(): void {
+    const cv = this.finalCv();
+    const id = this.gen.applicationId();
+    if (!cv || id === null) {
+      return;
+    }
+    this.gen.export(id, cv).subscribe({
+      next: (res) => {
+        this.exported.set(true);
+        const pages = res.page_count === 1 ? 'one page' : `${res.page_count} pages`;
+        this.toast.ok(`Saved ${res.filename}, ${pages}.`);
+      },
+      error: () => {},
+    });
+  }
+
+  readonly exported = signal(false);
+
+  /** The employer has it. Stamped once, and never rewritten by a later stage. */
+  markApplied(): void {
+    const id = this.gen.applicationId();
+    if (id === null) {
+      return;
+    }
+    this.applications.patch(id, { status: 'applied' }).subscribe({
+      next: () => {
+        this.toast.ok('Marked as applied.');
+        this.router.navigate(['/applications', id]);
+      },
       error: () => {},
     });
   }
@@ -246,6 +315,7 @@ export class GeneratePage {
     this.gen.clear();
     this.form.reset();
     this.editing.set(false);
+    this.exported.set(false);
   }
 
   scoreTone(score: number): string {

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import applications, auth
+from . import applications, auth, fit, generate
 from .db import SessionDep, init_db
 from .models import Profile, ValidationResult
 from .profile_parser import parse_text, validate_text
@@ -141,6 +141,8 @@ def put_source(body: SourceBody, session: SessionDep):
 
 
 api.include_router(applications.router)
+api.include_router(fit.router)
+api.include_router(generate.router)
 
 app.include_router(auth.router)
 app.include_router(api)

@@ -7,17 +7,34 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { KeyValuePipe } from '@angular/common';
 import { ActivatedRoute, CanDeactivateFn, Router } from '@angular/router';
 
-import { MAX_BYTES, USE_MOCKS } from '../../core/api';
+import { MAX_BYTES } from '../../core/api';
 import { copyPrompt, openClaude } from '../../core/claude-draft';
 import { ago } from '../../core/dates';
-import { Bullet, Project, ProfileIssue, ValidationResult } from '../../core/models';
+import { Bullet, Experience, Project, ProfileIssue, ValidationResult } from '../../core/models';
 import { ProfileService } from '../../core/profile.service';
 import { ToastService } from '../../core/toast.service';
 import { Icon } from '../../shared/icon';
 
 type Tab = 'browse' | 'edit';
+
+/**
+ * An employer, or the standalone Projects section wearing the same shape. The
+ * two are separate lists in the model on purpose, but they render identically,
+ * and one group type beats a second copy of the project card markup.
+ */
+type Group = Experience & { standalone: boolean };
+
+/** One thing waiting on you: a blocked bullet, or something you cannot evidence. */
+export interface Unresolved {
+  project: string;
+  kind: 'blocked' | 'unverified';
+  id: string;
+  text: string;
+  reason: string;
+}
 
 /** The gutter and the textarea must agree, so the number is in one place. */
 const LINE_HEIGHT = 19;
@@ -31,7 +48,7 @@ const LINE_HEIGHT = 19;
 @Component({
   selector: 'app-profile-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon],
+  imports: [Icon, KeyValuePipe],
   templateUrl: './profile-page.html',
   // Closing the tab bypasses the router, so the browser gets its own warning.
   host: { '(window:beforeunload)': 'onUnload($event)' },
@@ -45,7 +62,6 @@ export class ProfilePage {
   private readonly editor = viewChild<ElementRef<HTMLTextAreaElement>>('editor');
 
   readonly resource = this.service.profile;
-  readonly mocked = USE_MOCKS;
 
   readonly tab = signal<Tab>(
     this.route.snapshot.queryParamMap.get('tab') === 'edit' ? 'edit' : 'browse',
@@ -62,9 +78,11 @@ export class ProfilePage {
 
   readonly query = signal('');
 
-  private readonly projects = computed<Project[]>(() =>
-    (this.resource.value()?.experience ?? []).flatMap((e) => e.projects),
-  );
+  /** Employment is not what makes something a project, so both lists count. */
+  private readonly projects = computed<Project[]>(() => {
+    const profile = this.resource.value();
+    return profile ? [...profile.experience.flatMap((e) => e.projects), ...profile.projects] : [];
+  });
 
   private readonly bullets = computed<Bullet[]>(() =>
     this.projects().flatMap((p) => p.bullets),
@@ -73,19 +91,74 @@ export class ProfilePage {
   readonly health = computed(() => ({
     projects: this.projects().length,
     bullets: this.bullets().length,
-    blocked: this.bullets().filter((b) => b.status === 'blocked').length,
     missing: this.projects().filter((p) => !hasBoundary(p)).length,
   }));
 
-  readonly experience = computed(() => {
+  /**
+   * Blocked bullets and unverified notes are one queue, not two lists. They are
+   * the same job — go and check something — and splitting them means the shorter
+   * half never gets looked at.
+   */
+  readonly unresolved = computed<Unresolved[]>(() =>
+    this.projects().flatMap((project) => [
+      ...project.unverified.map((text) => ({
+        project: project.name,
+        kind: 'unverified' as const,
+        id: '',
+        text,
+        reason: '',
+      })),
+      ...project.bullets
+        .filter((bullet) => bullet.status === 'blocked')
+        .map((bullet) => ({
+          project: project.name,
+          kind: 'blocked' as const,
+          id: bullet.id,
+          text: bullet.text,
+          reason: bullet.blocked_reason,
+        })),
+    ]),
+  );
+
+  private readonly all = computed<Group[]>(() => {
+    const profile = this.resource.value();
+    if (!profile) {
+      return [];
+    }
+    const employers = profile.experience.map((e) => ({ ...e, standalone: false }));
+    if (!profile.projects.length) {
+      return employers;
+    }
+    // A display grouping, not an employer: the header prints no role or dates
+    // because there are none, rather than because they are missing.
+    return [
+      ...employers,
+      {
+        name: 'Standalone projects',
+        role: '',
+        start: '',
+        end: '',
+        location: '',
+        employment_type: '',
+        context: '',
+        disclosure: '',
+        previous_roles: [],
+        priority: 3,
+        projects: profile.projects,
+        standalone: true,
+      },
+    ];
+  });
+
+  readonly groups = computed<Group[]>(() => {
     const query = this.query().trim().toLowerCase();
     if (!query) {
-      return this.resource.value()?.experience ?? [];
+      return this.all();
     }
-    return (this.resource.value()?.experience ?? [])
-      .map((company) => ({
-        ...company,
-        projects: company.projects.filter(
+    return this.all()
+      .map((group) => ({
+        ...group,
+        projects: group.projects.filter(
           (project) =>
             project.name.toLowerCase().includes(query) ||
             project.tags.some((t) => t.includes(query)) ||
@@ -93,13 +166,39 @@ export class ProfilePage {
             project.bullets.some((b) => b.text.toLowerCase().includes(query)),
         ),
       }))
-      .filter((company) => company.projects.length > 0);
+      .filter((group) => group.projects.length > 0);
   });
 
   /** "3 of 12" — a filter that hides things has to say how many. */
-  readonly shown = computed(() => this.experience().reduce((n, c) => n + c.projects.length, 0));
+  readonly shown = computed(() => this.groups().reduce((n, g) => n + g.projects.length, 0));
+
+  /** Availability is all optional, so "did they write any of it" needs asking. */
+  readonly hasAvailability = computed(() =>
+    Object.values(this.resource.value()?.availability ?? {}).some(nonEmpty),
+  );
+
+  /** The three numbers always have defaults, so only the written parts count. */
+  readonly hasRules = computed(() => {
+    const rules = this.resource.value()?.rules;
+    return !!rules && [rules.banned_words, rules.banned_chars, rules.preferred_phrasing].some(nonEmpty);
+  });
 
   hasBoundary = hasBoundary;
+
+  /** The named fields and the free-form list, as one row of anchors. */
+  readonly identityLinks = computed(() => {
+    const identity = this.resource.value()?.identity;
+    if (!identity) {
+      return [];
+    }
+    return [
+      { text: identity.linkedin, url: identity.linkedin },
+      { text: identity.github, url: identity.github },
+      { text: identity.portfolio, url: identity.portfolio },
+      // The label is what the line is for; the URL behind it is rarely readable.
+      ...identity.links.map((link) => ({ text: link.label || link.url, url: link.url })),
+    ].filter((link) => !!link.url);
+  });
 
   /** Profiles are written "github.com/you", which a bare href reads as relative. */
   href(url: string): string {
@@ -269,8 +368,12 @@ export class ProfilePage {
     this.service.template().subscribe({
       next: async ({ claude_prompt }) => {
         if (open) {
-          openClaude(claude_prompt);
-          this.toast.ok('Paste what Claude gives you back over the source here.');
+          const opened = await openClaude(claude_prompt);
+          if (opened) {
+            this.toast.ok('Prompt copied. Paste it as your first message in the tab that opened.');
+          } else {
+            this.editError.set('The tab is open but the clipboard refused. Copy it by hand.');
+          }
           return;
         }
         const ok = await copyPrompt(claude_prompt);
@@ -357,4 +460,14 @@ function download(text: string): void {
   link.download = 'master.md';
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function nonEmpty(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+  if (value && typeof value === 'object') {
+    return Object.keys(value).length > 0;
+  }
+  return !!value;
 }

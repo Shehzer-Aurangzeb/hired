@@ -158,6 +158,18 @@ def patch_application(
     return ApplicationOut.of(row)
 
 
+@router.delete("/{application_id}", status_code=204)
+def delete_application(application_id: int, session: SessionDep) -> Response:
+    """
+    Gone, including the PDF, which is stored on the row and has no other copy.
+    The confirmation is the caller's job; by the time it reaches here the answer
+    is yes.
+    """
+    session.delete(_get(session, application_id))
+    session.commit()
+    return Response(status_code=204)
+
+
 @router.get("/{application_id}/pdf")
 def get_pdf(application_id: int, session: SessionDep) -> Response:
     row = _get(session, application_id)

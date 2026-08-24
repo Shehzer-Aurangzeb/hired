@@ -48,9 +48,30 @@
           >
             <app-icon name="download" [size]="15" />
           </a>
+          <!-- TEMPORARY, paired with POST /api/reexport. Delete with the route. -->
+          <button
+            type="button"
+            class="btn btn-outline"
+            [disabled]="rebuilding()"
+            (click)="reexport(application)"
+            title="Print this CV again from the current template"
+          >
+            <app-icon name="refresh" [size]="15" [class]="rebuilding() ? 'animate-spin' : ''" />
+            Re-export
+          </button>
         } @else {
           <span class="chip">No CV generated</span>
         }
+        <button
+          type="button"
+          class="btn btn-ghost hover:text-danger !px-2.5"
+          [disabled]="deleting()"
+          (click)="remove(application)"
+          title="Delete this application"
+          aria-label="Delete this application"
+        >
+          <app-icon name="x" [size]="15" />
+        </button>
       </div>
     </header>
 
@@ -344,15 +365,7 @@
           <app-icon name="x" [size]="15" />
         </button>
       </div>
-      @if (mocked) {
-        <div class="text-fg-muted flex h-[calc(92dvh-2.5rem)] flex-col items-center justify-center gap-2 p-6 text-center">
-          <app-icon name="file-text" [size]="24" class="text-fg-subtle" />
-          <p class="text-[13px]">No PDF yet.</p>
-          <p class="text-fg-subtle max-w-sm text-[12px]">
-            The export endpoint arrives with Phase 2. This dialog frames the real file once it does.
-          </p>
-        </div>
-      } @else if (viewing()) {
+      @if (viewing()) {
         <iframe
           [src]="safePdfUrl(application.id)"
           class="h-[calc(92dvh-2.5rem)] w-full border-0"

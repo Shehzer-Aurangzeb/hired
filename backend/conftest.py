@@ -11,3 +11,8 @@ import os
 os.environ["HIRED_SECRET_KEY"] = "test-secret-key"
 os.environ["HIRED_DATABASE_URL"] = "sqlite://"
 os.environ["HIRED_PASSWORD_HASH"] = ""
+# Both spellings, because the setting accepts both. Without this the suite makes
+# real, rate-limited calls to Google against whatever key is in .env: the first
+# run of test_fit.py did exactly that before this line existed.
+os.environ["HIRED_GEMINI_API_KEY"] = ""
+os.environ["GEMINI_API_KEY"] = ""

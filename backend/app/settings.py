@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,6 +40,21 @@ class Settings(BaseSettings):
     session_max_age: int = 60 * 60 * 24 * 14
 
     cors_origins: list[str] = ["http://localhost:4200"]
+
+    # Google AI Studio. GEMINI_API_KEY is the name Google's own tooling uses, so
+    # both spellings are accepted rather than making a working key look missing.
+    # Empty means every model-backed route answers 503 instead of half working.
+    gemini_api_key: str = Field(
+        "", validation_alias=AliasChoices("HIRED_GEMINI_API_KEY", "GEMINI_API_KEY")
+    )
+    # Empty uses the browser `playwright install chromium` puts in its own cache.
+    # Set it when a deployment already has a Chromium and a second copy is 150MB
+    # of image for nothing.
+    chrome_path: str = ""
+
+    # A setting because the free tier's limits move and the right model with them.
+    # gemini-2.5-flash is retired for new keys and 404s with a note pointing here.
+    gemini_model: str = "gemini-3.6-flash"
 
     # Content, not code. Empty means "use the default in app/profile_template.py",
     # so a fresh checkout needs no config and a reword needs no deploy of code.

@@ -1,8 +1,13 @@
-// Mirrors backend/app/models.py plus the API contract in hired_BUILD_PLAN.md.
-// Where the backend does not exist yet, these interfaces ARE the spec it has to
-// satisfy. core/mock-data.ts is the worked example.
+// Mirrors backend/app/models.py. Every route behind these is live: nothing in
+// the app is mocked any more.
 
 // ---------- profile (GET /api/profile, live) ----------
+
+/** Bookkeeping. schema_version is what lets an old file be migrated later. */
+export interface Meta {
+  schema_version: number;
+  updated: string;
+}
 
 /** Anything in a CV header that is not one of the named fields below. */
 export interface Link {
@@ -26,6 +31,8 @@ export interface Identity {
 export interface Title {
   id: string;
   text: string;
+  /** Not printed. Tells the selector which framing a posting calls for. */
+  use_when: string;
 }
 
 export interface Summary {
@@ -41,10 +48,36 @@ export interface SkillLine {
   gated: string[];
 }
 
+/**
+ * Never printed. How "5+ years of React" gets answered from the file rather
+ * than guessed, and how a gated skill gets refused when the project that
+ * evidences it is not on the page.
+ */
+export interface SkillEvidence {
+  name: string;
+  years: number | null;
+  last_used: string;
+  /** familiar | working | advanced | expert */
+  level: string;
+  /** professional | personal | academic */
+  context: string;
+  /** Project ids, from either list, that prove it. */
+  evidence: string[];
+  gated: boolean;
+}
+
 export interface ClaimBoundary {
   can_claim: string[];
   cannot_claim: string[];
   required_qualifiers: string[];
+}
+
+/** Where a number in a bullet came from. Absent is itself an answer. */
+export interface Metric {
+  value: string;
+  /** measured | estimated | reported | none */
+  source: string;
+  method: string;
 }
 
 export interface Bullet {
@@ -53,6 +86,10 @@ export interface Bullet {
   priority: number;
   tags: string[];
   status: 'active' | 'blocked';
+  /** An alternative wording for when the page is one line too long. */
+  short: string;
+  metric: Metric | null;
+  blocked_reason: string;
 }
 
 export interface Project {
@@ -60,13 +97,31 @@ export interface Project {
   name: string;
   label: string;
   stack: string[];
+  /** Your actual scope, in the words you would use under questioning. */
+  my_role: string;
+  /** live | shipped | internal | pilot | sunset | abandoned */
+  status: string;
+  domain: string;
+  start: string;
+  end: string;
+  /** Not printed. The answer when an interviewer asks why this exists. */
+  why_built: string;
   priority: number;
   tags: string[];
   disclosure: string;
+  /** True things you cannot evidence today. Each should have a blocked bullet. */
+  unverified: string[];
   /** Repo, live demo, case study, app store listing. */
   links: Link[];
   claim_boundary: ClaimBoundary;
   bullets: Bullet[];
+}
+
+/** A promotion inside the same employer. Newest first, current one excluded. */
+export interface PreviousRole {
+  role: string;
+  start: string;
+  end: string;
 }
 
 export interface Experience {
@@ -75,6 +130,12 @@ export interface Experience {
   start: string;
   end: string;
   location: string;
+  /** full-time | part-time | contract | freelance | internship | volunteer */
+  employment_type: string;
+  context: string;
+  /** What you may say about this employer in public. Not printed. */
+  disclosure: string;
+  previous_roles: PreviousRole[];
   priority: number;
   projects: Project[];
 }
@@ -86,7 +147,11 @@ export interface Education {
   location: string;
   start: string;
   end: string;
+  /** Off the page by default, switched on for a posting that asks. */
+  gpa: string;
+  coursework: string[];
   notes: string;
+  priority: number;
   links: Link[];
 }
 
@@ -94,26 +159,92 @@ export interface Certification {
   name: string;
   issuer: string;
   date: string;
+  /** earned | in_progress | expired. Only earned is ever printed. */
+  status: string;
+  expires: string;
   url: string;
+}
+
+export interface Publication {
+  /** talk | article | paper | patent | book | podcast */
+  type: string;
+  title: string;
+  venue: string;
+  date: string;
+  url: string;
+}
+
+export interface Award {
+  name: string;
+  issuer: string;
+  date: string;
+  note: string;
 }
 
 export interface Language {
   name: string;
+  /** native | fluent | professional | conversational | basic */
   level: string;
+  note: string;
+}
+
+/**
+ * Never printed. The register of what you cannot do, so the selector reports a
+ * gap instead of stretching a bullet to cover it.
+ */
+export interface Gap {
+  skill: string;
+  /** none | learning | personal-only | rusty */
+  status: string;
+  bridge: string;
+  blocks: string;
+}
+
+/** Never printed. What lets a posting be scored before an hour goes into it. */
+export interface Availability {
+  work_modes: string[];
+  locations: string[];
+  earliest_start: string;
+  notice_period: string;
+  employment_types: string[];
+  /** Free-shaped: currency, minimum, target, note, whatever else. */
+  compensation: Record<string, unknown>;
+  travel_ok: string;
+  deal_breakers: string[];
+  will_not_work_on: string[];
+}
+
+/** Never printed. Generation constraints that apply to every CV from this file. */
+export interface Rules {
+  banned_words: string[];
+  banned_chars: string[];
+  preferred_phrasing: Record<string, string>;
+  max_bullets_per_project: number;
+  max_projects: number;
+  page_limit: number;
 }
 
 export interface Profile {
+  meta: Meta;
   identity: Identity;
   titles: Title[];
   summaries: Summary[];
   skills: SkillLine[];
+  skill_evidence: SkillEvidence[];
   experience: Experience[];
+  /** Work with no employer: personal builds, open source, academic. */
+  projects: Project[];
   education: Education[];
   certifications: Certification[];
+  publications: Publication[];
+  awards: Award[];
   languages: Language[];
+  availability: Availability;
+  gaps: Gap[];
+  rules: Rules;
 }
 
-// ---------- profile source (the raw markdown, not built yet) ----------
+// ---------- profile source (the raw markdown, live) ----------
 
 export interface ProfileSource {
   text: string;
@@ -134,10 +265,15 @@ export interface ProfileIssue {
 }
 
 export interface ProfileSummary {
+  /** Projects under an employer. projects_total counts the standalone ones too. */
   projects: number;
+  projects_total: number;
   bullets: number;
   blocked: number;
   missing_boundaries: number;
+  skills_evidenced: number;
+  gaps: number;
+  unverified: number;
 }
 
 export interface ValidationResult {
@@ -147,7 +283,7 @@ export interface ValidationResult {
   summary: ProfileSummary | null;
 }
 
-// ---------- generate (POST /api/generate, not built yet) ----------
+// ---------- the fit check and the selector ----------
 
 export interface RequiredSkill {
   name: string;
@@ -202,26 +338,32 @@ export interface Flag {
   message: string;
 }
 
+/** POST /api/fit. Runs before anything is saved and writes nothing. */
+export interface FitResponse {
+  parsed_jd: ParsedJd;
+  fit: Fit;
+}
+
+/** POST /api/generate. The posting was already read by the fit check. */
 export interface GenerateRequest {
   jd_text: string;
-  company?: string;
-  role?: string;
+  parsed_jd: ParsedJd;
   title_variant?: string;
 }
 
 export interface GenerateResponse {
-  parsed_jd: ParsedJd;
-  fit: Fit;
   cv: GeneratedCv;
   flags: Flag[];
 }
 
+/** POST /api/export. Attaches a PDF to a row that already exists. */
 export interface ExportResponse {
+  id: number;
   filename: string;
   page_count: number;
 }
 
-// ---------- applications (not built yet) ----------
+// ---------- applications ----------
 
 /**
  * Where you are with an employer. Whether a CV exists is a separate fact

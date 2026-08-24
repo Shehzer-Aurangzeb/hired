@@ -211,3 +211,18 @@ def test_all_of_it_needs_a_session(client):
     assert client.get(f"/api/applications/{application_id}").status_code == 401
     assert client.patch(f"/api/applications/{application_id}", json={"status": "applied"}).status_code == 401
     assert client.get(f"/api/applications/{application_id}/pdf").status_code == 401
+    assert client.delete(f"/api/applications/{application_id}").status_code == 401
+
+
+def test_deleting_an_application_takes_its_pdf_with_it(client):
+    application_id = client.post("/api/applications", json=KEPT).json()["id"]
+    attach_pdf(client, application_id)
+
+    assert client.delete(f"/api/applications/{application_id}").status_code == 204
+    assert client.get(f"/api/applications/{application_id}").status_code == 404
+    assert client.get(f"/api/applications/{application_id}/pdf").status_code == 404
+    assert client.get("/api/applications").json() == []
+
+
+def test_deleting_something_that_is_not_there(client):
+    assert client.delete("/api/applications/999").status_code == 404

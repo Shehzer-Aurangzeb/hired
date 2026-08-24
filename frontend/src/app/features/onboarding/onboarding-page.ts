@@ -120,9 +120,13 @@ export class OnboardingPage {
     });
   }
 
-  openClaude(): void {
-    openClaude(this.prompt());
-    this.toast.ok('Paste what Claude gives you back over the file below.');
+  async openClaude(): Promise<void> {
+    const copied = await openClaude(this.prompt());
+    if (copied) {
+      this.toast.ok('Prompt copied. Paste it as your first message in the tab that opened.');
+    } else {
+      this.loadError.set('The tab is open but the clipboard refused. Copy the prompt by hand.');
+    }
   }
 
   async copyPrompt(): Promise<void> {

@@ -18,7 +18,7 @@
       </div>
     }
 
-    <form class="card p-4" [formGroup]="form" (ngSubmit)="generate()">
+    <form class="card p-4" [formGroup]="form" (ngSubmit)="checkFit()">
       <label class="label" for="jd">Posting text <span class="text-danger">*</span></label>
       <textarea
         id="jd"
@@ -26,8 +26,8 @@
         rows="14"
         class="field resize-y font-normal"
         placeholder="Paste the full posting. The parser wants the responsibilities and requirements sections, not just the blurb."
-        (keydown.meta.enter)="generate()"
-        (keydown.control.enter)="generate()"
+        (keydown.meta.enter)="checkFit()"
+        (keydown.control.enter)="checkFit()"
         [attr.aria-invalid]="form.controls.jd_text.touched && form.controls.jd_text.invalid"
         aria-describedby="jd-help"
       ></textarea>
@@ -40,21 +40,13 @@
           <span class="text-fg-subtle">
             <kbd class="border-line-strong bg-surface rounded border px-1 py-px text-[10px]">Cmd</kbd>
             <kbd class="border-line-strong bg-surface rounded border px-1 py-px text-[10px]">Enter</kbd>
-            to generate.
+            to check the fit.
           </span>
         }
         <span class="tabular text-fg-subtle shrink-0">{{ jdLength() }}</span>
       </p>
 
-      <div class="mt-4 grid gap-3 sm:grid-cols-3">
-        <div>
-          <label class="label" for="company">Company</label>
-          <input id="company" formControlName="company" class="field" placeholder="Air Canada" />
-        </div>
-        <div>
-          <label class="label" for="role">Role</label>
-          <input id="role" formControlName="role" class="field" placeholder="Front-End Developer" />
-        </div>
+      <div class="mt-4">
         <div>
           <label class="label" for="variant">Title variant</label>
           <select id="variant" formControlName="title_variant" class="field cursor-pointer">
@@ -72,7 +64,7 @@
           <br />
         }
         The headline under your name, which also swaps the summary paragraph. Company and role are
-        extracted from the posting if you leave them blank.
+        read off the posting.
       </p>
       @if (profile.error()) {
         <p class="text-warn mt-1 text-[11px]">
@@ -81,31 +73,31 @@
       }
 
       <div class="mt-4 flex gap-2">
-        <button type="submit" class="btn btn-primary flex-1" [disabled]="gen.generating()">
-          @if (gen.generating()) {
+        <button type="submit" class="btn btn-primary flex-1" [disabled]="gen.checking()">
+          @if (gen.checking()) {
             <app-icon name="refresh" [size]="15" class="animate-spin" />
-            Generating
+            Reading the posting
           } @else {
             <app-icon name="sparkles" [size]="15" />
-            Generate
+            Check fit
           }
         </button>
-        @if (gen.result()) {
+        @if (gen.fit()) {
           <button type="button" class="btn btn-outline" (click)="reset()">Clear</button>
         }
       </div>
     </form>
 
-    @if (gen.generating()) {
+    @if (gen.checking()) {
       <!-- One round trip, so this names the work rather than claiming a step. -->
       <div class="card mt-3 flex items-start gap-3 p-4" aria-live="polite" aria-busy="true">
         <app-icon name="refresh" [size]="16" class="text-fg-muted mt-0.5 animate-spin" />
         <div class="text-[13px]">
-          <p class="font-medium">Working</p>
+          <p class="font-medium">Reading it so you do not have to</p>
           <ul class="text-fg-muted mt-1 space-y-0.5">
-            <li>Parsing the posting into structured requirements</li>
-            <li>Selecting bullet ids from your pool</li>
-            <li>Checking every claim against its boundary</li>
+            <li>Pulling out what the posting actually requires</li>
+            <li>Scoring it against your evidence, not your skills list</li>
+            <li>Naming the gaps rather than covering them</li>
           </ul>
         </div>
       </div>
@@ -113,10 +105,10 @@
       <!-- The thesis. It is the only interesting engineering here, so say it. -->
       <section class="mt-8 grid gap-4 sm:grid-cols-3">
         <div>
-          <p class="text-fg text-[13px] font-medium">Bullet ids, not prose</p>
+          <p class="text-fg text-[13px] font-medium">Fit first, CV second</p>
           <p class="text-fg-muted mt-0.5 text-[12px]">
-            The model returns bullet ids from a fixed pool. It cannot write a claim that is not
-            already in your profile.
+            Nothing is generated and nothing is saved until you have seen the score. Being told to
+            skip a posting is the most useful thing this does.
           </p>
         </div>
         <div>
@@ -139,21 +131,131 @@
 }
 
 <!-- ============================================================
-     Phase 2: the result owns the screen. The posting collapses
-     to a header, because you never read it again.
+     Phase 2: scored, nothing saved. Three ways out, and one of
+     them is closing the tab.
+     ============================================================ -->
+@if (deciding() && !showForm()) {
+  @if (gen.fit(); as scored) {
+    <div class="mx-auto max-w-3xl px-4 py-8">
+      <div class="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h1 class="text-lg font-semibold">{{ scored.parsed_jd.company }}</h1>
+        <span class="text-fg-muted text-[13px]">{{ scored.parsed_jd.role }}</span>
+        @if (scored.parsed_jd.seniority) {
+          <span class="chip">{{ scored.parsed_jd.seniority }}</span>
+        }
+        @if (scored.parsed_jd.location) {
+          <span class="chip">{{ scored.parsed_jd.location }}</span>
+        }
+        @if (scored.parsed_jd.work_mode) {
+          <span class="chip">{{ scored.parsed_jd.work_mode }}</span>
+        }
+        <button type="button" class="btn btn-ghost ml-auto !min-h-8" (click)="startEdit()">
+          <app-icon name="arrow-left" [size]="14" />
+          Edit posting
+        </button>
+      </div>
+
+      <section class="card overflow-hidden">
+        <div class="flex items-start gap-4 p-4">
+          <div class="shrink-0 text-center">
+            <p class="text-3xl font-semibold" [class]="scoreTone(scored.fit.score)">
+              {{ scored.fit.score }}<span class="text-fg-subtle text-sm font-normal">/10</span>
+            </p>
+            <p class="stat-label">Fit</p>
+          </div>
+          <p class="text-[13px] leading-relaxed">{{ scored.fit.reasoning }}</p>
+        </div>
+
+        @if (scored.fit.gaps.length) {
+          <div class="border-line border-t p-4">
+            <p class="text-fg-muted mb-1.5 text-[11px] font-medium tracking-wide uppercase">
+              Gaps · {{ scored.fit.gaps.length }}
+            </p>
+            <ul class="flex flex-col gap-1">
+              @for (gap of scored.fit.gaps; track gap) {
+                <li class="text-warn flex items-start gap-1.5 text-[13px]">
+                  <app-icon name="alert" [size]="13" class="mt-0.5 shrink-0" />
+                  {{ gap }}
+                </li>
+              }
+            </ul>
+          </div>
+        }
+
+        @if (scored.parsed_jd.required_skills.length) {
+          <div class="border-line border-t p-4">
+            <p class="text-fg-muted mb-1.5 text-[11px] font-medium tracking-wide uppercase">
+              What it asks for
+            </p>
+            <p class="flex flex-wrap gap-1">
+              @for (skill of scored.parsed_jd.required_skills; track skill.name) {
+                <span class="chip font-medium">{{ skill.name }}</span>
+              }
+              @for (skill of scored.parsed_jd.preferred_skills; track skill.name) {
+                <span class="chip text-fg-subtle">{{ skill.name }}</span>
+              }
+            </p>
+          </div>
+        }
+      </section>
+
+      <!-- Discard is not a button. It is closing the tab, and it costs nothing
+           because nothing has been written yet. -->
+      <div class="mt-4 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          class="btn btn-primary"
+          [disabled]="gen.generating() || gen.saving()"
+          (click)="generate()"
+        >
+          @if (gen.generating()) {
+            <app-icon name="refresh" [size]="15" class="animate-spin" />
+            Selecting bullets
+          } @else {
+            <app-icon name="sparkles" [size]="15" />
+            Generate a CV
+          }
+        </button>
+        <button
+          type="button"
+          class="btn btn-outline"
+          [disabled]="gen.saving() || gen.generating()"
+          (click)="keep()"
+          title="Save the posting and its gaps without making a CV for it."
+        >
+          <app-icon name="file-text" [size]="15" />
+          Keep, not applying
+        </button>
+        <button type="button" class="btn btn-ghost ml-auto" (click)="reset()">
+          <app-icon name="x" [size]="15" />
+          Discard
+        </button>
+      </div>
+      <p class="text-fg-subtle mt-2 text-[12px]">
+        Nothing has been saved yet. Discard writes nothing at all; keeping it records the posting
+        and these gaps, which is worth having even when you do not apply.
+      </p>
+    </div>
+  }
+}
+
+<!-- ============================================================
+     Phase 3: the CV owns the screen. The posting collapses to a
+     header, because you never read it again.
      ============================================================ -->
 @if (gen.result(); as result) {
+  @if (gen.fit(); as scored) {
   <div [class.hidden]="showForm()">
     <!-- what this application is -->
     <div class="border-line bg-raised border-b px-4 py-2.5">
       <div class="mx-auto flex max-w-[86rem] flex-wrap items-center gap-x-3 gap-y-1">
-        <h1 class="text-[15px] font-semibold">{{ result.parsed_jd.company }}</h1>
-        <span class="text-fg-muted text-[13px]">{{ result.parsed_jd.role }}</span>
-        @if (result.parsed_jd.location) {
-          <span class="chip">{{ result.parsed_jd.location }}</span>
+        <h1 class="text-[15px] font-semibold">{{ scored.parsed_jd.company }}</h1>
+        <span class="text-fg-muted text-[13px]">{{ scored.parsed_jd.role }}</span>
+        @if (scored.parsed_jd.location) {
+          <span class="chip">{{ scored.parsed_jd.location }}</span>
         }
-        @if (result.parsed_jd.work_mode) {
-          <span class="chip">{{ result.parsed_jd.work_mode }}</span>
+        @if (scored.parsed_jd.work_mode) {
+          <span class="chip">{{ scored.parsed_jd.work_mode }}</span>
         }
         <span class="chip min-w-0 max-w-full" [title]="result.cv.title">
           <span class="truncate">{{ result.cv.title }}</span>
@@ -177,8 +279,8 @@
       <div class="mx-auto flex max-w-[86rem] flex-wrap items-center gap-x-5 gap-y-2">
         <div class="flex flex-wrap gap-2">
           <div class="stat" title="How well the posting matches your profile, judged by the selector.">
-            <p class="stat-value" [class]="scoreTone(result.fit.score)">
-              {{ result.fit.score }}<span class="text-fg-subtle text-xs font-normal">/10</span>
+            <p class="stat-value" [class]="scoreTone(scored.fit.score)">
+              {{ scored.fit.score }}<span class="text-fg-subtle text-xs font-normal">/10</span>
             </p>
             <p class="stat-label">Fit score</p>
           </div>
@@ -222,12 +324,12 @@
           <button
             type="button"
             class="btn btn-outline !min-h-8"
-            [disabled]="gen.summarizing()"
-            (click)="regenerateSummary()"
-            title="Regenerate the summary without redoing bullet selection"
+            [disabled]="!hasVariants()"
+            (click)="nextVariant()"
+            title="Switch to another headline and summary you wrote. Nothing is generated."
           >
-            <app-icon name="refresh" [size]="14" [class.animate-spin]="gen.summarizing()" />
-            {{ gen.summarizing() ? 'Rewriting' : 'Summary' }}
+            <app-icon name="refresh" [size]="14" />
+            Next framing
           </button>
           <button
             type="button"
@@ -240,9 +342,17 @@
               Exporting
             } @else {
               <app-icon name="download" [size]="14" />
-              Export PDF
+              {{ exported() ? 'Export again' : 'Export PDF' }}
             }
           </button>
+          @if (exported()) {
+            <!-- The employer has it. Stamped once and never rewritten, so this
+                 records when they got it rather than when you last touched it. -->
+            <button type="button" class="btn btn-primary !min-h-8" (click)="markApplied()">
+              <app-icon name="check" [size]="14" />
+              Mark applied
+            </button>
+          }
         </div>
       </div>
     </div>
@@ -255,11 +365,11 @@
             <h2 class="section-title">Why this score</h2>
           </header>
           <div class="p-3.5">
-            <p class="text-[13px] leading-relaxed">{{ result.fit.reasoning }}</p>
-            @if (result.fit.gaps.length) {
+            <p class="text-[13px] leading-relaxed">{{ scored.fit.reasoning }}</p>
+            @if (scored.fit.gaps.length) {
               <p class="mt-2.5 flex flex-wrap items-center gap-1.5">
                 <span class="text-fg-muted text-[11px] font-medium">Gaps</span>
-                @for (gap of result.fit.gaps; track gap) {
+                @for (gap of scored.fit.gaps; track gap) {
                   <span class="chip border-warn/50 bg-warn-soft text-warn font-medium">{{ gap }}</span>
                 }
               </p>
@@ -456,4 +566,5 @@
       </aside>
     </div>
   </div>
+  }
 }

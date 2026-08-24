@@ -141,15 +141,16 @@
         <app-icon name="claude" [size]="16" class="text-claude shrink-0" />
         <p class="text-fg-muted min-w-0 flex-1 text-[12px]">
           <span class="text-fg font-medium">Rather not fill this in by hand?</span>
-          Claude can interview you and return the file, ready to paste over the template.
+          Claude can interview you and return the file. The prompt is too long for a link, so
+          it goes to your clipboard: paste it as your first message.
         </p>
         <button type="button" class="btn btn-outline !min-h-8 !py-1" (click)="copyPrompt()">
           <app-icon [name]="copied() ? 'check' : 'file-text'" [size]="14" />
-          {{ copied() ? 'Copied' : 'Copy prompt' }}
+          {{ copied() ? 'Copied' : 'Copy prompt only' }}
         </button>
         <button type="button" class="btn btn-claude !min-h-8 !py-1" (click)="openClaude()">
           <app-icon name="claude" [size]="14" />
-          Open in Claude
+          Copy and open Claude
         </button>
       </div>
     }

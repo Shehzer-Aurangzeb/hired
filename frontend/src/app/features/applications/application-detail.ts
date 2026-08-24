@@ -1,10 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, map, of, switchMap } from 'rxjs';
 
-import { USE_MOCKS } from '../../core/api';
 import { ApplicationsService } from '../../core/applications.service';
 import { Coverage, computeCoverage } from '../../core/coverage';
 import { ago, daysSince } from '../../core/dates';
@@ -33,6 +32,7 @@ export class ApplicationDetail {
   private readonly api = inject(ApplicationsService);
   private readonly toast = inject(ToastService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly sanitizer = inject(DomSanitizer);
 
   readonly statuses = APPLICATION_STATUSES;
@@ -45,8 +45,11 @@ export class ApplicationDetail {
   readonly saving = signal(false);
   readonly savedAt = signal<number | null>(null);
   readonly viewing = signal(false);
+  readonly deleting = signal(false);
+  /** TEMPORARY, with reexport(). Cache-buster so a rebuilt PDF actually shows. */
+  readonly rebuilding = signal(false);
+  readonly stamp = signal<number | null>(null);
   /** No export endpoint yet, so there is no file to frame. */
-  readonly mocked = USE_MOCKS;
   readonly local = signal<Application | null>(null);
 
   private readonly loaded = toSignal<Application | null | undefined>(
@@ -151,13 +154,52 @@ export class ApplicationDetail {
     });
   }
 
+  /**
+   * ponytail: native confirm(). It is one line, it cannot be clicked past by
+   * accident, and this is the only destructive action in the app. A styled
+   * dialog is worth building the day there is a second one.
+   */
+  remove(current: Application): void {
+    const what = current.has_pdf ? ', and the CV that was sent with it,' : '';
+    if (!confirm(`Delete ${current.company} - ${current.role}${what} permanently?`)) {
+      return;
+    }
+    this.deleting.set(true);
+    this.api.delete(current.id).subscribe({
+      next: () => {
+        this.toast.ok('Application deleted.');
+        this.router.navigate(['/applications']);
+      },
+      error: () => this.deleting.set(false),
+    });
+  }
+
+  /**
+   * TEMPORARY, paired with POST /api/reexport. For rows whose PDF was printed
+   * by an older version of the template. Delete with the route.
+   */
+  reexport(current: Application): void {
+    this.rebuilding.set(true);
+    this.api.reexport(current.id).subscribe({
+      next: (res) => {
+        this.rebuilding.set(false);
+        // Same URL, new bytes. Without this the browser serves the old file
+        // from cache and the button looks like it did nothing.
+        this.stamp.set(Date.now());
+        this.toast.ok(`Rebuilt ${res.filename}.`);
+      },
+      error: () => this.rebuilding.set(false),
+    });
+  }
+
   /** Angular blocks iframe src bindings. The URL is our own API plus a numeric id. */
   safePdfUrl(id: number): SafeResourceUrl {
-    return this.sanitizer.bypassSecurityTrustResourceUrl(this.api.pdfUrl(id));
+    return this.sanitizer.bypassSecurityTrustResourceUrl(this.pdfUrl(id));
   }
 
   pdfUrl(id: number): string {
-    return this.api.pdfUrl(id);
+    const stamp = this.stamp();
+    return stamp ? `${this.api.pdfUrl(id)}?v=${stamp}` : this.api.pdfUrl(id);
   }
 
   /**

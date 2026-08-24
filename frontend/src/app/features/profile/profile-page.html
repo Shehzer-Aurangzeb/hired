@@ -26,18 +26,25 @@
     <header class="mb-3 flex flex-wrap items-start gap-x-4 gap-y-2">
       <div class="min-w-0">
         <h1 class="truncate text-lg font-semibold tracking-tight">{{ profile.identity.name }}</h1>
-        <p class="text-fg-muted text-[13px]">
-          {{ profile.identity.location }} · {{ profile.identity.email }} ·
-          {{ profile.identity.phone }}
-        </p>
-        <p class="text-fg-subtle flex flex-wrap items-center gap-x-1.5 text-[12px]">
-          <span>{{ profile.identity.linkedin }}</span>
-          <span>· {{ profile.identity.github }}</span>
-          @if (profile.identity.portfolio) {
-            <span>· {{ profile.identity.portfolio }}</span>
+        <!-- Separators come before each item and the first is hidden, so an
+             absent phone or portfolio cannot leave a dangling dot. -->
+        <p class="text-fg-muted flex flex-wrap items-center text-[13px]">
+          @if (profile.identity.location) {
+            <span class="contact-item">{{ profile.identity.location }}</span>
           }
-          @for (link of profile.identity.links; track link.url) {
-            <span>· {{ link.label }}: {{ link.url }}</span>
+          @if (profile.identity.email) {
+            <!-- prettier-ignore -->
+            <a class="contact-item link" [href]="'mailto:' + profile.identity.email">{{ profile.identity.email }}</a>
+          }
+          @if (profile.identity.phone) {
+            <!-- prettier-ignore -->
+            <a class="contact-item link" [href]="'tel:' + profile.identity.phone">{{ profile.identity.phone }}</a>
+          }
+        </p>
+        <p class="text-fg-subtle flex flex-wrap items-center text-[12px]">
+          @for (link of identityLinks(); track link.url) {
+            <!-- prettier-ignore -->
+            <a class="contact-item link" [href]="href(link.url)" target="_blank" rel="noopener noreferrer">{{ link.text }}</a>
           }
         </p>
       </div>
@@ -82,11 +89,11 @@
         <p class="stat-value text-fg">{{ health().bullets }}</p>
         <p class="stat-label">Bullets</p>
       </div>
-      <div class="stat-lg" [class]="health().blocked ? 'border-danger/40 bg-danger-soft' : ''">
-        <p class="stat-value" [class]="health().blocked ? 'text-danger' : 'text-fg-subtle'">
-          {{ health().blocked }}
+      <div class="stat-lg" [class]="unresolved().length ? 'border-danger/40 bg-danger-soft' : ''">
+        <p class="stat-value" [class]="unresolved().length ? 'text-danger' : 'text-fg-subtle'">
+          {{ unresolved().length }}
         </p>
-        <p class="stat-label">Blocked</p>
+        <p class="stat-label">To verify</p>
       </div>
       <div class="stat-lg" [class]="health().missing ? 'border-warn/50 bg-warn-soft' : ''">
         <p class="stat-value" [class]="health().missing ? 'text-warn' : 'text-fg-subtle'">
@@ -169,11 +176,11 @@
         <div class="lg:grid lg:grid-cols-[190px_minmax(0,1fr)] lg:gap-5">
           <!-- index -->
           <nav class="hidden self-start lg:sticky lg:top-4 lg:block" aria-label="Projects">
-            @for (company of experience(); track company.name) {
+            @for (group of groups(); track group.name) {
               <p class="text-fg-subtle mt-3 mb-1 text-[10px] tracking-wide uppercase first:mt-0">
-                {{ company.name }}
+                {{ group.name }}
               </p>
-              @for (project of company.projects; track project.id) {
+              @for (project of group.projects; track project.id) {
                 <button
                   type="button"
                   class="text-fg-muted hover:bg-surface hover:text-fg block w-full truncate rounded px-2 py-1 text-left text-[12px] transition-colors duration-150"
@@ -186,15 +193,61 @@
           </nav>
 
           <div class="min-w-0">
+            <!-- The one list on this page that is a to-do rather than a record.
+                 Blocked bullets and unverified notes are the same job. -->
+            @if (unresolved().length) {
+              <section class="border-danger/40 bg-danger-soft rounded-card mb-3 border p-3.5">
+                <h3 class="text-danger mb-2 flex items-center gap-1.5 text-[12px] font-semibold tracking-wide uppercase">
+                  <app-icon name="alert" [size]="14" />
+                  To verify · {{ unresolved().length }}
+                </h3>
+                <ul class="flex flex-col gap-2">
+                  @for (item of unresolved(); track item.kind + item.project + item.text) {
+                    <li class="flex items-start gap-2 text-[12px]">
+                      <span
+                        class="badge shrink-0"
+                        [class]="
+                          item.kind === 'blocked'
+                            ? 'bg-danger-soft text-danger'
+                            : 'bg-warn-soft text-warn'
+                        "
+                      >
+                        {{ item.kind }}
+                      </span>
+                      <div class="min-w-0">
+                        <p class="text-fg leading-relaxed">{{ item.text }}</p>
+                        <p class="text-fg-muted mt-0.5 flex flex-wrap items-center gap-x-2">
+                          <span>{{ item.project }}</span>
+                          @if (item.id) {
+                            <span class="mono text-fg-subtle">{{ item.id }}</span>
+                          }
+                          @if (item.reason) {
+                            <span>· {{ item.reason }}</span>
+                          } @else if (item.kind === 'blocked') {
+                            <span class="text-warn">· no blocked_reason, so nothing says why</span>
+                          }
+                        </p>
+                      </div>
+                    </li>
+                  }
+                </ul>
+              </section>
+            }
+
             <!-- titles and summaries -->
             <div class="mb-3 grid gap-3 md:grid-cols-2 md:items-start">
               <section class="card p-3.5">
                 <h3 class="section-title mb-2">Title variants</h3>
                 @for (title of profile.titles; track title.id) {
-                  <p class="mb-1.5 text-[13px]">
-                    <span class="mono text-fg-subtle mr-1">{{ title.id }}</span>
-                    {{ title.text }}
-                  </p>
+                  <div class="mb-1.5">
+                    <p class="text-[13px]">
+                      <span class="mono text-fg-subtle mr-1">{{ title.id }}</span>
+                      {{ title.text }}
+                    </p>
+                    @if (title.use_when) {
+                      <p class="text-fg-subtle text-[11px]">Use when: {{ title.use_when }}</p>
+                    }
+                  </div>
                 }
               </section>
 
@@ -244,18 +297,41 @@
             </section>
 
             <!-- projects -->
-            @for (company of experience(); track company.name) {
+            @for (group of groups(); track group.name) {
               <section class="mb-4">
                 <h3 class="mb-2 flex flex-wrap items-baseline gap-2">
-                  <span class="text-[14px] font-semibold">{{ company.name }}</span>
-                  <span class="text-fg-muted text-[12px]">{{ company.role }}</span>
-                  <span class="tabular text-fg-subtle text-[11px]">
-                    {{ company.start }} to {{ company.end }}
-                  </span>
+                  <span class="text-[14px] font-semibold">{{ group.name }}</span>
+                  @if (group.role) {
+                    <span class="text-fg-muted text-[12px]">{{ group.role }}</span>
+                  }
+                  @if (group.start) {
+                    <span class="tabular text-fg-subtle text-[11px]">
+                      {{ group.start }} to {{ group.end }}
+                    </span>
+                  }
+                  @if (group.employment_type && group.employment_type !== 'full-time') {
+                    <span class="badge bg-surface text-fg-muted">{{ group.employment_type }}</span>
+                  }
+                  @if (group.standalone) {
+                    <span class="text-fg-subtle text-[11px]">No employer</span>
+                  }
                 </h3>
+                @if (group.context || group.previous_roles.length || group.disclosure) {
+                  <div class="text-fg-subtle mb-2 space-y-0.5 text-[11px]">
+                    @if (group.context) {
+                      <p>{{ group.context }}</p>
+                    }
+                    @for (role of group.previous_roles; track role.role + role.start) {
+                      <p>Previously {{ role.role }}, {{ role.start }} to {{ role.end }}</p>
+                    }
+                    @if (group.disclosure) {
+                      <p class="text-warn">Disclosure: {{ group.disclosure }}</p>
+                    }
+                  </div>
+                }
 
                 <div class="flex flex-col gap-2">
-                  @for (project of company.projects; track project.id) {
+                  @for (project of group.projects; track project.id) {
                     <article class="card overflow-hidden" [id]="'project-' + project.id">
                       <header class="border-line bg-surface border-b px-3 py-2">
                         <div class="flex items-start gap-2">
@@ -265,6 +341,24 @@
                               <span class="mono text-fg-subtle">{{ project.id }}</span>
                               <span class="text-fg-muted text-[12px]">{{ project.label }}</span>
                             </p>
+                            @if (
+                              project.my_role || project.status || project.domain || project.start
+                            ) {
+                              <p class="text-fg-subtle mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[11px]">
+                                @if (project.my_role) {
+                                  <span class="text-fg-muted">{{ project.my_role }}</span>
+                                }
+                                @if (project.status) {
+                                  <span>· {{ project.status }}</span>
+                                }
+                                @if (project.domain) {
+                                  <span>· {{ project.domain }}</span>
+                                }
+                                @if (project.start) {
+                                  <span class="tabular">· {{ project.start }} to {{ project.end }}</span>
+                                }
+                              </p>
+                            }
                             <p class="mt-1 flex flex-wrap gap-1">
                               @for (tech of project.stack; track tech) {
                                 <span class="chip">{{ tech }}</span>
@@ -296,6 +390,11 @@
                       </header>
 
                       <div class="p-3">
+                        @if (project.why_built) {
+                          <p class="text-fg-subtle mb-2 text-[12px]">
+                            Built because: {{ project.why_built }}
+                          </p>
+                        }
                         @if (project.disclosure) {
                           <p
                             class="border-warn/40 bg-warn-soft text-warn rounded-card mb-2 flex items-start gap-2 border px-2.5 py-1.5 text-[12px]"
@@ -316,6 +415,18 @@
                               </span>
                               <div class="min-w-0">
                                 <p class="text-[13px] leading-relaxed">{{ bullet.text }}</p>
+                                @if (bullet.short) {
+                                  <p class="text-fg-subtle text-[12px]">Short: {{ bullet.short }}</p>
+                                }
+                                @if (bullet.metric; as metric) {
+                                  <p class="text-fg-muted text-[11px]">
+                                    {{ metric.value }} · {{ metric.source }}@if (metric.method) {<!--
+                                    -->, {{ metric.method }}}
+                                  </p>
+                                }
+                                @if (bullet.blocked_reason) {
+                                  <p class="text-danger text-[11px]">{{ bullet.blocked_reason }}</p>
+                                }
                                 <p class="mt-0.5 flex flex-wrap items-center gap-1.5">
                                   <span class="mono text-fg-subtle">{{ bullet.id }}</span>
                                   @if (bullet.status === 'blocked') {
@@ -405,11 +516,36 @@
                           </span>
                         </p>
                         <p class="text-fg-muted text-[12px]">
-                          {{ item.degree }}@if (item.field) { , {{ item.field }} }
+                          {{ item.degree }}@if (item.field) {<!--
+                          -->, {{ item.field }}}
                           @if (item.location) { · {{ item.location }} }
                         </p>
+                        @if (item.gpa || item.coursework.length) {
+                          <p class="text-fg-subtle text-[11px]">
+                            @if (item.gpa) {
+                              GPA {{ item.gpa }}
+                            }
+                            @if (item.coursework.length) {
+                              · {{ item.coursework.join(', ') }}
+                            }
+                          </p>
+                        }
                         @if (item.notes) {
                           <p class="text-fg-subtle text-[12px]">{{ item.notes }}</p>
+                        }
+                        @if (item.links.length) {
+                          <p class="mt-0.5 flex flex-wrap gap-1">
+                            @for (link of item.links; track link.url) {
+                              <a
+                                class="chip border-ink/30 text-fg hover:bg-surface"
+                                [href]="href(link.url)"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                {{ link.label }}
+                              </a>
+                            }
+                          </p>
                         }
                       </div>
                     }
@@ -436,7 +572,13 @@
                           <span class="text-fg-muted text-[12px]">
                             @if (cert.issuer) { · {{ cert.issuer }} }
                             @if (cert.date) { · {{ cert.date }} }
+                            @if (cert.expires) { · expires {{ cert.expires }} }
                           </span>
+                          @if (cert.status && cert.status !== 'earned') {
+                            <span class="badge bg-warn-soft text-warn ml-1">
+                              {{ cert.status }}, never printed
+                            </span>
+                          }
                         </p>
                       }
                     }
@@ -445,10 +587,13 @@
                       <h3 class="section-title mt-3 mb-2 first:mt-0">Languages</h3>
                       <p class="flex flex-wrap gap-1">
                         @for (lang of profile.languages; track lang.name) {
-                          <span class="chip">
+                          <span class="chip" [title]="lang.note">
                             {{ lang.name }}
                             @if (lang.level) {
                               <span class="text-fg-subtle">· {{ lang.level }}</span>
+                            }
+                            @if (lang.note) {
+                              <span class="text-fg-subtle">*</span>
                             }
                           </span>
                         }
@@ -456,10 +601,205 @@
                     }
                   </section>
                 }
+
+                @if (profile.publications.length) {
+                  <section class="card p-3.5">
+                    <h3 class="section-title mb-2">Publications</h3>
+                    @for (item of profile.publications; track item.title) {
+                      <p class="mb-1.5 text-[13px]">
+                        @if (item.url) {
+                          <a
+                            class="decoration-line-strong underline underline-offset-2"
+                            [href]="href(item.url)"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            >{{ item.title }}</a
+                          >
+                        } @else {
+                          {{ item.title }}
+                        }
+                        <span class="text-fg-muted text-[12px]">
+                          @if (item.type) { · {{ item.type }} }
+                          @if (item.venue) { · {{ item.venue }} }
+                          @if (item.date) { · {{ item.date }} }
+                        </span>
+                      </p>
+                    }
+                  </section>
+                }
+
+                @if (profile.awards.length) {
+                  <section class="card p-3.5">
+                    <h3 class="section-title mb-2">Awards</h3>
+                    @for (item of profile.awards; track item.name) {
+                      <div class="mb-1.5">
+                        <p class="text-[13px]">
+                          {{ item.name }}
+                          <span class="text-fg-muted text-[12px]">
+                            @if (item.issuer) { · {{ item.issuer }} }
+                            @if (item.date) { · {{ item.date }} }
+                          </span>
+                        </p>
+                        @if (item.note) {
+                          <p class="text-fg-subtle text-[11px]">{{ item.note }}</p>
+                        }
+                      </div>
+                    }
+                  </section>
+                }
               </div>
+
+              <!-- Nothing below here ever reaches a CV. It is what lets the tool
+                   score a posting honestly and refuse to overclaim, so it is
+                   shown read-only: the file is the editor. -->
+              @if (
+                profile.skill_evidence.length || profile.gaps.length || hasAvailability() || hasRules()
+              ) {
+                <section class="mt-4">
+                  <h2 class="section-title mb-1">Never printed</h2>
+                  <p class="text-fg-subtle mb-2 text-[11px]">
+                    Read-only. Edit these in the source, like everything else.
+                  </p>
+                  <div class="grid gap-3 md:grid-cols-2 md:items-start">
+                    @if (profile.skill_evidence.length) {
+                      <section class="card p-3.5">
+                        <h3 class="section-title mb-2">Skill evidence</h3>
+                        @for (skill of profile.skill_evidence; track skill.name) {
+                          <div class="mb-2 last:mb-0">
+                            <p class="flex flex-wrap items-baseline gap-x-2 text-[13px]">
+                              <span class="font-medium">{{ skill.name }}</span>
+                              @if (skill.level) {
+                                <span class="text-fg-muted text-[12px]">{{ skill.level }}</span>
+                              }
+                              @if (skill.years !== null) {
+                                <span class="tabular text-fg-subtle text-[11px]">
+                                  {{ skill.years }}y
+                                </span>
+                              }
+                              @if (skill.gated) {
+                                <span class="badge bg-warn-soft text-warn">gated</span>
+                              }
+                            </p>
+                            <p class="text-fg-subtle text-[11px]">
+                              @if (skill.context) { {{ skill.context }} }
+                              @if (skill.last_used) { · last used {{ skill.last_used }} }
+                              @if (skill.evidence.length) { · {{ skill.evidence.join(', ') }} }
+                              @if (skill.gated && !skill.evidence.length) {
+                                <span class="text-warn">
+                                  · gated with no evidence, so it can never print
+                                </span>
+                              }
+                            </p>
+                          </div>
+                        }
+                      </section>
+                    }
+
+                    @if (profile.gaps.length) {
+                      <section class="card p-3.5">
+                        <h3 class="section-title mb-2">Gaps</h3>
+                        @for (gap of profile.gaps; track gap.skill) {
+                          <div class="mb-2 last:mb-0">
+                            <p class="flex flex-wrap items-baseline gap-x-2 text-[13px]">
+                              <span class="font-medium">{{ gap.skill }}</span>
+                              @if (gap.status) {
+                                <span class="badge bg-surface text-fg-muted">{{ gap.status }}</span>
+                              }
+                            </p>
+                            @if (gap.bridge) {
+                              <p class="text-fg-muted text-[12px]">{{ gap.bridge }}</p>
+                            }
+                            @if (gap.blocks) {
+                              <p class="text-fg-subtle text-[11px]">Blocks: {{ gap.blocks }}</p>
+                            }
+                          </div>
+                        }
+                      </section>
+                    }
+
+                    @if (hasAvailability()) {
+                      <section class="card p-3.5 text-[12px]">
+                        <h3 class="section-title mb-2">Availability</h3>
+                        <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+                          @if (profile.availability.work_modes.length) {
+                            <dt class="text-fg-subtle">Work modes</dt>
+                            <dd>{{ profile.availability.work_modes.join(', ') }}</dd>
+                          }
+                          @if (profile.availability.locations.length) {
+                            <dt class="text-fg-subtle">Locations</dt>
+                            <dd>{{ profile.availability.locations.join(', ') }}</dd>
+                          }
+                          @if (profile.availability.employment_types.length) {
+                            <dt class="text-fg-subtle">Types</dt>
+                            <dd>{{ profile.availability.employment_types.join(', ') }}</dd>
+                          }
+                          @if (profile.availability.earliest_start) {
+                            <dt class="text-fg-subtle">Earliest start</dt>
+                            <dd class="tabular">{{ profile.availability.earliest_start }}</dd>
+                          }
+                          @if (profile.availability.notice_period) {
+                            <dt class="text-fg-subtle">Notice</dt>
+                            <dd>{{ profile.availability.notice_period }}</dd>
+                          }
+                          @if (profile.availability.travel_ok) {
+                            <dt class="text-fg-subtle">Travel</dt>
+                            <dd>{{ profile.availability.travel_ok }}</dd>
+                          }
+                          @for (
+                            entry of profile.availability.compensation | keyvalue;
+                            track entry.key
+                          ) {
+                            <dt class="text-fg-subtle">{{ entry.key }}</dt>
+                            <dd>{{ entry.value }}</dd>
+                          }
+                          @if (profile.availability.deal_breakers.length) {
+                            <dt class="text-danger">Deal breakers</dt>
+                            <dd>{{ profile.availability.deal_breakers.join('; ') }}</dd>
+                          }
+                          @if (profile.availability.will_not_work_on.length) {
+                            <dt class="text-danger">Will not work on</dt>
+                            <dd>{{ profile.availability.will_not_work_on.join('; ') }}</dd>
+                          }
+                        </dl>
+                      </section>
+                    }
+
+                    @if (hasRules()) {
+                      <section class="card p-3.5 text-[12px]">
+                        <h3 class="section-title mb-2">Generation rules</h3>
+                        @if (profile.rules.banned_words.length) {
+                          <p class="mb-1.5 flex flex-wrap gap-1">
+                            <span class="text-fg-subtle mr-1">Banned</span>
+                            @for (word of profile.rules.banned_words; track word) {
+                              <span class="chip">{{ word }}</span>
+                            }
+                          </p>
+                        }
+                        @for (
+                          entry of profile.rules.preferred_phrasing | keyvalue;
+                          track entry.key
+                        ) {
+                          <p class="text-fg-muted">
+                            {{ entry.key }} <span class="text-fg-subtle">becomes</span>
+                            {{ entry.value }}
+                          </p>
+                        }
+                        <p class="text-fg-subtle mt-1.5">
+                          At most {{ profile.rules.max_bullets_per_project }} bullets a project,
+                          {{ profile.rules.max_projects }} projects,
+                          {{ profile.rules.page_limit }} page.
+                          @if (profile.rules.banned_chars.length) {
+                            Banned characters: {{ profile.rules.banned_chars.join(', ') }}.
+                          }
+                        </p>
+                      </section>
+                    }
+                  </div>
+                </section>
+              }
             }
 
-            @if (!experience().length) {
+            @if (!groups().length) {
               <div class="card text-fg-muted px-6 py-12 text-center text-[13px]">
                 Nothing matches “{{ query() }}”.
                 <button
@@ -479,14 +819,6 @@
       <!-- Edit source                                                       -->
       <!-- ================================================================ -->
       @case ('edit') {
-        @if (mocked) {
-          <p class="border-line bg-surface text-fg-muted rounded-card mb-3 flex items-start gap-2 px-3 py-2 text-[12px]">
-            <app-icon name="alert" [size]="14" class="mt-0.5 shrink-0" />
-            Demo build. Saving here writes to the mock, so the Browse tab keeps showing the file
-            the backend parses off disk. The two join up when the source routes land.
-          </p>
-        }
-
         @if (conflict()) {
           <div class="border-warn/50 bg-warn-soft rounded-card mb-3 border px-3 py-2.5" role="alert">
             <p class="text-warn flex items-center gap-2 text-[13px] font-medium">
@@ -621,12 +953,16 @@
 
           <button type="button" class="btn btn-ghost" (click)="draftWithClaude(false)">
             <app-icon [name]="copied() ? 'check' : 'claude'" [size]="15" />
-            {{ copied() ? 'Prompt copied' : 'Copy Claude prompt' }}
+            {{ copied() ? 'Prompt copied' : 'Copy prompt only' }}
           </button>
           <button type="button" class="btn btn-claude" (click)="draftWithClaude(true)">
             <app-icon name="claude" [size]="15" />
-            Open in Claude
+            Copy and open Claude
           </button>
+          <p class="text-fg-subtle basis-full text-[12px]">
+            The prompt is too long for a link, so it goes to your clipboard. Paste it as your
+            first message, then paste what Claude returns back over the source here.
+          </p>
 
           @if (dirty()) {
             <button type="button" class="btn btn-ghost" (click)="revert()">

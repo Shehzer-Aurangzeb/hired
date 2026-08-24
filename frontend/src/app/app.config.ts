@@ -9,7 +9,6 @@ import { provideRouter, withInMemoryScrolling } from '@angular/router';
 import { routes } from './app.routes';
 import { authInterceptor } from './core/auth.interceptor';
 import { errorInterceptor } from './core/error.interceptor';
-import { mockInterceptor } from './core/mock.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -20,9 +19,6 @@ export const appConfig: ApplicationConfig = {
       // Back navigation restores the previous scroll position.
       withInMemoryScrolling({ scrollPositionRestoration: 'enabled', anchorScrolling: 'enabled' }),
     ),
-    // error is outermost so it catches failures from both the mock and the real
-    // backend. The other way round, a mock error short-circuits before the
-    // error interceptor is ever reached and no toast is raised.
-    provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, mockInterceptor])),
+    provideHttpClient(withInterceptors([authInterceptor, errorInterceptor])),
   ],
 };

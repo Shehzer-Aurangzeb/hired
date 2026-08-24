@@ -2,29 +2,28 @@
 
 ## Where we are
 
-Session paused 2026-08-16. Done: Phase 1 (backend parser and `GET /api/profile`)
-and the complete v1 frontend. Everything below is the detail.
+Updated 2026-08-23. **Nothing is mocked any more.** Every route is live: auth,
+the profile and its parser, the fit check, the selector and its claim guard, the
+PDF export, applications. Everything below is the detail, oldest first.
 
 **Blocked on you, and only you**
 
-1. `backend/profile/master.md`. Phase 4 (claim guard) cannot be written against
-   a fixture, and Phase 2 has nothing real to render. Start from
-   `backend/tests/fixtures/master.md`, which is structurally complete.
-2. Your current CV, in the repo. Phase 2 exit criteria is "visually identical",
-   which is not checkable against a description.
-3. Three real saved job descriptions, for testing the Phase 5 parser.
+1. Your real profile, written against `docs/master_template.md`. Everything runs
+   against the starter template today, which has placeholder bullets, so the
+   selector is choosing between sentences that say nothing.
+   `docs/master_interview_prompt.md` is the interview that produces the real one.
+2. A deploy target. It decides SQLite plus a volume versus Postgres, and whether
+   the image ships its own Chromium.
 
-**Next unblocked work, in order.** None of these need the CV:
+**Next work, in order**
 
 | # | Thing | Why now |
 |---|---|---|
-| 1 | `core/filenames.py` + pytest | Free-standing, pure function, twenty minutes |
-| 2 | `db.py` + `models/application.py` + `/api/applications` routes | Free-standing. Unblocks the frontend applications screens off mocks |
-| 3 | `config.py` + `.env` + `services/claude_client.py` | One place that talks to Anthropic |
-| 4 | `services/jd_parser.py` + `POST /api/generate` | Needs the three saved JDs |
-| 5 | `services/selector.py` | Needs `master.md` and the claim guard |
-
-As each route lands, set `USE_MOCKS = false` in `frontend/src/app/core/api.ts`.
+| 1 | Run the interview, save a real `master.md` | Everything below is guesswork without it |
+| 2 | Tune the selector prompt against real bullets | The only way to know if it picks well |
+| 3 | Match `templates/cv.html` to the reference CV | Layout, once there is real content in it |
+| 4 | The one-page budget loop | Needs a page that actually overflows |
+| 5 | Frontend tests | There are none, and the flow is now worth pinning |
 
 **Restart the two servers**
 
@@ -1132,3 +1131,148 @@ stored or served.
 
 `python -m app.seed_demo` now seeds the starter profile too, since the guards
 send you to `/setup` without one.
+
+## 2026-08-23 — the master profile schema, eight sections wider
+
+The profile grew from eight sections to sixteen. `Meta`, `Skill Evidence`,
+`Projects`, `Publications`, `Awards`, `Availability`, `Gaps` and `Rules` are
+new, and five of those never print on a CV: they exist so a posting can be
+scored honestly before an evening goes into tailoring for it, and so the tool
+can say "you cannot do this" instead of stretching a bullet to cover it.
+
+**The rule the whole change was built under: a profile that saved yesterday has
+to save today.** Every new field is optional with a default, and every new check
+ships as a warning. The profile row is the only copy of the CV data, so refusing
+a save costs more than almost anything it could protect against. The warnings
+get promoted to errors the day there is a generator with something to protect.
+`Certification.status` defaults to `earned` for the same reason: a file written
+before that field existed has no status, and its certifications were real.
+
+**The supplied template did not parse, at all.** It separates its sections with
+column-zero `---`, which is a horizontal rule to a reader and a document
+separator to YAML, and `safe_load` refuses a stream holding two documents. Every
+one of the sixteen failed with `expected a single document in the stream`, which
+says nothing about the rule that caused it. `_normalize` blanks them now, rather
+than deleting them, so the line numbers in error messages still point at the
+line the person typed. There is a test for that specifically.
+
+**Projects have one namespace across two lists.** `# Projects` holds `###`
+headings with no `##` parent, and they land in `Profile.projects` rather than
+under a synthesized employer, because a company that does not exist has no
+business appearing on a CV. But a bullet id resolves to exactly one project, so
+`unique_ids` walks both lists together and the same project id in both is an
+error. The Profile page groups the standalone ones under a header that prints no
+role and no dates, which is a display grouping and says so.
+
+**Thirteen new warnings**, capped at twenty with the tail collapsed into
+`and N more`. A hundred warnings and none are the same thing to the person
+looking at them. The ones worth naming: a bullet quoting a number with no
+`metric` block, an `estimated` metric whose text does not say "estimated", a
+project with bullets and an empty `cannot_claim`, and a `gated` skill with no
+evidence, which is a gate that can never open.
+
+**The existing fixture still saves, and warns seven times.** It was not changed.
+A real profile written before any of these checks existed is exactly the case
+worth keeping, so it is pinned as a characterization test instead.
+
+**The Claude button was broken by the new template and had to be rebuilt.** The
+combined prompt is 33KB, 48.6KB once URL-encoded, and `claude.ai/new?q=` cannot
+carry that: something in the path refuses or silently truncates it. Truncation
+is the dangerous half, because an interview running against half a template
+looks like it is working. So the clipboard carries the prompt and the URL
+carries a 197-character bootstrap that tells Claude to ask for the paste.
+`openClaude` returns whether the copy landed, because the tab opens either way.
+Two tests guard it: one on the URL length, and one asserting the frontend never
+interpolates `prompt` into the URL at all, which is the check that actually
+protects.
+
+**The template and the briefing are copies.** `docs/master_template.md` and
+`docs/master_interview_prompt.md` are where they are edited; the module holds a
+copy, because reading them at runtime would mean shipping `docs/` inside the
+container. A test compares the two, since a copy nothing checks is a copy that
+drifts.
+
+**A verification queue on the Profile page.** Blocked bullets and `unverified`
+notes are one list, not two: same job, and splitting them means the shorter half
+never gets looked at. It replaced the "Blocked" health stat, which had stopped
+being the whole answer.
+
+**Docs.** `docs/parser_contract.md` is the grammar and the complete error and
+warning lists, corrected against the code wherever the two disagreed, with the
+unbuilt parts kept under a heading that says so. The README's four stale claims
+are fixed: there is no `HIRED_MASTER`, applications are real, and Claude neither
+parses nor selects.
+
+**Known and deliberately not fixed.** A fenced ` ```yaml ` body is a hard parse
+error with a cryptic message, and the briefing tells Claude to return the file
+in a markdown code block, so a person who copies the fence with the contents
+hits it. A bare `cannot_claim:` with nothing under it is also a hard error
+rather than a warning, which is the one save-blocking case that the governing
+rule above would otherwise argue against. Both predate this change; neither is
+in scope for it.
+
+## 2026-08-23 — the flow, end to end
+
+Paste a posting, get a score, decide, and only then spend a model call on a CV.
+The whole thing runs against real services now. `USE_MOCKS`, `mock.interceptor.ts`,
+`mock-data.ts` and `seed_demo.py` are all deleted.
+
+**Gemini, not Claude, and not by preference.** The API key on hand is a Google
+one. Nothing about the design cared: the fit check and the selector want a model
+that returns JSON matching a schema, and `app/model.py` is one `httpx.post`
+behind `HIRED_GEMINI_MODEL`. No SDK.
+
+`gemini-2.5-flash` was the obvious pick and it **404s**: retired for new keys,
+with a body naming `gemini-3.6-flash` as the replacement. That error is passed
+through verbatim rather than shown as "502", because it contains the fix. One
+fit check measures at ~2,500 tokens including thinking, so at five postings a
+day the free tier's constraint is requests, not tokens, and eight a day is not
+close to it.
+
+**Two clamps, both from the model actually misbehaving.** It returned `55` on a
+1-to-10 score and `5` on the 1-to-3 skill importance scale. The score is clamped
+in the route; importance is clamped on `RequiredSkill` itself, so the selector
+and any future seed get it too. Fixed once, where every producer routes through.
+
+**The suite was making real API calls.** `conftest.py` cleared the password hash
+so tests never depend on local secrets, but nothing cleared the Gemini key, so
+the first run of `test_fit.py` sailed past the 503 branch and hit Google. The
+tell was the runtime: 12.5s against 4s. Both spellings are cleared now.
+
+**The selector returns ids and the guard is plain code.** Blocked bullets never
+enter the pool. After the answer comes back, the guard refuses an id that does
+not exist, refuses a blocked one that arrived anyway, enforces the `Rules` caps
+the model was merely asked to respect, checks that each selected project's
+`required_qualifiers` survived onto the page, and gates skills: a `gated` item
+prints only when a project evidencing it was selected. All of it is a lookup, so
+none of it is asked of a model.
+
+**Export prints with Chromium via Playwright.** Jinja renders `templates/cv.html`,
+Chromium prints it, so the preview and the PDF come from one layout engine rather
+than two. The page count is measured height over page height rather than parsed
+out of the file: it only has to answer "did it fit", which is the question the
+budget loop will ask. The row's `title_variant`, `summary_text` and
+`selected_bullets` are stamped at export from what was on screen, not from what
+the selector said, because deselecting a bullet has to reach the archive.
+
+**The Generate page is three screens now.** Paste, then a score with the gaps and
+what the posting asks for, then the CV. Discard is not a button that deletes
+anything: nothing is written until you press Keep or Generate, so closing the tab
+costs nothing. Keeping without applying writes the posting and its gaps, which is
+the record worth the most when you do not apply. Generate creates the row first,
+so an abandoned generation still leaves the posting on file.
+
+**Summary re-rolling is gone.** It was a model call that wrote prose onto a CV,
+which is the one thing this app exists not to do. The button cycles the
+title-and-summary pairs already written in `master.md`, swapping both together.
+
+**Four parser bugs, all found by asking what a real paste looks like.** A code
+fence around the file is now stripped, because the briefing asks Claude for a
+markdown code block and the fence comes along with it. A written-but-empty list
+(`cannot_claim:` with nothing under it) reads as empty rather than refusing the
+save. Enum tokens case-fold, so a capitalised `Earned` certification no longer
+silently never prints. And the education line lost a stray space before its comma.
+
+**Verified end to end against real services**: paste to fit (9/10, gaps named),
+generate, export, mark applied, landing on the detail page with a 47KB one-page
+PDF served from the row. Zero console errors. 168 backend tests.
