@@ -250,9 +250,19 @@
             <h2 class="section-title">What they asked for</h2>
             <span
               class="badge ml-auto"
-              [class]="backed().hit === backed().total ? 'bg-accent-soft text-accent' : 'bg-warn-soft text-warn'"
+              [class]="
+                unrecorded()
+                  ? 'bg-surface text-fg-subtle'
+                  : backed().hit === backed().total
+                    ? 'bg-accent-soft text-accent'
+                    : 'bg-warn-soft text-warn'
+              "
             >
-              {{ backed().hit }} of {{ backed().total }} backed
+              @if (unrecorded()) {
+                not recorded
+              } @else {
+                {{ backed().hit }} of {{ backed().total }} backed
+              }
             </span>
           </header>
           <div class="p-3.5">
@@ -261,18 +271,26 @@
                 <li
                   class="chip font-medium"
                   [class]="
-                    item.evidenced
-                      ? 'border-accent/50 bg-accent-soft text-accent'
-                      : item.required
-                        ? 'border-danger/50 bg-danger-soft text-danger'
-                        : 'bg-surface text-fg-subtle'
+                    unrecorded()
+                      ? 'bg-surface text-fg-muted'
+                      : item.evidenced
+                        ? 'border-accent/50 bg-accent-soft text-accent'
+                        : item.required
+                          ? 'border-danger/50 bg-danger-soft text-danger'
+                          : 'bg-surface text-fg-subtle'
                   "
                   [title]="
                     (item.required ? 'Required' : 'Preferred') +
-                    (item.evidenced ? '. A bullet on the page named it.' : '. No bullet named it.')
+                    (unrecorded()
+                      ? '. This record predates coverage, so nothing is known either way.'
+                      : item.evidenced
+                        ? '. A bullet on the page backs it.'
+                        : '. No bullet on the page backs it.')
                   "
                 >
-                  <app-icon [name]="item.evidenced ? 'check' : 'x'" [size]="12" />
+                  @if (!unrecorded()) {
+                    <app-icon [name]="item.evidenced ? 'check' : 'x'" [size]="12" />
+                  }
                   {{ item.name }}
                   @if (!item.required) {
                     <span class="text-fg-subtle text-[10px]">pref</span>
@@ -281,8 +299,13 @@
               }
             </ul>
             <p class="text-fg-subtle mt-2.5 text-[11px]">
-              Matched against the bullet text stored on this record. The skills line is not saved,
-              so this says whether a bullet backed the skill, not whether the word appeared anywhere.
+              @if (unrecorded()) {
+                This CV was exported before coverage was recorded, so these are the requirements
+                without an answer either way. Generate again to find out.
+              } @else {
+                Judged by the selector when this CV was generated, against the bullets it put on
+                the page. It says whether a bullet backs the skill, not whether the word appeared.
+              }
             </p>
           </div>
         </section>

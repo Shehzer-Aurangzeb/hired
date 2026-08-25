@@ -514,49 +514,38 @@
           ></div>
         </div>
 
-        @if (finalCv(); as cv) {
-          <!-- ponytail: an HTML approximation at Letter width, not the printed
-               artefact. Swapped for an iframe of the Jinja render in Phase 2.
-               zoom, not transform: the parent box shrinks with it, so no height
-               compensation is needed. -->
+        @if (finalCv()) {
+          <!-- ponytail: the PDF's own HTML in an iframe, not a second layout to
+               keep in step. srcdoc rather than a blob URL so it stays same-origin
+               and needs no object URL to revoke. -->
           <div class="rounded-card border-line max-h-[calc(100dvh-11rem)] overflow-auto border">
-            <article
-              class="min-h-[1056px] w-[816px] bg-white p-12 text-[13px] leading-snug text-slate-900"
+            <div
+              class="relative min-h-[1056px] w-[816px] bg-white"
               [style.zoom]="sheetScale()"
+              [style.padding]="sheetPad"
             >
-              <h3 class="text-[19px] font-bold">
-                {{ profile.value()?.identity?.name ?? 'Your name' }}
-              </h3>
-              <p class="text-slate-700">{{ cv.title }}</p>
-              <p class="mt-0.5 text-slate-500">
-                {{ profile.value()?.identity?.location }} ·
-                {{ profile.value()?.identity?.email }} ·
-                {{ profile.value()?.identity?.phone }}
-              </p>
-
-              <p class="mt-4 border-t border-slate-200 pt-3">{{ cv.summary }}</p>
-
-              <div class="mt-4">
-                @for (line of cv.skills_lines; track line.line) {
-                  <p><strong class="font-semibold">{{ line.line }}:</strong> {{ line.items.join(', ') }}</p>
+              @if (sheet(); as html) {
+                <iframe
+                  class="block w-full border-0"
+                  title="CV preview"
+                  sandbox="allow-same-origin"
+                  [srcdoc]="html"
+                  [style.height.px]="sheetHeight()"
+                  (load)="fitSheet($event)"
+                ></iframe>
+                @if (overflows()) {
+                  <!-- Where page one ends. Everything under it is page two. -->
+                  <div
+                    class="pointer-events-none absolute right-0 left-0 border-t border-dashed border-red-400"
+                    [style.top.px]="PAGE + 38"
+                  >
+                    <span class="absolute right-1 -top-4 text-[10px] text-red-500">page 1 ends</span>
+                  </div>
                 }
-              </div>
-
-              @for (section of cv.sections; track section.project_id) {
-                <div class="mt-4">
-                  <p class="font-semibold">
-                    {{ section.project_name }}
-                    <span class="font-normal text-slate-600">· {{ section.stack.join(' · ') }}</span>
-                  </p>
-                  <p class="text-slate-500 italic">{{ section.label }}</p>
-                  <ul class="mt-1 list-disc pl-5">
-                    @for (bullet of section.bullets; track bullet.id) {
-                      <li class="mb-1">{{ bullet.text }}</li>
-                    }
-                  </ul>
-                </div>
+              } @else {
+                <p class="text-[13px] text-slate-400">Rendering…</p>
               }
-            </article>
+            </div>
           </div>
         } @else {
           <div class="card text-fg-subtle px-4 py-12 text-center text-[12px]">

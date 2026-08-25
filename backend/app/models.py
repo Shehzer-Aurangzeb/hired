@@ -174,6 +174,10 @@ class Project(Loose):
     priority: int = 3
     tags: list[str] = []
     disclosure: str = ""
+    # Whether the project gets its own bold lead-in on the page. False prints its
+    # bullets straight under the employer, which is how small pieces of client
+    # work read: naming each one is more words than the work is worth.
+    named: bool = True
     # True things you cannot evidence today. Each should have a blocked bullet.
     unverified: list[str] = []
     # Repo, live demo, case study, app store listing.
@@ -422,7 +426,25 @@ class CvSection(BaseModel):
     project_name: str
     label: str = ""
     stack: list[str] = []
+    # Carried from the profile so the page can print this project's bullets with
+    # no bold lead-in above them. See Project.named.
+    named: bool = True
     bullets: list[SelectedBullet] = []
+
+
+class SkillCoverage(BaseModel):
+    """
+    One thing the posting asked for, and the bullets on the page a person could
+    point at when an interviewer asks about it.
+
+    Judged by the selector, which has read both the posting and every bullet, and
+    then filtered down to ids that actually printed. An empty list is the useful
+    answer, not a failure: it says the posting wants something this page does not
+    show, which is exactly what you want to know before sending it.
+    """
+
+    skill: str
+    bullet_ids: list[str] = []
 
 
 class GeneratedCv(BaseModel):
@@ -430,6 +452,7 @@ class GeneratedCv(BaseModel):
     summary: str = ""
     skills_lines: list[SkillsLine] = []
     sections: list[CvSection] = []
+    coverage: list[SkillCoverage] = []
 
 
 class Flag(BaseModel):

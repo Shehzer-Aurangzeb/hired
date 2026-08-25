@@ -62,12 +62,26 @@ export class ProfileService {
         text,
         expected_updated_at: expectedUpdatedAt,
       })
-      .pipe(
-        tap(() => {
-          this.exists.set(true);
-          this.probe = undefined;
-          this.profile.reload();
-        }),
-      );
+      .pipe(tap(() => this.landed()));
+  }
+
+  /** One bullet's wording, edited in place. The rest of the file is untouched. */
+  saveBullet(
+    id: string,
+    text: string,
+    expectedUpdatedAt: string | null,
+  ): Observable<ProfileSource> {
+    return this.http
+      .patch<ProfileSource>(`${API}/api/profile/bullets/${encodeURIComponent(id)}`, {
+        text,
+        expected_updated_at: expectedUpdatedAt,
+      })
+      .pipe(tap(() => this.landed()));
+  }
+
+  private landed(): void {
+    this.exists.set(true);
+    this.probe = undefined;
+    this.profile.reload();
   }
 }

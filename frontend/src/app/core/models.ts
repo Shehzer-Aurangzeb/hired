@@ -325,11 +325,18 @@ export interface CvSection {
   bullets: SelectedBullet[];
 }
 
+/** One posting requirement and the bullets on the page that back it. */
+export interface SkillCoverage {
+  skill: string;
+  bullet_ids: string[];
+}
+
 export interface GeneratedCv {
   title: string;
   summary: string;
   skills_lines: { line: string; items: string[] }[];
   sections: CvSection[];
+  coverage: SkillCoverage[];
 }
 
 /** block stops export. warn is a claim-boundary gap that needs a human decision. */
@@ -411,6 +418,7 @@ export interface Application {
   summary_text: string | null;
   selected_bullet_ids: string[];
   selected_bullets: SentBullet[];
+  coverage: SkillCoverage[];
   /** The bytes come from /api/applications/{id}/pdf, never from this payload. */
   has_pdf: boolean;
   filename: string | null;

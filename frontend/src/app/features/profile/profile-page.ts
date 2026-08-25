@@ -78,6 +78,49 @@ export class ProfilePage {
 
   readonly query = signal('');
 
+  // ---------- editing one bullet in place ----------
+
+  readonly editingBullet = signal<string | null>(null);
+  readonly bulletDraft = signal('');
+  readonly bulletSaving = signal(false);
+
+  startBullet(id: string, text: string): void {
+    // The source editor holds the whole file. Letting a bullet edit land while
+    // that buffer is dirty means the next Save there silently reverts it.
+    if (this.dirty()) {
+      this.toast.error('Save or revert your source edits first.');
+      return;
+    }
+    this.editingBullet.set(id);
+    this.bulletDraft.set(text);
+  }
+
+  cancelBullet(): void {
+    this.editingBullet.set(null);
+    this.bulletDraft.set('');
+  }
+
+  saveBullet(): void {
+    const id = this.editingBullet();
+    const text = this.bulletDraft().trim();
+    if (!id || !text || this.bulletSaving()) {
+      return;
+    }
+    this.bulletSaving.set(true);
+    this.service.saveBullet(id, text, this.updatedAt()).subscribe({
+      next: (source) => {
+        // The editor buffer is the same document, so it moves with it.
+        this.text.set(source.text);
+        this.saved.set(source.text);
+        this.updatedAt.set(source.updated_at);
+        this.bulletSaving.set(false);
+        this.cancelBullet();
+        this.toast.ok('Bullet saved.');
+      },
+      error: () => this.bulletSaving.set(false),
+    });
+  }
+
   /** Employment is not what makes something a project, so both lists count. */
   private readonly projects = computed<Project[]>(() => {
     const profile = this.resource.value();

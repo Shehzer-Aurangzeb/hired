@@ -10,7 +10,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from . import applications, auth, fit, generate
 from .db import SessionDep, init_db
 from .models import Profile, ValidationResult
-from .profile_parser import parse_text, validate_text
+from .profile_parser import ProfileError, parse_text, replace_bullet_text, validate_text
 from .profile_template import claude_prompt, template
 from .settings import get_settings
 from .tables import ProfileSource, now, stamp
@@ -82,6 +82,13 @@ class TextBody(BaseModel):
     text: str
 
 
+class BulletBody(BaseModel):
+    text: str
+    # Same optimistic lock as the source editor: the markdown is one row, and a
+    # bullet edit is a write to all of it.
+    expected_updated_at: str | None = None
+
+
 def _row(session: SessionDep) -> ProfileSource | None:
     return session.exec(select(ProfileSource)).first()
 
@@ -103,6 +110,31 @@ def get_source(session: SessionDep) -> dict:
 @api.post("/profile/validate")
 def post_validate(body: TextBody) -> ValidationResult:
     return validate_text(body.text)
+
+
+@api.patch("/profile/bullets/{bullet_id}")
+def patch_bullet(bullet_id: str, body: BulletBody, session: SessionDep):
+    """
+    Edit one bullet from the Browse screen without opening the markdown.
+
+    It rewrites the one line in the source and then goes through the same save
+    path as the editor, so a bullet edit cannot land a profile that does not
+    parse and cannot skip the conflict check.
+    """
+    row = _row(session)
+    if row is None:
+        raise HTTPException(404, "No profile saved yet.")
+    if not body.text.strip():
+        raise HTTPException(422, "A bullet cannot be empty. Delete it in the source instead.")
+
+    try:
+        text = replace_bullet_text(row.text, bullet_id, body.text)
+    except ProfileError as error:
+        raise HTTPException(404, error.message) from error
+
+    return put_source(
+        SourceBody(text=text, expected_updated_at=body.expected_updated_at), session
+    )
 
 
 @api.put("/profile/source")

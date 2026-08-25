@@ -59,12 +59,25 @@ _LIST_SECTIONS = (
 
 
 class ProfileError(Exception):
-    """A parse failure, with the file line that caused it when there is one."""
+    """
+    A parse failure, with the file line that caused it when there is one.
 
-    def __init__(self, message: str, line: int | None = None):
+    `more` carries the rest when one parse produced several independent faults.
+    YAML itself is fail-fast, but the schema check is not: it sees every bad
+    field at once, and making someone fix six of them one save at a time is the
+    whole complaint this exists to answer.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        line: int | None = None,
+        more: "list[tuple[str, int | None]] | None" = None,
+    ):
         super().__init__(message)
         self.message = message
         self.line = line
+        self.more = more or []
 
 
 def parse(path: Path) -> Profile:
@@ -117,7 +130,8 @@ def parse_text(text: str) -> Profile:
     try:
         return Profile.model_validate(data)
     except ValidationError as error:
-        raise ProfileError(_readable(error)) from error
+        first, *rest = _readable(error, lines)
+        raise ProfileError(first[0], first[1], rest) from error
 
 
 def _company(name: str, body: str, start: int) -> dict:
@@ -217,10 +231,69 @@ def _yaml(text: str, start: int, what: str):
         ) from error
 
 
-def _readable(error: ValidationError) -> str:
-    first = error.errors()[0]
-    where = " -> ".join(str(p) for p in first["loc"])
-    return f"{where}: {first['msg']}" if where else first["msg"]
+def _readable(error: ValidationError, lines: list[str]) -> list[tuple[str, int | None]]:
+    """
+    Pydantic reports a path and a type. A person editing markdown needs the line
+    and the fix, so each error is matched back to the text that produced it.
+    """
+    issues: list[tuple[str, int | None]] = []
+    seen: set[tuple[str, int | None]] = set()
+    for fault in error.errors():
+        issue = _explain(fault, lines)
+        if issue not in seen:
+            seen.add(issue)
+            issues.append(issue)
+    if len(issues) > MAX_ERRORS:
+        hidden = len(issues) - MAX_ERRORS
+        issues = issues[:MAX_ERRORS]
+        issues.append((f"and {hidden} more. Fix these first and check again.", None))
+    return issues
+
+
+def _explain(fault: dict, lines: list[str]) -> tuple[str, int | None]:
+    where = _where(fault["loc"])
+    value = fault.get("input")
+
+    # The colon trap, which is the one people actually hit. "- Built the flow:
+    # with OTP" is a mapping to YAML, so the item arrives as a dict and the
+    # schema rejects it with a type error that names nothing useful.
+    if isinstance(value, dict) and len(value) == 1 and "str" in fault.get("type", ""):
+        key = next(iter(value))
+        line = _line_of(f"{key}:", lines)
+        if line:
+            return (
+                "This list item has a colon in it, so YAML read it as a name and "
+                "a value instead of a sentence. Wrap the whole thing in single "
+                f"quotes: {_quoted(lines[line - 1])}",
+                line,
+            )
+
+    return f"{where}: {fault['msg']}.", _line_of(str(value), lines)
+
+
+def _where(loc: tuple) -> str:
+    """experience -> item 1 -> projects -> item 1 -> claim_boundary -> can_claim -> item 2"""
+    return " -> ".join(f"item {p + 1}" if isinstance(p, int) else str(p) for p in loc)
+
+
+def _line_of(needle: str, lines: list[str]) -> int | None:
+    """
+    ponytail: first line containing the text, not a real source map. Building
+    one means a YAML loader that records marks per node, which is a lot of
+    machinery for a number that is right whenever the text appears once.
+    """
+    if not needle or len(needle) < 3:
+        return None
+    for index, line in enumerate(lines):
+        if needle in line:
+            return index + 1
+    return None
+
+
+def _quoted(line: str) -> str:
+    """The same list item, quoted, ready to paste over the broken one."""
+    body = line.strip().removeprefix("- ").strip().strip("'\"")
+    return "- '" + body.replace("'", "''") + "'"
 
 
 def _slug(text: str) -> str:
@@ -244,15 +317,76 @@ GAP_STATUS = ("none", "learning", "personal-only", "rusty")
 # A hundred warnings and none are the same thing to the person looking at them.
 MAX_WARNINGS = 20
 
+# Errors are rarer and each one blocks the save, so the list is shorter.
+MAX_ERRORS = 8
+
 DASHES = {"\u2014": "em dash", "\u2013": "en dash"}
+
+# A digit that follows a letter is part of a name, not a measurement: Auth0,
+# HTML5, ES6, S3. Asking for a metric block on "Auth0" trains the reader to
+# ignore the warning, which is worse than not having it.
+_NUMBER = re.compile(r"(?<![A-Za-z])\d")
+
+
+def replace_bullet_text(source: str, bullet_id: str, text: str) -> str:
+    """
+    Rewrite one bullet's text in the markdown, leaving the rest of the file byte
+    for byte alone.
+
+    Surgery rather than a round trip on purpose. Parsing to a Profile and dumping
+    it back would reformat the whole document and drop every comment in it, and
+    those comments are half of why the file is readable. The cost is that this
+    has to understand the file's shape, which is why it lives beside the parser.
+
+    Raises ProfileError when the id is not there, so a stale screen cannot write
+    a bullet into a file that no longer has one.
+    """
+    lines = source.split("\n")
+    item = re.compile(r"^(\s*)-\s+id:\s*(\S+)\s*$")
+
+    start = indent = None
+    for number, line in enumerate(lines):
+        found = item.match(line)
+        if found and found.group(2) == bullet_id:
+            if start is not None:
+                raise ProfileError(f'Bullet "{bullet_id}" appears twice. Ids have to be unique.')
+            start, indent = number, len(found.group(1))
+    if start is None:
+        raise ProfileError(f'No bullet with id "{bullet_id}" in this profile.')
+
+    # The keys of this bullet sit two columns in from its dash.
+    keys = " " * (indent + 2)
+    end = len(lines)
+    for number in range(start + 1, len(lines)):
+        line = lines[number]
+        if not line.strip():
+            continue
+        if len(line) - len(line.lstrip()) <= indent:
+            end = number
+            break
+
+    for number in range(start + 1, end):
+        if not lines[number].startswith(f"{keys}text:"):
+            continue
+        # The scalar runs on until the next key at this depth.
+        last = number
+        for follow in range(number + 1, end):
+            if lines[follow].strip() and len(lines[follow]) - len(lines[follow].lstrip()) <= len(keys):
+                break
+            last = follow
+        quoted = text.strip().replace("'", "''")
+        return "\n".join(lines[: number] + [f"{keys}text: '{quoted}'"] + lines[last + 1 :])
+
+    raise ProfileError(f'Bullet "{bullet_id}" has no text to replace.')
 
 
 def validate_text(text: str) -> ValidationResult:
     """
     What the editor shows before you are allowed to save.
 
-    ponytail: one error at a time. The parser is fail-fast because YAML is, and
-    collecting more would mean re-parsing after each guessed fix.
+    ponytail: one error at a time from YAML itself, because a broken document
+    cannot be read past the break. The schema check is different: it sees the
+    whole parsed file, so every fault it finds is reported together.
 
     Everything below is a warning. A profile that saved yesterday has to save
     today, because this row is the only copy of the CV data, and refusing it
@@ -263,7 +397,11 @@ def validate_text(text: str) -> ValidationResult:
         profile = parse_text(text)
     except ProfileError as error:
         return ValidationResult(
-            ok=False, errors=[ProfileIssue(line=error.line, message=error.message)]
+            ok=False,
+            errors=[
+                ProfileIssue(line=error.line, message=error.message),
+                *(ProfileIssue(line=line, message=message) for message, line in error.more),
+            ],
         )
 
     warnings: list[ProfileIssue] = []
@@ -301,7 +439,7 @@ def validate_text(text: str) -> ValidationResult:
     # ---------- numbers ----------
 
     for bullet in bullets:
-        if any(character.isdigit() for character in bullet.text) and bullet.metric is None:
+        if _NUMBER.search(bullet.text) and bullet.metric is None:
             warn(
                 f'Bullet "{bullet.id}" quotes a number with no metric block. A number '
                 "needs a source you can name out loud, or it becomes one you invented."

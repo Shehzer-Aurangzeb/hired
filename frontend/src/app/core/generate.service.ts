@@ -70,6 +70,11 @@ export class GenerateService {
     }
   }
 
+  /** The page as the PDF renderer draws it. One template, so no second layout. */
+  preview(cv: GeneratedCv): Observable<string> {
+    return this.http.post(`${API}/api/preview`, { cv }, { responseType: 'text' });
+  }
+
   export(applicationId: number, cv: GeneratedCv): Observable<ExportResponse> {
     this.exporting.set(true);
     return this.http

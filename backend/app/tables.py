@@ -79,6 +79,10 @@ class Application(SQLModel, table=True):
     # The bullet text as it was printed, not a join against today's profile. The
     # profile keeps changing and this has to show what the employer actually read.
     selected_bullets: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
+    # What the page backed, judged when it was generated. Stored for the same
+    # reason the bullet text is: the profile keeps changing and this has to say
+    # what was true of the CV the employer received.
+    coverage: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
 
     # The PDF itself, not a path. ~80 KB each, so a hundred applications is 8 MB,
     # and keeping it here means the whole app is one file to back up and no

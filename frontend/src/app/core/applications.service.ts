@@ -35,10 +35,11 @@ export class ApplicationsService {
    * row already stores, for rows exported before a template fix. Delete this
    * and the button on the detail page together.
    */
-  reexport(id: number): Observable<{ filename: string; page_count: number }> {
-    return this.http.post<{ filename: string; page_count: number }>(`${API}/api/reexport`, {
-      application_id: id,
-    });
+  reexport(id: number): Observable<{ filename: string; page_count: number; dropped: string[] }> {
+    return this.http.post<{ filename: string; page_count: number; dropped: string[] }>(
+      `${API}/api/reexport`,
+      { application_id: id },
+    );
   }
 
   /** Takes the PDF with it. Ask before calling this. */

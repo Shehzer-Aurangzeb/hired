@@ -39,6 +39,7 @@ class ApplicationIn(BaseModel):
     summary_text: str | None = None
     selected_bullet_ids: list[str] = []
     selected_bullets: list[dict] = []
+    coverage: list[dict] = []
 
     status: str = "saved"
     notes: str | None = None
@@ -66,6 +67,7 @@ class ApplicationOut(BaseModel):
     summary_text: str | None
     selected_bullet_ids: list[str]
     selected_bullets: list[dict]
+    coverage: list[dict]
 
     has_pdf: bool
     filename: str | None

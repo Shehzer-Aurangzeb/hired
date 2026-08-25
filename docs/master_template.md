@@ -159,6 +159,10 @@ end: 2025-06
 status: live
   # domain: the industry, for matching postings. One or two words.
 domain: fintech
+  # named: false prints this project's bullets straight under the employer with
+  # no bold lead-in of its own. For small pieces of client work where naming each
+  # one costs more lines than the work is worth. Defaults to true.
+named: true
 priority: 1
 tags: [frontend, design-system, performance]
   # disclosure: what you are allowed to say about this work in public.

@@ -16,6 +16,7 @@ skill onto the page with nothing evidencing it.
 import json
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlmodel import select
 
@@ -30,10 +31,11 @@ from .models import (
     Profile,
     Project,
     SelectedBullet,
+    SkillCoverage,
     SkillsLine,
 )
 from .profile_parser import parse_text
-from .render import filename, render_html, to_pdf
+from .render import filename, measurer, render_html, to_pdf
 from .tables import Application, ProfileSource
 
 router = APIRouter(tags=["generate"])
@@ -67,8 +69,19 @@ SCHEMA = {
                 "required": ["project_id", "bullet_ids"],
             },
         },
+        "coverage": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "skill": {"type": "string"},
+                    "bullet_ids": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["skill", "bullet_ids"],
+            },
+        },
     },
-    "required": ["title_id", "sections"],
+    "required": ["title_id", "sections", "coverage"],
 }
 
 INSTRUCTIONS = """You are choosing which of a candidate's existing bullets belong on a
@@ -85,6 +98,12 @@ What to do:
 - Within each, pick at most {max_bullets} bullet ids, strongest evidence first.
 - Order matters. What you put first is what gets read.
 
+Fill the page. It is one page and it should be a full one, roughly {target}
+bullets in total across the projects you choose. Under-filling is the failure
+this gets wrong most often: half a page of white space reads as a thin
+candidate, not a focused one. If a project is relevant, give it the evidence it
+deserves rather than a single line.
+
 Rules:
 
 - Only ids that appear in the pool below. An id you cannot find is a mistake,
@@ -95,9 +114,25 @@ Rules:
   one that is merely impressive.
 - A project whose cannot_claim excludes what the posting is asking for is weak
   evidence for that requirement, however good the bullets read.
-- Leave a project out entirely rather than padding it with a bullet that does
-  not speak to this posting. A shorter, sharper page wins.
-- Do not pick a project only because it is recent."""
+- Leave a project out entirely rather than padding it with a bullet that says
+  nothing about this posting. Relevance decides what goes on, and the target
+  above decides how much: never both at once, and never padding to reach it.
+- Do not pick a project only because it is recent.
+
+Then say what the page backs. For every skill in WHAT THE POSTING ASKS FOR,
+required and preferred alike, return one coverage entry: the skill name copied
+exactly as the posting listed it, and the ids of the bullets you selected that
+the person could point at if an interviewer asked about that skill.
+
+- Judge it by meaning, not by wording. A bullet about shipping a React Native
+  app to both stores backs "mobile app development" without using the phrase,
+  and a bullet naming GitHub Actions backs "CI/CD".
+- Only ids you actually selected above. A bullet that is not on the page cannot
+  back anything, however well it would have.
+- Return an empty list when nothing you picked backs it, and do not stretch to
+  avoid one. The empty lists are the point of this field: they are what tells
+  the person the posting asks for something their page does not show.
+- One entry per skill, and every skill gets one."""
 
 
 @router.post("/generate")
@@ -118,7 +153,7 @@ def generate(body: GenerateRequest, session: SessionDep) -> GenerateResponse:
         )
 
     answer = generate_json(_prompt(profile, text, body), SCHEMA)
-    cv, flags = _assemble(profile, answer, body.title_variant)
+    cv, flags = _assemble(profile, answer, body.title_variant, body.parsed_jd)
     return GenerateResponse(cv=cv, flags=flags)
 
 
@@ -165,7 +200,9 @@ def _prompt(profile: Profile, jd_text: str, body: GenerateRequest) -> str:
         ],
     }
     instructions = INSTRUCTIONS.format(
-        max_projects=rules.max_projects, max_bullets=rules.max_bullets_per_project
+        max_projects=rules.max_projects,
+        max_bullets=rules.max_bullets_per_project,
+        target=_target(rules),
     )
     chosen = (
         f"\n\nThe person has already chosen the framing: use title_id "
@@ -184,7 +221,7 @@ def _prompt(profile: Profile, jd_text: str, body: GenerateRequest) -> str:
 
 
 def _assemble(
-    profile: Profile, answer: dict, forced: str | None
+    profile: Profile, answer: dict, forced: str | None, jd: ParsedJd
 ) -> tuple[GeneratedCv, list[Flag]]:
     flags: list[Flag] = []
     projects = {project.id: project for project in profile.all_projects()}
@@ -228,9 +265,12 @@ def _assemble(
                     project_name=project.name,
                     label=project.label,
                     stack=project.stack,
+                    named=project.named,
                     bullets=bullets,
                 )
             )
+
+    _fill_page(profile, title, summary, sections, projects, rules, flags)
 
     printed = " ".join(
         [summary.text if summary else ""]
@@ -244,6 +284,7 @@ def _assemble(
         summary=summary.text if summary else "",
         skills_lines=_skills(profile, {section.project_id for section in sections}),
         sections=sections,
+        coverage=_coverage(jd, answer, sections),
     )
     if not sections:
         flags.append(Flag(type="block", message="Nothing was selected, so there is no CV."))
@@ -279,6 +320,36 @@ def _bullets(project: Project, ids: list, rules, flags: list[Flag]) -> list[Sele
             SelectedBullet(id=bullet.id, text=bullet.text, source_id=bullet.id, rephrased=False)
         )
     return chosen
+
+
+def _coverage(jd: ParsedJd, answer: dict, sections: list[CvSection]) -> list[SkillCoverage]:
+    """
+    What the page backs, as the selector judged it, minus anything it got wrong.
+
+    Same bargain as the rest of this file: the model points at ids and plain code
+    decides whether they mean anything. An id that did not print is dropped, and
+    a skill the posting never asked for is not carried through at all, so the
+    list is always exactly the posting's requirements in the posting's order.
+
+    ponytail: bullets added afterwards by the page-fill loop are not in the
+    model's answer, so they back nothing here. They were picked for length, not
+    relevance, so under-crediting them is the safe direction.
+    """
+    printed = {bullet.id for section in sections for bullet in section.bullets}
+    claimed: dict[str, list[str]] = {}
+    for entry in answer.get("coverage") or []:
+        name = str(entry.get("skill") or "").strip().casefold()
+        if name:
+            claimed[name] = [str(i) for i in entry.get("bullet_ids") or []]
+    return [
+        SkillCoverage(
+            skill=skill.name,
+            bullet_ids=[
+                i for i in claimed.get(skill.name.strip().casefold(), []) if i in printed
+            ],
+        )
+        for skill in [*jd.required_skills, *jd.preferred_skills]
+    ]
 
 
 def _check_qualifiers(sections, projects, printed: str, flags: list[Flag]) -> None:
@@ -317,6 +388,125 @@ def _check_banned(rules, printed: str, flags: list[Flag]) -> None:
             flags.append(
                 Flag(type="block", message=f"A banned character reached the page: {raw}.")
             )
+
+
+# What "a full page" means. Under MIN the page reads as a thin candidate and
+# gets topped up; over MAX it is two pages pretending to be one. A CV that
+# lands between them is left alone.
+MIN_FILL = 0.90
+MAX_FILL = 1.25
+
+
+def _fill_page(profile, title, summary, sections, projects, rules, flags) -> None:
+    """
+    Top the page up until it is actually full, measuring rather than guessing.
+
+    The model decides what is relevant; how much fits is arithmetic, and asking
+    a model to do arithmetic it cannot see the result of is how the page ended
+    up half empty. Bullets are added in profile priority order from the projects
+    already chosen first, then from the next-best unused project.
+
+    ponytail: no second model call. The ordering of the top-ups is the author's
+    own priority field rather than relevance to this posting, which is the right
+    trade at the bottom of a page. It becomes a second call the day the tail of
+    the page matters as much as the top.
+    """
+    def build() -> GeneratedCv:
+        return GeneratedCv(
+            title=title.text if title else "",
+            summary=summary.text if summary else "",
+            skills_lines=_skills(profile, {s.project_id for s in sections}),
+            sections=sections,
+        )
+
+    # Everything not on the page yet, best first: unused bullets from projects
+    # already printing, then the projects that were left out, by priority.
+    on_page = {b.source_id for s in sections for b in s.bullets}
+    chosen = [projects[s.project_id] for s in sections]
+    rest = sorted(
+        (p for p in profile.all_projects() if p.id not in {c.id for c in chosen}),
+        key=lambda p: p.priority,
+    )
+    spare: list[tuple[Project, Bullet]] = [
+        (project, bullet)
+        for project in chosen + rest
+        for bullet in sorted(project.bullets, key=lambda b: b.priority)
+        if bullet.id not in on_page and bullet.status != "blocked"
+    ]
+
+    try:
+        with measurer() as pages:
+            filled = started = pages(render_html(profile, build()))
+            added = 0
+            while filled < MIN_FILL and spare:
+                project, bullet = spare.pop(0)
+                # Look the section up rather than remembering one: the second
+                # bullet of a project added a moment ago belongs in the section
+                # that bullet created, not in a duplicate of it.
+                section = next((s for s in sections if s.project_id == project.id), None)
+                fresh = section is None
+                if fresh:
+                    if len(sections) >= rules.max_projects:
+                        continue
+                    section = CvSection(
+                        project_id=project.id,
+                        project_name=project.name,
+                        label=project.label,
+                        stack=project.stack,
+                        named=project.named,
+                    )
+                    sections.append(section)
+                elif len(section.bullets) >= rules.max_bullets_per_project:
+                    continue
+                section.bullets.append(
+                    SelectedBullet(id=bullet.id, source_id=bullet.id, text=bullet.text)
+                )
+                grown = pages(render_html(profile, build()))
+                # One bullet that turns a full page into two is worse than the
+                # gap it filled, so it goes back.
+                if grown > MAX_FILL:
+                    section.bullets.pop()
+                    if fresh:
+                        sections.remove(section)
+                    break
+                filled, added = grown, added + 1
+
+            if added:
+                flags.append(
+                    Flag(
+                        type="warn",
+                        message=f"Added {added} more bullet{'s' if added > 1 else ''} to fill the "
+                        f"page: the selector came back at {started:.2f} of a page, now "
+                        f"{filled:.2f}. "
+                        "They are in your own priority order, so check the tail reads right.",
+                    )
+                )
+            elif filled < MIN_FILL:
+                flags.append(
+                    Flag(
+                        type="warn",
+                        message=f"This comes to {filled:.2f} of a page and there is nothing "
+                        "unused left to add. Write more bullets, or accept a short CV.",
+                    )
+                )
+    except Exception as error:  # noqa: BLE001
+        # No browser, no measurement. The CV is still correct, just unchecked
+        # for length, and refusing to generate over that would be worse.
+        flags.append(
+            Flag(type="warn", message=f"Could not measure the page length. {error}")
+        )
+
+
+def _target(rules) -> str:
+    """
+    Roughly how many bullets fill one page at this template's size, as a range.
+
+    ponytail: derived from the caps rather than configured, because it is one
+    more number to keep in sync for a value nobody would set differently. It
+    becomes a Rules field the day the page limit is not one.
+    """
+    most = rules.max_projects * rules.max_bullets_per_project
+    return f"{max(6, most // 2)} to {max(8, int(most * 0.7))}"
 
 
 def _skills(profile: Profile, selected: set[str]) -> list[SkillsLine]:
@@ -375,9 +565,33 @@ class ExportRequest(BaseModel):
 
 
 class ExportResponse(BaseModel):
+    # Bullets a re-export could not find in the profile any more. Silently
+    # shipping a shorter CV than the one on record is how a re-export came back
+    # half a page and nobody knew why.
+    dropped: list[str] = []
     id: int
     filename: str
     page_count: int
+
+
+class PreviewRequest(BaseModel):
+    cv: GeneratedCv
+
+
+@router.post("/preview", response_class=HTMLResponse)
+def preview(body: PreviewRequest, session: SessionDep) -> str:
+    """
+    The page as HTML, for the preview pane to show in an iframe.
+
+    The same render_html the PDF goes through, so the preview cannot drift from
+    the printed artefact: there is one template and this is it. The hand-written
+    approximation this replaced had stopped matching the moment cv.html changed,
+    which is the failure any second renderer eventually has.
+    """
+    source = session.exec(select(ProfileSource)).first()
+    if source is None:
+        raise HTTPException(404, "No profile saved yet.")
+    return render_html(parse_text(source.text), body.cv)
 
 
 @router.post("/export")
@@ -406,6 +620,7 @@ def export(body: ExportRequest, session: SessionDep) -> ExportResponse:
         for section in body.cv.sections
         for bullet in section.bullets
     ]
+    row.coverage = [item.model_dump() for item in body.cv.coverage]
     session.add(row)
     session.commit()
     session.refresh(row)
@@ -463,6 +678,7 @@ def reexport(body: ReexportRequest, session: SessionDep) -> ExportResponse:
                     project_name=project.name,
                     label=project.label,
                     stack=project.stack,
+                    named=project.named,
                 )
             )
         # The text is the one that was sent, not whatever the profile says today.
@@ -492,4 +708,4 @@ def reexport(body: ReexportRequest, session: SessionDep) -> ExportResponse:
     session.add(row)
     session.commit()
     session.refresh(row)
-    return ExportResponse(id=row.id, filename=row.filename, page_count=pages)
+    return ExportResponse(id=row.id, filename=row.filename, page_count=pages, dropped=missing)

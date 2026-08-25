@@ -6,10 +6,11 @@ import {
   linkedSignal,
   signal,
 } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { of, switchMap, tap, finalize } from 'rxjs';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { of, switchMap, tap, finalize, catchError, debounceTime } from 'rxjs';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 import { GenerateService } from '../../core/generate.service';
 import { Coverage, computeCoverage } from '../../core/coverage';
@@ -39,6 +40,8 @@ export class GeneratePage {
 
   /** The posting form owns the screen until there is a result, then collapses. */
   readonly editing = signal(false);
+  private readonly sanitizer = inject(DomSanitizer);
+
   readonly zoom = signal<'fit' | 'actual'>('fit');
 
   readonly form = this.fb.nonNullable.group({
@@ -92,22 +95,31 @@ export class GeneratePage {
     return Math.round(((cv.summary.length + body) / PAGE_BUDGET) * 100);
   });
 
-  /** Bullets carry the evidence; the skills line and stacks only make it visible. */
+  /**
+   * Bullets carry the evidence; the skills line and stacks only make it visible.
+   *
+   * The selector said which bullets back which requirement, but the person can
+   * still deselect one here, so the map is narrowed to what is left on screen.
+   */
   readonly coverage = computed<Coverage[]>(() => {
     const jd = this.gen.fit()?.parsed_jd;
     const cv = this.finalCv();
     if (!jd || !cv) {
       return [];
     }
-    const bullets = cv.sections.flatMap((s) => s.bullets.map((b) => b.text)).join(' ');
+    const onPage = new Set(cv.sections.flatMap((s) => s.bullets.map((b) => b.id)));
+    const backing = (cv.coverage ?? []).map((c) => ({
+      ...c,
+      bullet_ids: c.bullet_ids.filter((id) => onPage.has(id)),
+    }));
     const page = [
-      bullets,
+      ...cv.sections.flatMap((s) => s.bullets.map((b) => b.text)),
       cv.title,
       cv.summary,
       ...cv.skills_lines.flatMap((l) => l.items),
       ...cv.sections.flatMap((s) => s.stack),
     ].join(' ');
-    return computeCoverage(jd, bullets, page);
+    return computeCoverage(jd, backing, page);
   });
 
   readonly requiredCovered = computed(() => {
@@ -170,6 +182,54 @@ export class GeneratePage {
 
   /** Letter is 816px at 96dpi. The sheet renders at that width and is zoomed. */
   readonly sheetScale = computed(() => (this.zoom() === 'fit' ? 0.62 : 1));
+
+  /**
+   * The preview is the PDF's own HTML, fetched and shown in an iframe.
+   *
+   * It used to be Tailwind markup in this template approximating the layout, and
+   * an approximation of a layout is a layout that silently stops matching. This
+   * cannot: it is the same render_html the exporter prints from.
+   *
+   * Debounced because it refires on every reorder and deselect, and each one is
+   * a round trip.
+   */
+  private readonly previewHtml = toSignal(
+    toObservable(this.finalCv).pipe(
+      debounceTime(200),
+      switchMap((cv) => (cv ? this.gen.preview(cv).pipe(catchError(() => of(''))) : of(''))),
+    ),
+    { initialValue: '' },
+  );
+
+  readonly sheet = computed<SafeHtml | null>(() => {
+    const html = this.previewHtml();
+    // Our own template, rendered by our own server from our own profile. The
+    // bypass is what lets it into an iframe at all; nothing user-authored
+    // reaches it that does not already reach the PDF.
+    return html ? this.sanitizer.bypassSecurityTrustHtml(html) : null;
+  });
+
+  /** The margins page.pdf applies, as padding, so the sheet matches the print. */
+  readonly sheetPad = '0.4in 0.5in 0.3in';
+
+  /** 11in less the 0.4in and 0.3in margins, at 96dpi. One page of content. */
+  readonly PAGE = 989;
+
+  /**
+   * The iframe is sized to its content, so a page and a bit shows as a page and
+   * a bit instead of being silently cropped at the fold. The renderer is allowed
+   * up to 1.25 pages, so overflow is a normal state to look at, not an error.
+   */
+  readonly sheetHeight = signal(this.PAGE);
+
+  fitSheet(event: Event): void {
+    const frame = event.target as HTMLIFrameElement;
+    const height = frame.contentDocument?.body?.scrollHeight;
+    this.sheetHeight.set(Math.max(this.PAGE, height ?? this.PAGE));
+  }
+
+  /** Where page one ends, drawn on the sheet. The question is always "does it fit". */
+  readonly overflows = computed(() => this.sheetHeight() > this.PAGE);
 
   startEdit(): void {
     this.editing.set(true);

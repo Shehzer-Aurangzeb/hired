@@ -84,12 +84,14 @@ export class ApplicationDetail {
   });
 
   /**
-   * Which of the posting's requirements a bullet on the page actually backed.
+   * Which of the posting's requirements a bullet on the page actually backed,
+   * as judged when the CV was generated and stored on the row since.
    *
    * ponytail: two states here, not the three on the generate page. The record
-   * stores the bullets and the summary but not the skills line, so "on the page
-   * but unbacked" cannot be told apart from "absent". Claiming otherwise would
-   * be guessing, so the labels say backed / not backed and stop there.
+   * keeps the bullets and the summary but not the skills line, so "on the page
+   * but unbacked" cannot be told apart from "absent". The labels say backed /
+   * not backed and stop there. Rows exported before coverage was stored have an
+   * empty map and read as nothing backed; regenerate one to see the truth.
    */
   readonly coverage = computed<Coverage[]>(() => {
     const current = this.record();
@@ -97,7 +99,24 @@ export class ApplicationDetail {
       return [];
     }
     const bullets = (current.selected_bullets ?? []).map((b) => b.text).join(' ');
-    return computeCoverage(current.jd_parsed, bullets, `${bullets} ${current.summary_text}`);
+    return computeCoverage(
+      current.jd_parsed,
+      current.coverage ?? [],
+      `${bullets} ${current.summary_text}`,
+    );
+  });
+
+  /**
+   * No coverage on the record is unknown, not zero.
+   *
+   * Rows exported before the selector started reporting coverage have an empty
+   * map. Counting that as "0 of 6 backed" states something false with a badge
+   * behind it, which is worse than saying nothing: the whole point of this panel
+   * is that you can trust the crosses.
+   */
+  readonly unrecorded = computed(() => {
+    const current = this.record();
+    return !!current?.selected_bullets?.length && !current.coverage?.length;
   });
 
   readonly backed = computed(() => {
@@ -186,7 +205,16 @@ export class ApplicationDetail {
         // Same URL, new bytes. Without this the browser serves the old file
         // from cache and the button looks like it did nothing.
         this.stamp.set(Date.now());
-        this.toast.ok(`Rebuilt ${res.filename}.`);
+        if (res.dropped?.length) {
+          // Rebuilding against an edited profile can lose bullets. Saying so
+          // beats handing back a shorter CV with no explanation.
+          this.toast.error(
+            `Rebuilt without ${res.dropped.length} bullet(s) no longer in your profile: ` +
+              res.dropped.join(', '),
+          );
+        } else {
+          this.toast.ok(`Rebuilt ${res.filename}.`);
+        }
       },
       error: () => this.rebuilding.set(false),
     });

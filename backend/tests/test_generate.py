@@ -8,14 +8,17 @@ reaches the network; the model is a dict.
 """
 
 import re
+from contextlib import contextmanager
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
-from app import auth, generate
+from app import auth, generate, render
 from app.db import get_session
+from app.models import CvSection, GeneratedCv, ParsedJd, RequiredSkill, SelectedBullet
+from app.render import render_html
 from app.profile_parser import parse_text
 from app.profile_template import DEFAULT_TEMPLATE
 from app.settings import Settings
@@ -338,6 +341,30 @@ def stub_pdf(monkeypatch, pages=1):
     monkeypatch.setattr(generate, "to_pdf", lambda html: (b"%PDF-1.4 " + html[:20].encode(), pages))
 
 
+@pytest.fixture(autouse=True)
+def no_browser(monkeypatch):
+    """
+    The fill loop measures a real page. Left alone it would launch Chromium in
+    every test in this file and top up selections the guard tests are asserting
+    on, so by default the page reports itself full and the loop does nothing.
+    Tests for the loop itself override this with fill_to().
+    """
+    monkeypatch.setattr(generate, "measurer", lambda: _measures(lambda html: 1.0))
+
+
+@contextmanager
+def _measures(fn):
+    yield fn
+
+
+def fill_to(monkeypatch, heights):
+    """A measurer that walks a scripted list of page heights."""
+    seen = iter(heights)
+    monkeypatch.setattr(
+        generate, "measurer", lambda: _measures(lambda html: next(seen, heights[-1]))
+    )
+
+
 def make_application(client):
     return client.post(
         "/api/applications",
@@ -435,10 +462,10 @@ def test_the_html_puts_projects_back_under_their_employer():
     )
     html = render_html(profile, cv)
     # The selector answers in project ids and knows nothing about employers.
-    assert "Company Name" in html and "Work experience" in html.replace("</h2>", "")
+    assert "Company Name" in html and "WORK EXPERIENCE" in html
     assert html.index("Company Name") < html.index("Project Name")
     # Standalone work is its own section, not filed under a company.
-    assert html.index("Side Project") > html.index("Projects")
+    assert html.index("Side Project") > html.index("PROJECTS")
 
 
 def test_every_link_on_the_page_is_clickable_and_absolute():
@@ -462,17 +489,23 @@ def test_every_link_on_the_page_is_clickable_and_absolute():
     # Written in Identity as extra header content, and once dropped on the floor.
     assert "Stack Overflow" in html
     # A project with links has its name linked; one without stays plain text.
-    assert 'class="name linked" href="https://product.example.com"' in html
-    assert '<span class="name">Second Project</span>' in html
+    assert '<a href="https://product.example.com">Project Name</a>' in html
+    assert '<span class="name">Second Project' in html
 
 
-def test_an_in_progress_certification_never_prints():
+def test_certifications_never_reach_the_page():
+    """
+    They are in the profile so the fit check knows the skills are there. They
+    have never been on this CV, earned or otherwise.
+    """
     from app.render import render_html
     from app.models import GeneratedCv
 
     profile = parse_text(DEFAULT_TEMPLATE)
+    assert profile.certifications, "the fixture should have some to leave out"
     html = render_html(profile, GeneratedCv.model_validate(CV))
-    assert "Certification Name" in html
+    assert "CERTIFICATIONS" not in html
+    assert "Certification Name" not in html
     assert "A Course You Are Halfway Through" not in html
 
 
@@ -534,3 +567,267 @@ def test_reexport_needs_something_to_rebuild(client, monkeypatch):
     response = client.post("/api/reexport", json={"application_id": application_id})
     assert response.status_code == 422 and "nothing to rebuild" in response.json()["detail"]
     assert client.post("/api/reexport", json={"application_id": 999}).status_code == 404
+
+
+# ---------- the layout, against docs/cv/ShehzarAurangzeb.html ----------
+
+
+def test_the_fonts_survive_autoescaping():
+    """
+    Jinja escaped the quotes in format('truetype') and Chromium silently dropped
+    every @font-face, so the page printed in Helvetica while claiming Inter. The
+    escaping is invisible in the markup; only the rendered PDF showed it.
+    """
+    from app.render import render_html
+    from app.models import GeneratedCv
+
+    html = render_html(parse_text(DEFAULT_TEMPLATE), GeneratedCv.model_validate(CV))
+    assert html.count("@font-face") == 4
+    assert "format('truetype')" in html
+    assert "&#39;" not in html
+
+
+def test_a_project_leads_in_with_its_first_bullet_on_the_same_line():
+    """
+    The source document runs the project name straight into its first bullet.
+    It is what makes the page fit, so it is the one structural rule here.
+    """
+    from app.render import render_html
+    from app.models import GeneratedCv
+
+    cv = GeneratedCv.model_validate(
+        {
+            **CV,
+            "sections": [
+                {
+                    **CV["sections"][0],
+                    "bullets": [
+                        {"id": "a", "source_id": "a", "text": "First one."},
+                        {"id": "b", "source_id": "b", "text": "Second one."},
+                    ],
+                }
+            ],
+        }
+    )
+    html = render_html(parse_text(DEFAULT_TEMPLATE), cv)
+    assert "(A product)</span> · First one." in html
+    # Everything after the first is an ordinary bullet.
+    assert "<li>Second one.</li>" in html
+    assert "<li>First one.</li>" not in html
+
+
+def test_an_unnamed_project_prints_bullets_with_no_lead_in():
+    """Small client work in the source CV has no bold heading of its own."""
+    from app.render import render_html
+    from app.models import GeneratedCv
+
+    cv = GeneratedCv.model_validate(
+        {**CV, "sections": [{**CV["sections"][0], "named": False}]}
+    )
+    html = render_html(parse_text(DEFAULT_TEMPLATE), cv)
+    assert "Project Name" not in html
+    assert "Built a thing." in html
+
+
+def test_dates_are_printed_for_a_person_not_a_sorter():
+    from app.render import _month
+
+    assert _month("2024-11") == "Nov 2024"
+    assert _month("2026-6") == "Jun 2026"
+    assert _month("present") == "Present"
+    # Anything that is not a month passes through rather than being mangled.
+    assert _month("2024") == "2024"
+    assert _month("") == ""
+
+
+# ---------- filling the page ----------
+#
+# The complaint these answer: the selector returned four bullets, the page came
+# out half empty, and nothing in the code noticed.
+
+
+def test_a_short_page_is_topped_up_until_it_is_full(client, monkeypatch):
+    save_profile(client)
+    # Starts at half a page, each added bullet buys 0.2, full on the third.
+    fill_to(monkeypatch, [0.5, 0.7, 0.9, 0.95])
+    body = run(client, monkeypatch, PICKED)
+
+    printed = [b["id"] for s in body["cv"]["sections"] for b in s["bullets"]]
+    assert len(printed) > 1, "the selector picked one bullet and the page was half empty"
+    assert "project-name-perf" in printed, "what the selector chose stays chosen"
+    assert any("fill the page" in f["message"] for f in body["flags"])
+
+
+def test_a_page_that_is_already_full_is_left_alone(client, monkeypatch):
+    save_profile(client)
+    fill_to(monkeypatch, [0.95])
+    body = run(client, monkeypatch, PICKED)
+    assert [b["id"] for s in body["cv"]["sections"] for b in s["bullets"]] == ["project-name-perf"]
+    assert not any("fill the page" in f["message"] for f in body["flags"])
+
+
+def test_a_top_up_that_would_spill_onto_a_second_page_is_taken_back(client, monkeypatch):
+    save_profile(client)
+    # The first candidate takes it straight past the limit, so it comes off again.
+    fill_to(monkeypatch, [0.5, 1.6])
+    body = run(client, monkeypatch, PICKED)
+    assert [b["id"] for s in body["cv"]["sections"] for b in s["bullets"]] == ["project-name-perf"]
+
+
+def test_a_blocked_bullet_is_never_used_to_fill(client, monkeypatch):
+    save_profile(client)
+    fill_to(monkeypatch, [0.1] * 20)
+    body = run(client, monkeypatch, PICKED)
+    printed = [b["id"] for s in body["cv"]["sections"] for b in s["bullets"]]
+    # project-name-migration is status: blocked in the shipped template.
+    assert "project-name-migration" not in printed
+
+
+def test_the_caps_still_hold_while_filling(client, monkeypatch):
+    save_profile(client)
+    fill_to(monkeypatch, [0.1] * 40)
+    body = run(client, monkeypatch, PICKED)
+    profile = parse_text(DEFAULT_TEMPLATE)
+    assert len(body["cv"]["sections"]) <= profile.rules.max_projects
+    for section in body["cv"]["sections"]:
+        assert len(section["bullets"]) <= profile.rules.max_bullets_per_project
+
+
+def test_nothing_left_to_add_says_so_rather_than_silently_shipping_short(client, monkeypatch):
+    save_profile(client, BANNED.replace("Spearheaded the rewrite.", "Built the rewrite."))
+    fill_to(monkeypatch, [0.3] * 10)
+    body = run(
+        client,
+        monkeypatch,
+        {"title_id": "", "sections": [{"project_id": "p", "bullet_ids": ["p-one"]}]},
+    )
+    assert any("nothing unused left to add" in f["message"] for f in body["flags"])
+
+
+def test_no_browser_does_not_stop_a_cv_being_generated(client, monkeypatch):
+    save_profile(client)
+
+    def broken():
+        raise RuntimeError("Chromium is not installed")
+
+    monkeypatch.setattr(generate, "measurer", broken)
+    body = run(client, monkeypatch, PICKED)
+    assert body["cv"]["sections"], "an unmeasurable page is still a page"
+    assert any("Could not measure" in f["message"] for f in body["flags"])
+
+
+# ---------- coverage: what the page backs ----------
+#
+# The substring scan this replaced said "React Native" was the only one of six
+# requirements backed, because it was the only one whose exact words appeared in
+# a bullet. Meaning is the model's job; keeping it honest is this code's.
+
+
+def _jd(*names: str) -> ParsedJd:
+    return ParsedJd(required_skills=[RequiredSkill(name=n, importance=3) for n in names])
+
+
+def _sections(**by_project: list[str]) -> list[CvSection]:
+    return [
+        CvSection(
+            project_id=project,
+            project_name=project,
+            bullets=[
+                SelectedBullet(id=i, text=i, source_id=i) for i in ids
+            ],
+        )
+        for project, ids in by_project.items()
+    ]
+
+
+def test_coverage_credits_a_bullet_that_never_says_the_words():
+    answer = {"coverage": [{"skill": "Mobile App Development", "bullet_ids": ["sp-app"]}]}
+    result = generate._coverage(_jd("Mobile App Development"), answer, _sections(sp=["sp-app"]))
+    assert [(c.skill, c.bullet_ids) for c in result] == [
+        ("Mobile App Development", ["sp-app"])
+    ]
+    assert result[0].bullet_ids  # evidenced
+
+
+def test_coverage_drops_a_bullet_that_did_not_print():
+    """The page-fill loop and a deselect both change what is on the page."""
+    answer = {"coverage": [{"skill": "TypeScript", "bullet_ids": ["gone", "here"]}]}
+    result = generate._coverage(_jd("TypeScript"), answer, _sections(sp=["here"]))
+    assert result[0].bullet_ids == ["here"]
+
+
+def test_coverage_reports_every_requirement_even_the_unbacked_ones():
+    """An empty list is the answer that matters: the posting wants what you lack."""
+    answer = {"coverage": [{"skill": "React Native", "bullet_ids": ["sp-app"]}]}
+    result = generate._coverage(
+        _jd("React Native", "Xcode"), answer, _sections(sp=["sp-app"])
+    )
+    assert [c.skill for c in result] == ["React Native", "Xcode"]
+    assert result[1].bullet_ids == []
+
+
+def test_coverage_ignores_a_skill_the_posting_never_asked_for():
+    answer = {"coverage": [{"skill": "Fortran", "bullet_ids": ["sp-app"]}]}
+    result = generate._coverage(_jd("TypeScript"), answer, _sections(sp=["sp-app"]))
+    assert [c.skill for c in result] == ["TypeScript"]
+
+
+def test_coverage_matches_the_skill_name_case_and_space_insensitively():
+    answer = {"coverage": [{"skill": " restful apis ", "bullet_ids": ["sp-app"]}]}
+    result = generate._coverage(_jd("RESTful APIs"), answer, _sections(sp=["sp-app"]))
+    assert result[0].bullet_ids == ["sp-app"]
+
+
+# ---------- preview ----------
+#
+# The preview pane used to be Tailwind markup approximating the layout, and it
+# had drifted out of step with cv.html without anyone noticing. These pin the
+# only property that matters: preview and print come off the same template.
+
+
+def test_preview_is_the_same_html_the_pdf_prints_from(client):
+    save_profile(client)
+    html = client.post("/api/preview", json={"cv": CV}).text
+
+    source = client.get("/api/profile/source").json()["text"]
+    assert html == render_html(parse_text(source), GeneratedCv.model_validate(CV))
+
+
+def test_preview_needs_a_profile():
+    """Without one there is nothing to rejoin the sections onto."""
+    from app.main import app
+
+    with TestClient(app) as fresh:
+        fresh.post("/api/auth/login", json={"password": PASSWORD})
+        assert fresh.post("/api/preview", json={"cv": CV}).status_code in (404, 401)
+
+
+# ---------- labels that name their own links ----------
+
+
+def test_a_label_naming_its_links_gets_them_hyperlinked():
+    """"live on App Store + Play Store" links both phrases, not the project name."""
+    from app.models import Link
+
+    links = [
+        Link(label="App Store", url="apps.apple.com/ca/app/x/id1"),
+        Link(label="Play Store", url="play.google.com/store/apps/details?id=y"),
+    ]
+    html, used = render._linkify("React Native application, live on App Store + Play Store", links)
+    assert used
+    assert '<a href="https://apps.apple.com/ca/app/x/id1">App Store</a>' in html
+    assert '<a href="https://play.google.com/store/apps/details?id=y">Play Store</a>' in html
+
+
+def test_a_label_that_names_nothing_leaves_the_links_for_the_name():
+    from app.models import Link
+
+    html, used = render._linkify("A tailoring app", [Link(label="Repo", url="github.com/x")])
+    assert not used and html == "A tailoring app"
+
+
+def test_linkify_escapes_the_label_it_did_not_link():
+    from app.models import Link
+
+    html, _ = render._linkify("Tools & <toys>", [Link(label="Tools", url="x.com")])
+    assert "&amp;" in html and "&lt;toys&gt;" in html

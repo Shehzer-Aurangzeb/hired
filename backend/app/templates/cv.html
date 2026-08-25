@@ -2,12 +2,23 @@
 <meta charset="utf-8" />
 <title>{{ identity.name }}</title>
 <style>
-  /* Letter, half-inch margins. The budget loop in render.py measures against
-     these numbers, so changing them changes what fits. */
-  @page {
-    size: letter;
-    margin: 0.5in;
-  }
+  {#- safe: this is CSS this module built from its own files, and autoescaping
+      it turns format('truetype') into format(&#39;truetype&#39;), which makes
+      Chromium drop every @font-face without a word. -#}
+  {{ font_css | safe }}
+
+  /*
+    Every number below was read out of docs/cv/ShehzarAurangzeb.html, the Google
+    Docs export of the CV this template exists to reproduce. The class names in
+    the comments are that file's, so the two can be compared line by line.
+
+    The page box lives in render.py MARGIN, not here: Chromium is handed the
+    margins directly when printing, so an @page rule would only be a second
+    place to keep the same numbers.
+
+    Do not tune these by eye. If the layout needs to change, change the document
+    and re-read the export.
+  */
 
   * {
     margin: 0;
@@ -15,215 +26,242 @@
     box-sizing: border-box;
   }
 
+  /* .c15 minus its padding, which is the print margin. 540pt content width. */
   body {
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-size: 9.6pt;
-    line-height: 1.32;
-    color: #111;
-    /* Matches the @page box, so the browser measurement and the print agree. */
-    width: 7.5in;
+    width: 540pt;
+    font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+    font-size: 10pt;
+    font-weight: 400;
+    /* The export says line-height:1.0, but that is Google Docs' "single", which
+       is the font's own leading rather than exactly one em. Taking the export
+       literally set the lines tighter than the document. */
+    line-height: normal;
+    color: #000;
   }
 
-  /* Links carry no colour: a CV covered in blue reads as a web page. The header
-     links are obvious from what they say, so they stay bare. */
+  p {
+    orphans: 2;
+    widows: 2;
+  }
+
+  /* .c5 / .c12. Links are blue and underlined in the source document. */
   a {
-    color: inherit;
-    text-decoration: none;
-  }
-
-  /* A project name is not obviously clickable, so this one gets a hint. */
-  .linked {
+    color: #1155cc;
     text-decoration: underline;
-    text-decoration-color: #bbb;
-    text-underline-offset: 2pt;
   }
 
-  h1 {
-    font-size: 15pt;
-    letter-spacing: -0.01em;
+  /* .c24, .c14 */
+  .fullname {
+    font-size: 18pt;
+    text-align: center;
   }
 
-  .headline,
+  .headline {
+    text-align: center;
+  }
+
   .contact {
     font-size: 9pt;
-    color: #333;
+    text-align: center;
+    padding-bottom: 1pt;
   }
 
-  .contact {
-    margin-top: 1pt;
+  .contact a {
+    font-size: 9pt;
   }
 
+  /* .c20 */
   h2 {
-    font-size: 8.5pt;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    border-bottom: 0.6pt solid #999;
-    padding-bottom: 1.5pt;
-    margin: 9pt 0 4pt;
-  }
-
-  .employer {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-top: 5pt;
-  }
-
-  .employer .name {
+    font-size: 10pt;
     font-weight: 700;
+    /* Measured off the source PDF, not copied from the export: the gap into a
+       heading is 19.1pt and the gap out of it 20.7pt, baseline to baseline. The
+       export's 12/6 split put the same total in the wrong places and the rule
+       ended up crowding the line under it. */
+    padding-top: 11pt;
+    /* The rule sits 4.1pt under the heading's baseline in the source document.
+       Raising this and dropping the margin by the same amount moves the rule
+       without moving the line under it. */
+    padding-bottom: 5pt;
+    line-height: 0.5;
+    border-bottom: 0.5pt solid #999999;
+    margin-bottom: 6pt;
   }
 
+  /* .c1, and the role line under it. The export spaces the right-hand column
+     with runs of non-breaking spaces; a flex row puts it where it was meant to
+     be without changing anything else. */
+  .employer,
   .role {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
+    gap: 12pt;
+  }
+
+  .employer {
+    font-weight: 700;
+    padding-top: 8pt;
+  }
+
+  /* The 8pt above an employer separates it from the project above. Directly
+     under a section rule there is nothing to separate from, and stacking it on
+     the heading's own gap makes WORK EXPERIENCE sit lower than every other
+     section. */
+  h2 + .employer {
+    padding-top: 0.85pt;
+  }
+
+  .employer .where,
+  .role {
+    font-weight: 400;
     font-style: italic;
-    color: #333;
   }
 
+  /* .c6: the project name and its first bullet are one paragraph. */
   .project {
-    margin-top: 3.5pt;
+    padding-top: 5pt;
   }
 
-  .project .name {
+  .name {
     font-weight: 700;
   }
 
+  /* .c13 .c9, and the "\0000b7   " marker on .lst-kix_list_1-0. 24pt less the
+     9pt the export writes as an invalid negative padding, which is how Docs
+     renders it. */
   ul {
     list-style: none;
-    margin-top: 1pt;
+    margin-left: 15pt;
   }
 
   li {
-    padding-left: 9pt;
-    position: relative;
-    margin-top: 1pt;
+    text-indent: -9pt;
   }
 
   li::before {
-    content: "•";
-    position: absolute;
-    left: 1pt;
+    content: "\0000b7";
+    display: inline-block;
+    min-width: 9pt;
+    white-space: nowrap;
+    /* text-indent inherits, and an inline-block is a block container, so the
+       hanging indent above would apply a second time inside this box and carry
+       the glyph off the left edge of the page. */
+    text-indent: 0;
   }
 
-  .skills div {
-    margin-top: 1.5pt;
-  }
-
-  .skills .label {
-    font-weight: 700;
-  }
-
-  .education {
+  .row {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    margin-top: 2pt;
+    gap: 12pt;
   }
 
-  .muted {
-    color: #444;
+  strong {
+    font-weight: 700;
   }
 </style>
 
-{#- A project name links to its first link when it has one. Bare text in a PDF
-    gives a reader nothing to click, and the store listing is the proof. -#}
-{%- macro project_name(section, href) -%}
-{%- if href %}<a class="name linked" href="{{ href | url }}">{{ section.project_name }}</a>
-{%- else %}<span class="name">{{ section.project_name }}</span>{% endif -%}
+{#- Inside Experience: the project name, its label in brackets, then the first
+    selected bullet running on after a middle dot. That is one paragraph in the
+    source document, and it is what makes the page as dense as it is. -#}
+{%- macro lead_in(section) -%}
+{%- set href = project_links.get(section.project_id) -%}
+<span class="name">
+{%- if href %}<a href="{{ href | url }}">{{ section.project_name }}</a>
+{%- else %}{{ section.project_name }}{% endif %}
+{%- set label = project_labels.get(section.project_id) %}{% if label %} ({{ label }}){% endif %}</span>
+{%- if section.bullets %} · {{ section.bullets[0].text }}{% endif %}
 {%- endmacro -%}
 
-<h1>{{ identity.name }}</h1>
+{#- Under Projects the shape is different: name, label, link and stack on the
+    line, and every bullet below it. Matched to the source document rather than
+    made consistent with the one above. -#}
+{%- macro project_head(section) -%}
+{%- set href = project_links.get(section.project_id) -%}
+<span class="name">{{ section.project_name }}
+{%- set label = project_labels.get(section.project_id) %}{% if label %} · {{ label }}{% endif %}</span>
+{%- if href %} · <a href="{{ href | url }}">{{ href }}</a>{% endif %}
+{%- if section.stack %} · {{ section.stack | join(", ") }}{% endif %}
+{%- endmacro -%}
+
+{#- Bullets after the first, or every bullet when the project has no lead-in. -#}
+{%- macro bullets(items) -%}
+{%- if items %}<ul>
+  {%- for bullet in items %}<li>{{ bullet.text }}</li>{% endfor -%}
+</ul>{% endif -%}
+{%- endmacro -%}
+
+<p class="fullname">{{ identity.name }}</p>
 <p class="headline">
-  {{ cv.title }}{% if identity.location %} | {{ identity.location }}{% endif %}
-  {%- if identity.relocation %} - {{ identity.relocation }}{% endif %}
+  {{- cv.title }}{% if identity.location %} | {{ identity.location }}{% endif %}
+  {%- if identity.relocation %} - {{ identity.relocation }}{% endif -%}
 </p>
 <p class="contact">
-  {#- Every entry is (what is printed, where it goes). A recruiter opening the
-      PDF should be one click from the profile, not retyping the URL. -#}
   {%- set links = [] -%}
   {%- if identity.email %}{% set _ = links.append((identity.email, "mailto:" ~ identity.email)) %}{% endif -%}
   {%- if identity.phone %}{% set _ = links.append((identity.phone, "tel:" ~ identity.phone)) %}{% endif -%}
   {%- if identity.linkedin %}{% set _ = links.append((identity.linkedin, identity.linkedin | url)) %}{% endif -%}
   {%- if identity.portfolio %}{% set _ = links.append((identity.portfolio, identity.portfolio | url)) %}{% endif -%}
   {%- if identity.github %}{% set _ = links.append((identity.github, identity.github | url)) %}{% endif -%}
-  {#- Written in Identity as "anything else you would put in a CV header", and
-      until now silently dropped. The label prints; the URL is behind it. -#}
   {%- for extra in identity.links %}{% set _ = links.append((extra.label or extra.url, extra.url | url)) %}{% endfor -%}
   {%- for text, href in links %}{% if not loop.first %} | {% endif %}<a href="{{ href }}">{{ text }}</a>{% endfor -%}
   {%- if identity.authorization %} | {{ identity.authorization }}{% endif -%}
 </p>
 
 {% if cv.summary %}
-  <h2>Summary</h2>
+  <h2>SUMMARY</h2>
   <p>{{ cv.summary }}</p>
 {% endif %}
 
 {% if cv.skills_lines %}
-  <h2>Skills</h2>
-  <div class="skills">
-    {% for row in cv.skills_lines %}
-      <div><span class="label">{{ row.line }}:</span> {{ row.items | join(" · ") }}</div>
-    {% endfor %}
-  </div>
+  <h2>SKILLS</h2>
+  {% for row in cv.skills_lines %}
+    <p><strong>{{ row.line }}:</strong> {{ row.items | join(" · ") }}</p>
+  {% endfor %}
 {% endif %}
 
 {% for group in employment %}
-  {% if loop.first %}<h2>Work experience</h2>{% endif %}
-  <div class="employer">
-    <span class="name">{{ group.name }}</span>
-    <span class="muted">{{ group.location }}</span>
-  </div>
-  <div class="role">
-    <span>{{ group.role }}{% if group.employment_type and group.employment_type != "full-time" %}
-        ({{ group.employment_type }}){% endif %}</span>
-    <span>{{ group.start }}{% if group.end %} - {{ group.end }}{% endif %}</span>
-  </div>
+  {% if loop.first %}<h2>WORK EXPERIENCE</h2>{% endif %}
+  <p class="employer">
+    <span>{{ group.name }}</span>
+    {%- if group.location %}<span class="where">{{ group.location }}</span>{% endif -%}
+  </p>
+  <p class="role">
+    {#- The type is printed unless the employer's own name already says it:
+        omitting a contract or volunteer arrangement reads as a lie the moment
+        somebody checks, but "Contract Engineer (Freelance)" saying freelance
+        twice is the renderer talking over the document. -#}
+    <span>{{ group.role }}{% if group.show_type %} ({{ group.employment_type }}){% endif %}</span>
+    <span>{{ group.start | month }}{% if group.end %} - {{ group.end | month }}{% endif %}</span>
+  </p>
   {% for section in group.sections %}
-    <div class="project">
-      {{ project_name(section, project_links.get(section.project_id)) }}
-      {%- if section.label %} · <span class="muted">{{ section.label }}</span>{% endif %}
-      <ul>
-        {% for bullet in section.bullets %}<li>{{ bullet.text }}</li>{% endfor %}
-      </ul>
-    </div>
+    {% if section.named %}
+      <p class="project">{{ lead_in(section) }}</p>
+      {{ bullets(section.bullets[1:]) }}
+    {% else %}
+      {{ bullets(section.bullets) }}
+    {% endif %}
   {% endfor %}
 {% endfor %}
 
 {% if standalone %}
-  <h2>Projects</h2>
+  <h2>PROJECTS</h2>
   {% for section in standalone %}
-    <div class="project">
-      {{ project_name(section, project_links.get(section.project_id)) }}
-      {%- if section.label %} · <span class="muted">{{ section.label }}</span>{% endif %}
-      {%- if section.stack %} · <span class="muted">{{ section.stack | join(", ") }}</span>{% endif %}
-      <ul>
-        {% for bullet in section.bullets %}<li>{{ bullet.text }}</li>{% endfor %}
-      </ul>
-    </div>
+    <p>{{ project_head(section) }}</p>
+    {{ bullets(section.bullets) }}
   {% endfor %}
 {% endif %}
 
 {% if education %}
-  <h2>Education</h2>
+  <h2>EDUCATION</h2>
   {% for item in education %}
-    <div class="education">
+    <p class="row">
       <span>
-        <span class="name">{{ item.degree }}{% if item.field %}, {{ item.field }}{% endif %}</span>
-        {%- if item.school %} · {{ item.school }}{% endif %}
-        {%- if item.gpa %} · GPA {{ item.gpa }}{% endif %}
+        {{- item.degree }}{% if item.field %} {{ item.field }}{% endif %}
+        {%- if item.school %}<strong>, {{ item.school }}</strong>{% endif %}
       </span>
-      <span class="muted">{{ item.end or item.start }}</span>
-    </div>
-  {% endfor %}
-{% endif %}
-
-{% if certifications %}
-  <h2>Certifications</h2>
-  {% for item in certifications %}
-    <div class="education">
-      <span>{{ item.name }}{% if item.issuer %} · {{ item.issuer }}{% endif %}</span>
-      <span class="muted">{{ item.date }}</span>
-    </div>
+      <span>{{ (item.end or item.start) | month }}</span>
+    </p>
   {% endfor %}
 {% endif %}

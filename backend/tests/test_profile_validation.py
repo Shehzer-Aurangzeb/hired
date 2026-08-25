@@ -311,3 +311,75 @@ def test_the_fixture_still_saves_and_what_it_warns_about():
     result = validate_text(FIXTURE.read_text(encoding="utf-8"))
     assert result.ok and result.errors == []
     assert len(result.warnings) == 6
+
+
+# ---------- errors that name the line and the fix ----------
+#
+# The complaint these answer: "experience -> 0 -> projects -> 0 ->
+# claim_boundary -> can_claim -> 1: Input should be a valid string" told a
+# person editing markdown nothing they could act on.
+
+COLON = """# Identity
+name: N
+
+# Experience
+## Devnito
+role: Engineer
+
+### Dedicate
+my_role: Lead
+claim_boundary:
+  can_claim:
+    - Built the front-end from scratch
+    - Wired the full Auth0 flow: HttpOnly cookies, OTP, passkeys
+bullets:
+  - id: dedicate-one
+    text: Built a thing.
+"""
+
+
+def test_a_colon_in_a_list_item_names_the_line_and_the_repair():
+    result = validate_text(COLON)
+    assert not result.ok
+    issue = result.errors[0]
+    # The line the colon is actually on, not the section it lives in.
+    assert issue.line == 13
+    assert COLON.split("\n")[issue.line - 1].strip().startswith("- Wired")
+    assert "colon" in issue.message
+    # The repair is the whole line, quoted, ready to paste over the broken one.
+    assert "- 'Wired the full Auth0 flow: HttpOnly cookies, OTP, passkeys'" in issue.message
+
+
+def test_the_repair_it_suggests_actually_parses():
+    """A fix that does not work is worse than no fix at all."""
+    suggestion = validate_text(COLON).errors[0].message.split("single quotes: ")[1]
+    fixed = COLON.replace(
+        "    - Wired the full Auth0 flow: HttpOnly cookies, OTP, passkeys",
+        f"    {suggestion}",
+    )
+    assert validate_text(fixed).ok
+
+
+def test_every_fault_is_reported_at_once_not_one_save_at_a_time():
+    broken = COLON.replace("    text: Built a thing.", "    priority: soon\n    text: Built a thing.")
+    broken = broken.replace(
+        "    - Built the front-end from scratch", "    - Note: this one is broken too"
+    )
+    lines = [issue.line for issue in validate_text(broken).errors]
+    assert len(lines) == 3
+    at = broken.split("\n")
+    assert [at[line - 1].strip() for line in sorted(lines)] == [
+        "- Note: this one is broken too",
+        "- Wired the full Auth0 flow: HttpOnly cookies, OTP, passkeys",
+        "priority: soon",
+    ]
+
+
+def test_an_error_with_no_special_case_still_says_where_and_what():
+    result = validate_text(COLON.replace("    text: Built a thing.", "    priority: soon\n    text: x."))
+    generic = [i for i in result.errors if "colon" not in i.message][0]
+    assert "priority" in generic.message and "integer" in generic.message
+    # The line it points at is the one with the bad value on it.
+    assert COLON.replace("    text: Built a thing.", "    priority: soon\n    text: x.").split(
+        "\n"
+    )[generic.line - 1].strip() == "priority: soon"
