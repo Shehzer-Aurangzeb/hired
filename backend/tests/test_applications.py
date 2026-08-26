@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
-from app import auth
+from app import auth, main
 from app.db import get_session
 from app.settings import Settings
 from app.tables import Application
@@ -248,3 +248,28 @@ def test_where_you_found_it_is_kept(client):
     ).json()
     assert (body["source"], body["url"]) == ("LinkedIn", "https://example.com/jobs/1")
     assert client.get(f"/api/applications/{body['id']}").json()["url"] == body["url"]
+
+
+# ---------- serving the built front end ----------
+#
+# Only runs when a build exists. The guard it checks is the reason the route is
+# hand-written rather than a bare StaticFiles mount.
+
+
+@pytest.mark.skipif(not main.BUNDLE.is_dir(), reason="no frontend build to serve")
+class TestBundle:
+    def test_a_deep_link_reaches_the_router_not_a_404(self, client):
+        """The router is in the browser, so /applications has to serve index.html."""
+        response = client.get("/applications")
+        assert response.status_code == 200 and "<html" in response.text
+
+    def test_the_api_is_not_shadowed_by_the_catch_all(self, client):
+        assert client.get("/api/health").json() == {"status": "ok"}
+        client.post("/api/auth/logout")
+        assert client.get("/api/profile").status_code == 401
+
+    def test_a_path_climbing_out_of_the_bundle_gets_index_html(self, client):
+        """Without the containment check this is a file read of anything on disk."""
+        for attempt in ("../../backend/.env", "../../../etc/passwd", "..%2f..%2f.env"):
+            response = client.get(f"/{attempt}")
+            assert "HIRED_" not in response.text and "root:" not in response.text

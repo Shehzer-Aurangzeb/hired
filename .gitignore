@@ -13,3 +13,7 @@ backend/backups/
 # number and address in it. docs/ itself stays tracked, because two tests read
 # master_template.md and master_interview_prompt.md off disk.
 docs/cv/
+
+# The launcher writes these beside the backend.
+backend/.hired.pid
+backend/.hired.log

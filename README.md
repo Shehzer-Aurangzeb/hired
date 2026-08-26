@@ -40,15 +40,30 @@ payoff.
 ## Run
 
 ```bash
-# backend, port 8000
-cd backend
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/uvicorn app.main:app --reload
+hired          # start it and open the browser
+hired stop     # stop it
+hired log      # follow the log
+hired dev      # also start ng serve on 4200, for working on the front end
+```
 
-# frontend, port 4200
-cd frontend
-npm install
-npm start
+Install the command once, from anywhere afterwards:
+
+```bash
+ln -s "$PWD/bin/hired" ~/.local/bin/hired     # with ~/.local/bin on your PATH
+```
+
+`hired` runs the whole app as **one process on one port**: FastAPI serves the
+built Angular bundle, so there is no node running and no CORS. It rebuilds the
+front end only when `frontend/src` is newer than the bundle, waits for
+`/api/health` rather than guessing at a sleep, and binds to `127.0.0.1` so
+nothing else on the network can reach it. Starting it twice just opens the tab.
+
+To run the two servers separately while working on the front end, use
+`hired dev`, or by hand:
+
+```bash
+cd backend  && .venv/bin/uvicorn app.main:app --reload   # port 8000
+cd frontend && npm install && npm start                  # port 4200, proxied to 8000
 ```
 
 Copy `backend/.env.example` to `backend/.env` first: `HIRED_SECRET_KEY` has no

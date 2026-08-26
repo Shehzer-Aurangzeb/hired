@@ -1,6 +1,9 @@
-// ponytail: no environment files. v1 is localhost only, and the backend already
-// allows CORS from 4200, so there is no proxy.conf either.
-export const API = 'http://localhost:8000';
+// Same origin, always. In normal use FastAPI serves this bundle itself, so
+// there is one port and no CORS; under `ng serve` proxy.conf.json forwards /api
+// to the backend so the same relative URL keeps working.
+//
+// ponytail: no environment files. One constant beats a build-time swap.
+export const API = '';
 
 /**
  * Cap on an uploaded profile, enforced before the bytes leave the browser.

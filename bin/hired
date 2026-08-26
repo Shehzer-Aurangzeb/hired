@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+#
+# Start hired and open it. Run from anywhere.
+#
+#   hired            start it, or focus it if it is already running
+#   hired stop       stop it
+#   hired log        follow the log
+#   hired dev        ng serve on 4200 as well, for working on the frontend
+#
+# One process: FastAPI serves the built Angular bundle, so there is one port,
+# no CORS, and no node running at all in normal use.
+#
+# It binds to 127.0.0.1 only. Nothing on your network can reach it, which is
+# the point: the whole database is your profile and every CV you have sent.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$(readlink "${BASH_SOURCE[0]}" || echo "${BASH_SOURCE[0]}")")/.." && pwd)"
+BACKEND="$ROOT/backend"
+BUNDLE="$ROOT/frontend/dist/hired/browser"
+PORT="${HIRED_PORT:-8000}"
+URL="http://127.0.0.1:$PORT"
+PIDFILE="$BACKEND/.hired.pid"
+LOGFILE="$BACKEND/.hired.log"
+
+running() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
+
+stop() {
+  if running; then
+    kill "$(cat "$PIDFILE")" 2>/dev/null || true
+    # Give uvicorn a moment to close the database before anyone reopens it.
+    for _ in $(seq 20); do running || break; sleep 0.1; done
+    running && kill -9 "$(cat "$PIDFILE")" 2>/dev/null || true
+  fi
+  rm -f "$PIDFILE"
+}
+
+case "${1:-start}" in
+  stop) stop; echo "stopped"; exit 0 ;;
+  log)  exec tail -f "$LOGFILE" ;;
+  dev)  DEV=1 ;;
+  start) DEV= ;;
+  *) echo "usage: hired [start|stop|log|dev]" >&2; exit 2 ;;
+esac
+
+if running; then
+  echo "already running on $URL"
+  open "$URL" 2>/dev/null || true
+  exit 0
+fi
+rm -f "$PIDFILE"
+
+# The secret and the password hash live in .env, never in the shell or in
+# your history. No .env means no session signing key, and the app refuses to
+# start rather than inventing one.
+[ -f "$BACKEND/.env" ] || { echo "No .env at $BACKEND. Copy .env.example and fill it in." >&2; exit 1; }
+
+# Rebuild only when the sources are newer than the bundle. A no-op start
+# should not cost an Angular build.
+if [ ! -f "$BUNDLE/index.html" ] || [ -n "$(find "$ROOT/frontend/src" -newer "$BUNDLE/index.html" -print -quit)" ]; then
+  echo "building the front end..."
+  (cd "$ROOT/frontend" && npx ng build --configuration production >/dev/null)
+fi
+
+cd "$BACKEND"
+: > "$LOGFILE"
+.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port "$PORT" >>"$LOGFILE" 2>&1 &
+echo $! > "$PIDFILE"
+
+# Wait for it to answer rather than guessing at a sleep. /api/health needs no
+# session, which is exactly what it is for.
+for _ in $(seq 100); do
+  if curl -fsS --max-time 1 "$URL/api/health" >/dev/null 2>&1; then
+    open "$URL" 2>/dev/null || true
+    echo "hired is up on $URL   (hired stop | hired log)"
+    [ -n "$DEV" ] && (cd "$ROOT/frontend" && exec npx ng serve --open)
+    exit 0
+  fi
+  running || { echo "it died on startup:" >&2; tail -20 "$LOGFILE" >&2; exit 1; }
+  sleep 0.1
+done
+
+echo "did not come up in 10s:" >&2; tail -20 "$LOGFILE" >&2; stop; exit 1

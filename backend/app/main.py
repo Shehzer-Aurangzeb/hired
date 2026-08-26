@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from sqlmodel import select
 from starlette.middleware.sessions import SessionMiddleware
@@ -189,3 +191,33 @@ api.include_router(generate.router)
 
 app.include_router(auth.router)
 app.include_router(api)
+
+
+# ---------- the front end ----------
+#
+# Serving the built bundle from here makes the whole app one process on one
+# port. That is not just convenience: the session is a cookie, and a cookie
+# shared across two origins has to be SameSite=None, which Safari and Brave
+# refuse outright. Same origin keeps it Lax and keeps it working.
+#
+# Mounted last so it can never shadow /api, and skipped entirely when there is
+# no build, so `ng serve` and the tests are unaffected.
+
+BUNDLE = Path(__file__).resolve().parents[2] / "frontend/dist/hired/browser"
+
+if BUNDLE.is_dir():
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def spa(path: str) -> FileResponse:
+        """
+        Any path that is not a real file is index.html: the router is in the
+        browser, so a deep link and a refresh have to reach it rather than 404.
+        """
+        candidate = (BUNDLE / path).resolve()
+        # A path is only served if it stays inside the bundle. Without this,
+        # /../../.env is a file read.
+        if path and candidate.is_file() and candidate.is_relative_to(BUNDLE):
+            return FileResponse(candidate)
+        return FileResponse(BUNDLE / "index.html")
+
+    app.mount("/", StaticFiles(directory=BUNDLE), name="bundle")
