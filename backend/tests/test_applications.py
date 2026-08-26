@@ -226,3 +226,25 @@ def test_deleting_an_application_takes_its_pdf_with_it(client):
 
 def test_deleting_something_that_is_not_there(client):
     assert client.delete("/api/applications/999").status_code == 404
+
+
+def test_health_needs_no_session():
+    """A platform health check has no cookie, and a 401 reads as a dead container."""
+    from app.main import app
+
+    with TestClient(app) as anyone:
+        response = anyone.get("/api/health")
+    assert response.status_code == 200 and response.json() == {"status": "ok"}
+
+
+def test_where_you_found_it_is_kept(client):
+    body = client.post(
+        "/api/applications",
+        json={
+            "company": "Acme", "role": "Dev", "jd_text": "x" * 100,
+            "fit_score": 7, "source": "LinkedIn",
+            "url": "https://example.com/jobs/1",
+        },
+    ).json()
+    assert (body["source"], body["url"]) == ("LinkedIn", "https://example.com/jobs/1")
+    assert client.get(f"/api/applications/{body['id']}").json()["url"] == body["url"]

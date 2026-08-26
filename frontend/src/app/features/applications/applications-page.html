@@ -42,6 +42,62 @@
     </label>
   </header>
 
+  <!-- ---------- today ----------
+       Its own strip above the stats, because it is the only number here that
+       asks you to do something rather than reporting what already happened. -->
+  <section class="card mb-2 p-3.5" aria-labelledby="today-heading">
+    <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+      <h2 class="section-title" id="today-heading">Today</h2>
+      <p class="ml-auto text-[13px]">
+        <span
+          class="text-lg font-semibold tabular"
+          [class]="hitTarget() ? 'text-accent' : 'text-fg'"
+          >{{ today() }}</span
+        >
+        <span class="text-fg-subtle"> of </span>
+        <label class="text-fg-subtle">
+          <span class="sr-only">Daily target</span>
+          <input
+            type="number"
+            min="1"
+            max="50"
+            class="tabular border-line-strong bg-surface focus:border-ink w-11 rounded border px-1 py-0.5 text-center text-[13px] outline-none"
+            [value]="target()"
+            (change)="setTarget($any($event.target).valueAsNumber)"
+          />
+        </label>
+        <span class="text-fg-subtle"> sent</span>
+      </p>
+    </div>
+
+    <div
+      class="bg-surface border-line mt-2.5 h-1.5 overflow-hidden rounded-full border"
+      role="progressbar"
+      [attr.aria-valuenow]="today()"
+      aria-valuemin="0"
+      [attr.aria-valuemax]="target()"
+      [attr.aria-label]="'Applications sent today, against a target of ' + target()"
+    >
+      <div
+        class="h-full transition-[width] duration-300"
+        [class]="hitTarget() ? 'bg-accent' : 'bg-ink'"
+        [style.width.%]="targetPercent()"
+      ></div>
+    </div>
+
+    <p class="text-fg-subtle mt-2 text-[11px]">
+      @if (hitTarget()) {
+        Target met. Anything past this is a bonus, not a debt.
+      } @else if (today()) {
+        {{ target() - today() }} to go. Counted when a row reaches a sent status, not when
+        you save the posting.
+      } @else {
+        Nothing sent yet today. Counted when a row reaches a sent status, not when you save
+        the posting.
+      }
+    </p>
+  </section>
+
   <!-- ---------- headline numbers ---------- -->
   <div class="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
     <div class="stat-lg">

@@ -163,8 +163,38 @@
             </p>
             <p class="stat-label">Fit</p>
           </div>
-          <p class="text-[13px] leading-relaxed">{{ scored.fit.reasoning }}</p>
+          <div>
+            <!-- The verdict is the score on the bands the prompt scores against.
+                 A word decides faster than a number does. -->
+            <p class="chip mb-1.5 font-semibold" [class]="verdictClass(scored.fit.score)">
+              {{ verdict(scored.fit.score) }}
+            </p>
+            <p class="text-[13px] leading-relaxed">{{ scored.fit.reasoning }}</p>
+          </div>
         </div>
+
+        @if (scored.seen.length) {
+          <!-- You have been here before. Not a block: a second role at a company
+               that liked you is a good idea, and a second at one that rejected
+               you is a decision worth making on purpose. -->
+          <div class="border-line bg-warn-soft/40 border-t p-4">
+            <p class="text-warn mb-1.5 flex items-center gap-1.5 text-[11px] font-medium tracking-wide uppercase">
+              <app-icon name="alert" [size]="12" />
+              Already on file at {{ scored.parsed_jd.company }} · {{ scored.seen.length }}
+            </p>
+            <ul class="flex flex-col gap-1">
+              @for (prior of scored.seen; track prior.id) {
+                <li class="flex flex-wrap items-baseline gap-x-2 text-[12px]">
+                  <a class="link font-medium" [routerLink]="['/applications', prior.id]">
+                    {{ prior.role }}
+                  </a>
+                  <span class="chip" [class]="statusClass(prior.status)">{{ prior.status }}</span>
+                  <span class="text-fg-subtle">{{ ago(prior.applied_at ?? prior.created_at) }}</span>
+                </li>
+              }
+            </ul>
+          </div>
+        }
 
         @if (scored.fit.gaps.length) {
           <div class="border-line border-t p-4">
@@ -199,9 +229,38 @@
         }
       </section>
 
+      <!-- Asked here because this is the last moment the posting's tab is still
+           open. Both travel with either save. -->
+      <div class="mt-3 flex flex-wrap items-end gap-2">
+        <div>
+          <label class="label" for="src">Found on</label>
+          <select
+            id="src"
+            class="field cursor-pointer !w-auto"
+            [value]="source()"
+            (change)="setSource($any($event.target).value)"
+          >
+            @for (option of sources; track option) {
+              <option [value]="option">{{ option }}</option>
+            }
+          </select>
+        </div>
+        <div class="min-w-[16rem] flex-1">
+          <label class="label" for="url">Posting URL <span class="text-fg-subtle">optional</span></label>
+          <input
+            id="url"
+            type="url"
+            class="field"
+            placeholder="https://…"
+            [value]="url()"
+            (input)="url.set($any($event.target).value)"
+          />
+        </div>
+      </div>
+
       <!-- Discard is not a button. It is closing the tab, and it costs nothing
            because nothing has been written yet. -->
-      <div class="mt-4 flex flex-wrap items-center gap-2">
+      <div class="mt-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
           class="btn btn-primary"

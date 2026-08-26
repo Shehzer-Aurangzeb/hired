@@ -13,13 +13,14 @@ import json
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlmodel import select
 
 from .db import SessionDep
 from .model import generate_json
 from .models import Fit, ParsedJd, Profile
 from .profile_parser import parse_text
-from .tables import ProfileSource
+from .tables import Application, ProfileSource, stamp
 
 router = APIRouter(tags=["fit"])
 
@@ -28,9 +29,23 @@ class FitRequest(BaseModel):
     jd_text: str
 
 
+class PriorApplication(BaseModel):
+    """A row already on file for this employer."""
+
+    id: int
+    role: str
+    status: str
+    created_at: str
+    applied_at: str | None = None
+
+
 class FitResponse(BaseModel):
     parsed_jd: ParsedJd
     fit: Fit
+    # Anything already on file for this employer. Applying twice to the same
+    # company without knowing is the one mistake this app can actually prevent,
+    # and it costs a single indexed lookup on a name the model just gave us.
+    seen: list[PriorApplication] = []
 
 
 # What Google is told to return. Kept beside the prompt, because changing one
@@ -141,8 +156,10 @@ def check_fit(body: FitRequest, session: SessionDep) -> FitResponse:
     )
     answer = generate_json(prompt, SCHEMA)
 
+    parsed_jd = ParsedJd.model_validate(answer.get("parsed_jd") or {})
     return FitResponse(
-        parsed_jd=ParsedJd.model_validate(answer.get("parsed_jd") or {}),
+        parsed_jd=parsed_jd,
+        seen=_seen(session, parsed_jd.company),
         fit=Fit(
             # Clamped rather than trusted. The schema asks for 1 to 10 and Gemini
             # has handed back 55 for the same request shape, and a score outside
@@ -152,6 +169,37 @@ def check_fit(body: FitRequest, session: SessionDep) -> FitResponse:
             gaps=[str(gap) for gap in answer.get("gaps") or []],
         ),
     )
+
+
+def _seen(session: SessionDep, company: str) -> list[PriorApplication]:
+    """
+    Every row already filed under this employer, newest first.
+
+    ponytail: an exact case-insensitive name match. "Shopify" and "Shopify Inc."
+    read as two employers, which is the safe direction to be wrong in: a missed
+    warning costs a duplicate application, a false one costs trust in the
+    warning. Fuzzy matching if the same company starts showing up spelled two
+    ways.
+    """
+    name = (company or "").strip()
+    if not name:
+        return []
+    rows = session.exec(
+        select(Application)
+        .where(func.lower(Application.company) == name.lower())
+        .order_by(Application.created_at.desc())
+        .limit(5)
+    ).all()
+    return [
+        PriorApplication(
+            id=row.id,
+            role=row.role,
+            status=row.status,
+            created_at=stamp(row.created_at) or "",
+            applied_at=stamp(row.applied_at),
+        )
+        for row in rows
+    ]
 
 
 def context(profile: Profile) -> dict:

@@ -47,6 +47,17 @@ app.add_middleware(
 )
 
 
+@app.get("/api/health")
+def health() -> dict[str, str]:
+    """
+    Is the process up. Deliberately on `app` rather than the protected router,
+    because a platform health check has no session and a 401 would read as a
+    dead container. It touches nothing: a database check here would take the
+    service down for a problem it cannot fix by restarting.
+    """
+    return {"status": "ok"}
+
+
 # One dependency on the router rather than one per route: a route added later
 # cannot forget to be protected, because there is nowhere unprotected to put it.
 api = APIRouter(prefix="/api", dependencies=[Depends(auth.require_session)])

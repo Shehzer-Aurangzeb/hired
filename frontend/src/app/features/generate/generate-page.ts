@@ -9,11 +9,13 @@ import {
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { of, switchMap, tap, finalize, catchError, debounceTime } from 'rxjs';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 import { GenerateService } from '../../core/generate.service';
 import { Coverage, computeCoverage } from '../../core/coverage';
+import { verdict, verdictClass, statusClass } from '../../core/pipeline';
+import { ago } from '../../core/dates';
 import { ApplicationsService } from '../../core/applications.service';
 import { CvSection, GeneratedCv } from '../../core/models';
 import { ProfileService } from '../../core/profile.service';
@@ -27,7 +29,7 @@ const PAGE_BUDGET = 3000;
 @Component({
   selector: 'app-generate-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, BulletSelector, Icon],
+  imports: [ReactiveFormsModule, BulletSelector, Icon, RouterLink],
   templateUrl: './generate-page.html',
 })
 export class GeneratePage {
@@ -300,6 +302,27 @@ export class GeneratePage {
       .subscribe({ error: () => {} });
   }
 
+  /**
+   * Where the posting came from. Fixed list rather than free text, because the
+   * whole point is grouping reply rate by it later, and "LinkedIn" typed three
+   * ways is three sources.
+   */
+  readonly sources = ['LinkedIn', 'Indeed', 'Company website', 'Job Bank', 'Wellfound', 'Referral', 'Other'];
+
+  // Asked for on the decide screen, which is the only moment the tab is still
+  // open. Remembered across postings: you tend to work one board at a time.
+  readonly source = signal(localStorage.getItem('hired.last-source') ?? 'LinkedIn');
+  readonly url = signal('');
+
+  setSource(value: string): void {
+    this.source.set(value);
+    try {
+      localStorage.setItem('hired.last-source', value);
+    } catch {
+      // Not worth failing a save over a remembered dropdown.
+    }
+  }
+
   private save(status: 'saved' | 'skipped') {
     const fit = this.gen.fit();
     this.gen.saving.set(true);
@@ -307,6 +330,8 @@ export class GeneratePage {
       .create({
         company: fit?.parsed_jd.company || 'Unknown',
         role: fit?.parsed_jd.role || 'Unknown',
+        source: this.source(),
+        url: this.url().trim() || null,
         jd_text: this.gen.jdText(),
         jd_parsed: fit?.parsed_jd,
         fit_score: fit?.fit.score ?? 0,
@@ -377,6 +402,11 @@ export class GeneratePage {
     this.editing.set(false);
     this.exported.set(false);
   }
+
+  readonly verdict = verdict;
+  readonly statusClass = statusClass;
+  readonly ago = ago;
+  readonly verdictClass = verdictClass;
 
   scoreTone(score: number): string {
     if (score >= 8) return 'text-accent';

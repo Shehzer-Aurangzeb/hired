@@ -368,6 +368,20 @@
           }
         </span>
       </header>
+      @if (application.source || application.url) {
+        <p class="border-line flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-3.5 py-2 text-[12px]">
+          @if (application.source) {
+            <span class="chip">{{ application.source }}</span>
+          }
+          @if (application.url) {
+            <!-- The posting itself is usually gone by now; the text below is the
+                 copy that survives. This is here for the week it still works. -->
+            <a class="link truncate" [href]="application.url" target="_blank" rel="noopener noreferrer">
+              {{ application.url }}
+            </a>
+          }
+        </p>
+      }
       <pre class="text-fg-muted max-h-96 overflow-y-auto p-3.5 text-[12px] leading-relaxed whitespace-pre-wrap">{{ application.jd_text }}</pre>
     </section>
 

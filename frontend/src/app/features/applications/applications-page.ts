@@ -87,6 +87,58 @@ export class ApplicationsPage {
   readonly total = computed(() => (this.rows() ?? []).length);
   readonly sent = computed(() => (this.rows() ?? []).filter(isSent).length);
 
+  // ---------- the daily target ----------
+  //
+  // ponytail: the number lives in localStorage, not the database. It is a
+  // preference rather than a record: losing it costs nothing, and it does not
+  // belong in the file you back up to keep your application history.
+
+  private static readonly KEY = 'hired.daily-target';
+
+  readonly target = signal(ApplicationsPage.readTarget());
+
+  private static readTarget(): number {
+    try {
+      const saved = Number(localStorage.getItem(ApplicationsPage.KEY));
+      return saved >= 1 && saved <= 50 ? Math.round(saved) : 3;
+    } catch {
+      // Private windows and blocked site data both throw on access.
+      return 3;
+    }
+  }
+
+  setTarget(value: number): void {
+    const target = Math.min(50, Math.max(1, Math.round(value || 0)));
+    this.target.set(target);
+    try {
+      localStorage.setItem(ApplicationsPage.KEY, String(target));
+    } catch {
+      // The number still works for this session; it just will not persist.
+    }
+  }
+
+  /**
+   * Applications sent today, in your timezone.
+   *
+   * applied_at is stamped the first time a row reaches a sent status, so this
+   * counts the act of applying rather than the act of saving a posting. Saving
+   * ten tabs is not a day's work.
+   */
+  readonly today = computed(() => {
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    return (this.rows() ?? []).filter(
+      (a) => a.applied_at && new Date(a.applied_at) >= midnight,
+    ).length;
+  });
+
+  readonly hitTarget = computed(() => this.today() >= this.target());
+
+  /** Capped at 100 so overshooting does not overflow the bar. */
+  readonly targetPercent = computed(() =>
+    Math.min(100, Math.round((this.today() / this.target()) * 100)),
+  );
+
   /** Of everything actually sent, how much came back. */
   readonly replyRate = computed(() => {
     const sent = this.sent();

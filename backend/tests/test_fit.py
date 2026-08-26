@@ -207,3 +207,65 @@ def test_the_client_refuses_before_it_calls(monkeypatch):
     with pytest.raises(HTTPException) as error:
         model.generate_json("anything", {})
     assert error.value.status_code == 503
+
+
+# ---------- applying twice to the same employer ----------
+#
+# The one mistake this app is placed to catch: the company name comes back from
+# the parse, so the lookup is free and lands exactly where the decision is made.
+
+
+def _file(client, company, role="Front-End Developer", status="applied"):
+    with Session(client.engine) as session:
+        session.add(
+            Application(
+                company=company, role=role, jd_text=JD, jd_parsed={},
+                fit_score=7, fit_reasoning="", status=status,
+            )
+        )
+        session.commit()
+
+
+def test_a_first_look_at_a_company_reports_nothing_seen(client, monkeypatch):
+    save_profile(client)
+    answers(monkeypatch, ANSWER)
+    assert client.post("/api/fit", json={"jd_text": JD}).json()["seen"] == []
+
+
+def test_an_earlier_application_to_the_same_company_comes_back(client, monkeypatch):
+    save_profile(client)
+    answers(monkeypatch, ANSWER)
+    _file(client, "Acme", role="Backend Developer", status="rejected")
+
+    seen = client.post("/api/fit", json={"jd_text": JD}).json()["seen"]
+    assert [(s["role"], s["status"]) for s in seen] == [("Backend Developer", "rejected")]
+
+
+def test_the_match_ignores_case_and_surrounding_space(client, monkeypatch):
+    save_profile(client)
+    answers(monkeypatch, {**ANSWER, "parsed_jd": {**ANSWER["parsed_jd"], "company": "  acme "}})
+    _file(client, "ACME")
+    assert len(client.post("/api/fit", json={"jd_text": JD}).json()["seen"]) == 1
+
+
+def test_a_different_company_is_not_a_duplicate(client, monkeypatch):
+    save_profile(client)
+    answers(monkeypatch, ANSWER)
+    _file(client, "Acme Corp")  # ponytail: exact match, so this is deliberately missed
+    assert client.post("/api/fit", json={"jd_text": JD}).json()["seen"] == []
+
+
+def test_an_unnamed_company_does_not_match_every_blank_row(client, monkeypatch):
+    save_profile(client)
+    answers(monkeypatch, {**ANSWER, "parsed_jd": {**ANSWER["parsed_jd"], "company": ""}})
+    _file(client, "")
+    assert client.post("/api/fit", json={"jd_text": JD}).json()["seen"] == []
+
+
+def test_the_fit_check_still_writes_nothing(client, monkeypatch):
+    """The lookup reads. Saving stays a separate decision."""
+    save_profile(client)
+    answers(monkeypatch, ANSWER)
+    client.post("/api/fit", json={"jd_text": JD})
+    with Session(client.engine) as session:
+        assert session.exec(select(Application)).all() == []

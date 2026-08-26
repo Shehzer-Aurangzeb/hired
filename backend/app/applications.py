@@ -28,6 +28,7 @@ class ApplicationIn(BaseModel):
     company: str
     role: str
     source: str | None = None
+    url: str | None = None
 
     jd_text: str
     jd_parsed: ParsedJd = ParsedJd()
@@ -56,6 +57,7 @@ class ApplicationOut(BaseModel):
     company: str
     role: str
     source: str | None
+    url: str | None
 
     jd_text: str
     jd_parsed: ParsedJd

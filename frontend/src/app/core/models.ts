@@ -346,9 +346,19 @@ export interface Flag {
 }
 
 /** POST /api/fit. Runs before anything is saved and writes nothing. */
+/** A row already on file for the same employer. */
+export interface PriorApplication {
+  id: number;
+  role: string;
+  status: ApplicationStatus;
+  created_at: string;
+  applied_at: string | null;
+}
+
 export interface FitResponse {
   parsed_jd: ParsedJd;
   fit: Fit;
+  seen: PriorApplication[];
 }
 
 /** POST /api/generate. The posting was already read by the fit check. */
@@ -409,6 +419,7 @@ export interface Application {
   company: string;
   role: string;
   source: string | null;
+  url: string | null;
   jd_text: string;
   jd_parsed: ParsedJd;
   fit_score: number;

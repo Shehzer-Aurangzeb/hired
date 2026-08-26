@@ -15,13 +15,14 @@ from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
-from app import auth, generate, render
+from app import auth, generate, model, render
 from app.db import get_session
 from app.models import CvSection, GeneratedCv, ParsedJd, RequiredSkill, SelectedBullet
 from app.render import render_html
 from app.profile_parser import parse_text
 from app.profile_template import DEFAULT_TEMPLATE
 from app.settings import Settings
+from fastapi import HTTPException
 from app.tables import ProfileSource
 
 PASSWORD = "correct horse battery staple"
@@ -831,3 +832,57 @@ def test_linkify_escapes_the_label_it_did_not_link():
 
     html, _ = render._linkify("Tools & <toys>", [Link(label="Tools", url="x.com")])
     assert "&amp;" in html and "&lt;toys&gt;" in html
+
+
+# ---------- when the model answers badly ----------
+#
+# Every one of these is a 502 with a sentence, not a traceback and not a
+# half-built CV. The selector cannot be trusted to answer well; it can only be
+# stopped from answering destructively.
+
+
+def _reply(monkeypatch, payload):
+    """A Gemini response envelope holding whatever text is given."""
+
+    class Fake:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return payload
+
+    monkeypatch.setattr(model, "get_settings", lambda: Settings(secret_key="t", gemini_api_key="k"))
+    monkeypatch.setattr(model.httpx, "post", lambda *a, **k: Fake())
+
+
+def _wrapped(text: str) -> dict:
+    return {"candidates": [{"content": {"parts": [{"text": text}]}}]}
+
+
+def test_prose_where_json_was_asked_for_is_a_502(monkeypatch):
+    _reply(monkeypatch, _wrapped("Sure! Here is your CV: ..."))
+    with pytest.raises(HTTPException) as caught:
+        model.generate_json("p", generate.SCHEMA)
+    assert caught.value.status_code == 502 and "unreadable" in caught.value.detail
+
+
+def test_truncated_json_is_a_502(monkeypatch):
+    _reply(monkeypatch, _wrapped('{"title_id": "frontend", "sections": ['))
+    with pytest.raises(HTTPException) as caught:
+        model.generate_json("p", generate.SCHEMA)
+    assert caught.value.status_code == 502
+
+
+def test_a_blocked_or_empty_answer_says_so(monkeypatch):
+    """No candidates is a safety block, not a parse problem, and reads that way."""
+    _reply(monkeypatch, {"candidates": []})
+    with pytest.raises(HTTPException) as caught:
+        model.generate_json("p", generate.SCHEMA)
+    assert caught.value.status_code == 502 and "blocked" in caught.value.detail
+
+
+def test_a_shape_we_did_not_expect_is_a_502_not_a_keyerror(monkeypatch):
+    _reply(monkeypatch, {"candidates": [{"content": {}}]})
+    with pytest.raises(HTTPException) as caught:
+        model.generate_json("p", generate.SCHEMA)
+    assert caught.value.status_code == 502

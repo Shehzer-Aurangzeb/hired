@@ -63,7 +63,12 @@ class Application(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     company: str
     role: str
+    # Where you found it, and where it lived. The URL is kept because a posting
+    # is taken down the week after you apply, and an interview three weeks later
+    # is the moment you want to reread it. jd_text below is the actual snapshot;
+    # this is just the address it came from.
     source: str | None = None
+    url: str | None = None
 
     jd_text: str
     jd_parsed: dict = Field(default_factory=dict, sa_column=Column(JSON))

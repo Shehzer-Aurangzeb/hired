@@ -103,3 +103,21 @@ export function scoreTone(score: number): string {
   if (score >= 6) return 'text-warn';
   return 'text-danger';
 }
+
+/**
+ * The score as a verdict, on the bands the scoring prompt itself defines:
+ * 7-10 is a good fit, 4-6 is real overlap with a gap, 1-3 is a different
+ * discipline. Derived rather than asked for, because a threshold is not worth
+ * a model call and a stored answer would go stale the moment the profile does.
+ */
+export function verdict(score: number): 'Apply' | 'Consider' | 'Skip' {
+  if (score >= 7) return 'Apply';
+  if (score >= 4) return 'Consider';
+  return 'Skip';
+}
+
+export function verdictClass(score: number): string {
+  if (score >= 7) return 'border-accent/50 bg-accent-soft text-accent';
+  if (score >= 4) return 'border-warn/50 bg-warn-soft text-warn';
+  return 'border-danger/50 bg-danger-soft text-danger';
+}
