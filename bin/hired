@@ -1,17 +1,7 @@
 #!/usr/bin/env bash
 #
-# Start hired and open it. Run from anywhere.
-#
-#   hired            start it, or focus it if it is already running
-#   hired stop       stop it
-#   hired log        follow the log
-#   hired dev        ng serve on 4200 as well, for working on the frontend
-#
-# One process: FastAPI serves the built Angular bundle, so there is one port,
-# no CORS, and no node running at all in normal use.
-#
-# It binds to 127.0.0.1 only. Nothing on your network can reach it, which is
-# the point: the whole database is your profile and every CV you have sent.
+# Start hired and open it. Run from anywhere. `hired help` lists the commands;
+# usage() below is the one copy of that list, so it cannot drift from the code.
 
 set -euo pipefail
 
@@ -35,12 +25,55 @@ stop() {
   rm -f "$PIDFILE"
 }
 
+usage() {
+  cat <<TXT
+hired — tailor a CV to a job posting, on your own machine.
+
+  hired            start it and open the browser
+                   (already running? just opens the tab)
+  hired stop       stop it
+  hired restart    stop, then start
+  hired status     is it up, and on what
+  hired log        follow the log, Ctrl-C to stop watching
+  hired dev        start it, then ng serve on 4200 for front-end work
+  hired backup     copy the database and profile into backend/backups
+  hired help       this
+
+How it runs
+  One process on one port: FastAPI serves the built Angular bundle, so
+  there is no separate front-end server and no CORS. The front end is
+  rebuilt only when frontend/src is newer than the last build.
+
+  It listens on 127.0.0.1 only, so nothing else on your network can
+  reach it. The database holds your profile and every CV you have sent.
+
+  Port $PORT, override with HIRED_PORT. Secrets come from
+  backend/.env and are never passed on the command line.
+
+  Repo   $ROOT
+  Log    $LOGFILE
+TXT
+}
+
+status() {
+  if running; then
+    echo "running on $URL   (pid $(cat "$PIDFILE"))"
+  else
+    echo "not running"
+  fi
+}
+
 case "${1:-start}" in
   stop) stop; echo "stopped"; exit 0 ;;
-  log)  exec tail -f "$LOGFILE" ;;
+  status) status; exit 0 ;;
+  log)  [ -f "$LOGFILE" ] || { echo "no log yet; start it first" >&2; exit 1; }
+        exec tail -f "$LOGFILE" ;;
+  backup) exec "$BACKEND/.venv/bin/python" "$BACKEND/tools/backup.py" ;;
+  help|-h|--help) usage; exit 0 ;;
+  restart) stop; DEV= ;;
   dev)  DEV=1 ;;
   start) DEV= ;;
-  *) echo "usage: hired [start|stop|log|dev]" >&2; exit 2 ;;
+  *) echo "hired: no such command '$1'" >&2; echo >&2; usage >&2; exit 2 ;;
 esac
 
 if running; then

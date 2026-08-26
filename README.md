@@ -41,10 +41,11 @@ payoff.
 
 ```bash
 hired          # start it and open the browser
-hired stop     # stop it
-hired log      # follow the log
-hired dev      # also start ng serve on 4200, for working on the front end
+hired help     # every command, and what it does
 ```
+
+`hired help` is the reference; `stop`, `restart`, `status`, `log`, `dev` and
+`backup` are the rest of it.
 
 Install the command once, from anywhere afterwards:
 
