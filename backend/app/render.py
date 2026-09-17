@@ -1,9 +1,6 @@
 """
-The CV, as HTML and then as a PDF.
-
-Jinja renders it and Chromium prints it, which means what you see in the preview
-is what comes out: one layout engine, not two. No model is anywhere near this
-step. The sentences were already chosen by the time anything gets here.
+The CV, as HTML and then as a PDF. Jinja renders it and Chromium prints it, so
+preview and print come off one layout engine. No model is near this step.
 """
 
 import base64
@@ -23,14 +20,13 @@ from .settings import get_settings
 
 TEMPLATES = Path(__file__).parent / "templates"
 
-# The page box, taken from the source document: 28.8pt top, 21.6pt bottom, 36pt
-# each side, on Letter. Chromium is told these directly rather than reading an
-# @page rule, so they live here and the template assumes them.
-# In inches, because page.pdf refuses points: 28.8pt, 21.6pt, 36pt.
-MARGIN = {"top": "0.4in", "bottom": "0.3in", "left": "0.5in", "right": "0.5in"}
+# A quarter inch every side, on Letter. Inches, because page.pdf refuses points.
+MARGIN_IN = 0.25
+MARGIN = {side: f"{MARGIN_IN}in" for side in ("top", "bottom", "left", "right")}
+CONTENT_WIDTH_PT = (8.5 - 2 * MARGIN_IN) * 72
 
 # Letter at 96dpi less the vertical margins, for the "did it fit" measurement.
-PAGE_HEIGHT = int((11 - (28.8 + 21.6) / 72) * 96)
+PAGE_HEIGHT = int((11 - 2 * MARGIN_IN) * 96)
 
 _env = Environment(
     loader=FileSystemLoader(TEMPLATES),
@@ -42,14 +38,7 @@ _env = Environment(
 
 @lru_cache(maxsize=1)
 def _font_css() -> str:
-    """
-    Inter, embedded rather than named.
-
-    A `font-family: Inter` that falls back to Helvetica on a machine without it
-    reflows the whole page, and the point of this template is that it comes out
-    the same everywhere. These are the four faces lifted out of the source
-    .docx, which is where the layout was measured from.
-    """
+    """Embedded, not named: a fallback to Helvetica would reflow the page."""
     faces = {
         "Inter-regular.ttf": ("normal", 400),
         "Inter-italic.ttf": ("italic", 400),
@@ -69,20 +58,12 @@ def _font_css() -> str:
 
 
 def _url(value: str) -> str:
-    """
-    Profiles are written "github.com/you", and a PDF reader hands a href with no
-    scheme to the operating system as a file path, which does nothing. Anything
-    that already carries a scheme, mailto: included, is left alone.
-    """
+    """Add https:// when absent. A PDF reader reads a bare host as a file path."""
     return value if re.match(r"^[a-z][a-z0-9+.-]*:", value or "", re.I) else f"https://{value}"
 
 
 def _month(value: str) -> str:
-    """
-    2024-11 -> Nov 2024, present -> Present. Profiles are written in sortable
-    dates because the validator orders employers by them; a CV is read by a
-    person. Anything that is not a YYYY-MM is passed through untouched.
-    """
+    """2024-11 to Nov 2024. Anything that is not a YYYY-MM passes through."""
     text = str(value or "").strip()
     match = re.fullmatch(r"(\d{4})-(\d{1,2})", text)
     if not match:
@@ -95,17 +76,10 @@ def _month(value: str) -> str:
 
 def _linkify(text: str, links) -> tuple[Markup, bool]:
     """
-    Hyperlink any of a project's link labels that its own description names.
+    Hyperlink any link label the description names, and say whether any matched,
+    since a label that absorbed them does not want them on the project name too.
 
-    A label reading "live on App Store + Play Store" comes out with both phrases
-    linked, so the wording lives in one place instead of being repeated as a row
-    of bare URLs after the name. Returns whether anything was linked, because a
-    label that absorbed the links does not also want them on the project name.
-
-    ponytail: a plain first-occurrence replace, longest label first so a longer
-    phrase is not eaten by a shorter one inside it. It would mangle a label whose
-    text repeats a link label inside another link's URL; none do, and the fix if
-    one ever does is to match on word boundaries.
+    ponytail: first-occurrence replace, longest label first.
     """
     out = escape(text or "")
     used = False
@@ -124,13 +98,7 @@ _env.filters["month"] = _month
 
 
 def render_html(profile: Profile, cv: GeneratedCv) -> str:
-    """
-    The selected bullets, put back under the employers they came from.
-
-    The selector answers in project ids and knows nothing about who you worked
-    for; that structure lives in the profile, so it is rejoined here rather than
-    asked for.
-    """
+    """Selected bullets, refiled under employers. The selector only knows ids."""
     placed = {section.project_id: section for section in cv.sections}
     employment = []
     for employer in profile.experience:
@@ -152,10 +120,7 @@ def render_html(profile: Profile, cv: GeneratedCv) -> str:
             )
     standalone = [placed[p.id] for p in profile.projects if p.id in placed]
 
-    # A project's own links live on the profile, not on the selector's answer, so
-    # they are resolved here. A label that names its links ("live on App Store +
-    # Play Store") gets those words linked; one that does not falls back to
-    # linking the project name, first link only.
+    # A label that names its links gets those words linked; otherwise the name.
     by_project = {p.id: p.links for p in profile.all_projects()}
     project_labels: dict[str, Markup] = {}
     project_links: dict[str, str] = {}
@@ -167,6 +132,7 @@ def render_html(profile: Profile, cv: GeneratedCv) -> str:
             project_links[section.project_id] = links[0].url
 
     return _env.get_template("cv.html").render(
+        content_width_pt=CONTENT_WIDTH_PT,
         font_css=_font_css(),
         identity=profile.identity,
         cv=cv,
@@ -174,22 +140,13 @@ def render_html(profile: Profile, cv: GeneratedCv) -> str:
         standalone=standalone,
         project_links=project_links,
         project_labels=project_labels,
-        # Certifications are deliberately not passed: they live in the profile
-        # so the fit check knows the skills are there, and they have never been
-        # on this CV.
         education=sorted(profile.education, key=lambda e: e.priority),
     )
 
 
 @contextmanager
 def measurer():
-    """
-    Yields html -> how many pages it comes to, on one browser.
-
-    The fill loop asks this several times per generation, and launching Chromium
-    per question costs more than the whole rest of the route. One page object,
-    reset by set_content, answers all of them.
-    """
+    """Yields html -> page count. One browser, because the fill loop asks often."""
     from playwright.sync_api import sync_playwright
 
     launch = {}
@@ -213,12 +170,8 @@ def measurer():
 
 def to_pdf(html: str) -> tuple[bytes, int]:
     """
-    Print it, and say how many pages it came to.
-
-    ponytail: the page count is measured height over page height rather than
-    read out of the PDF. Counting objects in the file means parsing it, and this
-    number only has to answer "did it fit", which is the question the budget loop
-    asks. Swap for pypdf the day the count needs to be exact.
+    ponytail: the page count is measured height over page height, not read out
+    of the PDF, since it only has to answer "did it fit".
     """
     from playwright.sync_api import Error, sync_playwright
 
@@ -243,9 +196,8 @@ def to_pdf(html: str) -> tuple[bytes, int]:
                 browser.close()
     except Error as error:
         detail = error.message.splitlines()[0]
-        # Only a launch failure has an install fix. Blaming a missing browser for
-        # every Playwright error sends the reader to the wrong place, which is
-        # worse than no advice: this message once hid a bad pdf() argument.
+        # Only a launch failure has an install fix. This message once hid a bad
+        # pdf() argument behind "run playwright install".
         if "executable doesn" in detail.lower() or "playwright install" in detail.lower():
             detail = f"{detail} Run `.venv/bin/playwright install chromium`."
         raise HTTPException(500, f"Could not print the PDF. {detail}") from error
@@ -254,18 +206,12 @@ def to_pdf(html: str) -> tuple[bytes, int]:
 
 
 def filename(name: str, company: str, role: str, when: date | None = None) -> str:
-    """
-    Shehzar_Abbasi_AirCanada_FrontEndDeveloper_2026-08-23.pdf
-
-    A recruiter's downloads folder is full of "resume.pdf", and the date is what
-    tells you which version they actually received.
-    """
+    """Shehzar_Abbasi_AirCanada_FrontEndDeveloper_2026-08-23.pdf"""
     stamp = (when or date.today()).isoformat()
     parts = [_squash(name), _squash(company), _squash(role), stamp]
     return "_".join(part for part in parts if part) + ".pdf"
 
 
 def _squash(text: str) -> str:
-    """Title-cased and stripped to what a filesystem and a header both accept."""
     words = re.findall(r"[A-Za-z0-9]+", text or "")
     return "".join(word[:1].upper() + word[1:] for word in words)

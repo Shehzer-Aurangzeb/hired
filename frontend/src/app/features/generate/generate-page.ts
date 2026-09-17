@@ -211,11 +211,12 @@ export class GeneratePage {
     return html ? this.sanitizer.bypassSecurityTrustHtml(html) : null;
   });
 
-  /** The margins page.pdf applies, as padding, so the sheet matches the print. */
-  readonly sheetPad = '0.4in 0.5in 0.3in';
+  /** The margins page.pdf applies, as padding, so the sheet matches the print.
+      Mirrors MARGIN in render.py; move one and move the other. */
+  readonly sheetPad = '0.25in';
 
-  /** 11in less the 0.4in and 0.3in margins, at 96dpi. One page of content. */
-  readonly PAGE = 989;
+  /** 11in less the two 0.25in margins, at 96dpi. One page of content. */
+  readonly PAGE = 1008;
 
   /**
    * The iframe is sized to its content, so a page and a bit shows as a page and

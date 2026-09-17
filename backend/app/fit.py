@@ -1,12 +1,6 @@
 """
-The fit check: paste a posting, find out whether it is worth your evening.
-
-This runs before anything is saved and before any CV exists, because the point
-is not to read the posting. It answers two questions in one model call: what the
-posting actually asks for, and how that lands against the profile.
-
-It writes nothing. Saving is a separate decision and a separate route, which is
-what makes "discard" free: you close the tab and no row exists.
+The fit check. One model call answers what the posting asks for and how that
+lands against the profile. Writes nothing, so discarding is free.
 """
 
 import json
@@ -30,8 +24,6 @@ class FitRequest(BaseModel):
 
 
 class PriorApplication(BaseModel):
-    """A row already on file for this employer."""
-
     id: int
     role: str
     status: str
@@ -42,14 +34,10 @@ class PriorApplication(BaseModel):
 class FitResponse(BaseModel):
     parsed_jd: ParsedJd
     fit: Fit
-    # Anything already on file for this employer. Applying twice to the same
-    # company without knowing is the one mistake this app can actually prevent,
-    # and it costs a single indexed lookup on a name the model just gave us.
+    # Applying twice is the one mistake this app can prevent, and it is a lookup.
     seen: list[PriorApplication] = []
 
 
-# What Google is told to return. Kept beside the prompt, because changing one
-# without the other is how a schema and its instructions drift apart.
 SCHEMA = {
     "type": "object",
     "properties": {
@@ -161,9 +149,8 @@ def check_fit(body: FitRequest, session: SessionDep) -> FitResponse:
         parsed_jd=parsed_jd,
         seen=_seen(session, parsed_jd.company),
         fit=Fit(
-            # Clamped rather than trusted. The schema asks for 1 to 10 and Gemini
-            # has handed back 55 for the same request shape, and a score outside
-            # the range renders as a broken meter rather than an error.
+            # Clamped, not trusted. The schema says 1 to 10 and a model has
+            # handed back 55, which renders as a broken meter.
             score=max(1, min(10, int(answer.get("score", 0)))),
             reasoning=str(answer.get("reasoning", "")),
             gaps=[str(gap) for gap in answer.get("gaps") or []],
@@ -173,13 +160,8 @@ def check_fit(body: FitRequest, session: SessionDep) -> FitResponse:
 
 def _seen(session: SessionDep, company: str) -> list[PriorApplication]:
     """
-    Every row already filed under this employer, newest first.
-
-    ponytail: an exact case-insensitive name match. "Shopify" and "Shopify Inc."
-    read as two employers, which is the safe direction to be wrong in: a missed
-    warning costs a duplicate application, a false one costs trust in the
-    warning. Fuzzy matching if the same company starts showing up spelled two
-    ways.
+    ponytail: exact case-insensitive match, so "Shopify Inc." reads as a
+    different employer. Missing a warning is safer than crying wolf.
     """
     name = (company or "").strip()
     if not name:
@@ -203,14 +185,7 @@ def _seen(session: SessionDep, company: str) -> list[PriorApplication]:
 
 
 def context(profile: Profile) -> dict:
-    """
-    The part of the profile that scoring needs, which is not all of it.
-
-    Bullet text is left out on purpose: nothing here decides what to print, and
-    sending the whole file would triple the prompt to no benefit. What goes in is
-    what the posting gets compared against, plus every constraint that could turn
-    an apparent match into a gap.
-    """
+    """What scoring needs. Bullet text is out: nothing here decides what prints."""
     return {
         "titles": [{"id": t.id, "use_when": t.use_when} for t in profile.titles],
         "skills": [

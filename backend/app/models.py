@@ -8,24 +8,12 @@ from pydantic import BaseModel, BeforeValidator, field_validator, model_validato
 # ponytail: YAML turns 2024-11-01 into a date object; coerce back to string.
 Str = Annotated[str, BeforeValidator(str)]
 
-# Documented in the template as "one of". Lowercased on the way in so a file
-# written with "Native" or "Full-Time" both stops warning and starts matching:
-# these are tokens the code branches on, not prose anybody reads.
+# Lowercased so "Native" and "native" both match. Code branches on these.
 Token = Annotated[str, BeforeValidator(lambda v: str(v).strip().lower() if v else "")]
 
 
 class Loose(BaseModel):
-    """
-    A base that reads a written-but-empty list as an empty list.
-
-        cannot_claim:
-        bullets:
-
-    YAML calls both of those None, and Pydantic calls None a type error, which
-    refuses the whole save. Mid-draft is not a reason to lose the file, and this
-    is the one place every model can inherit it from rather than each list field
-    carrying its own validator.
-    """
+    """Reads a written-but-empty list as [], which YAML hands over as None."""
 
     @model_validator(mode="before")
     @classmethod
@@ -44,15 +32,7 @@ class Loose(BaseModel):
 
 
 def _as_link(value: Any) -> Any:
-    """
-    People write links three ways and all three are unambiguous, so all three
-    parse:
-
-        - label: Repo
-          url: github.com/me/thing
-        - Repo: github.com/me/thing
-        - github.com/me/thing
-    """
+    """Accept a {label, url}, a one-key {label: url}, or a bare URL string."""
     if isinstance(value, str):
         host = urlparse(value if "//" in value else f"//{value}").netloc
         return {"label": host.removeprefix("www.") or value, "url": value}
@@ -78,8 +58,6 @@ class Meta(BaseModel):
 
 
 class Identity(Loose):
-    # Only the name is required. A profile missing a phone number is incomplete,
-    # not unparseable, and refusing to load it helps nobody.
     name: str
     location: str = ""
     email: str = ""
@@ -87,8 +65,6 @@ class Identity(Loose):
     linkedin: str = ""
     github: str = ""
     portfolio: str = ""
-    # Anything else in the header: Dribbble, Stack Overflow, a paper, a talk.
-    # A fixed field per site would need a code change per site.
     links: Links = []
     relocation: str = ""
     authorization: str = ""
@@ -97,7 +73,6 @@ class Identity(Loose):
 class Title(BaseModel):
     id: str
     text: str
-    # Not printed. It tells the selector which framing a posting calls for.
     use_when: str = ""
 
 
@@ -115,18 +90,13 @@ class SkillLine(Loose):
 
 
 class SkillEvidence(Loose):
-    """
-    Never printed. It is how "5+ years of React" gets answered from the file
-    rather than guessed, and how a gated skill gets refused when the project
-    that evidences it is not on the page.
-    """
+    """Never printed. Answers "5+ years of React" and gates unevidenced skills."""
 
     name: str
     years: float | None = None
     last_used: Str = ""
     level: Token = ""  # familiar | working | advanced | expert
     context: Token = ""  # professional | personal | academic
-    # Project ids, from Experience or Projects, that prove it.
     evidence: list[str] = []
     gated: bool = False
 
@@ -151,10 +121,8 @@ class Bullet(Loose):
     priority: int = 3
     tags: list[str] = []
     status: Token = "active"  # active | blocked
-    # An alternative wording for when the page is one line too long. Same claim.
     short: str = ""
     metric: Metric | None = None
-    # Why it is blocked. Without it nobody can act on it later, including you.
     blocked_reason: str = ""
 
 
@@ -163,24 +131,19 @@ class Project(Loose):
     name: str
     label: str = ""
     stack: list[str] = []
-    # Your actual scope, in the words you would use under questioning.
     my_role: str = ""
     status: Token = ""  # live | shipped | internal | pilot | sunset | abandoned
     domain: str = ""
     start: Str = ""
     end: Str = ""
-    # Not printed. The answer when an interviewer asks why this exists.
     why_built: str = ""
     priority: int = 3
     tags: list[str] = []
     disclosure: str = ""
-    # Whether the project gets its own bold lead-in on the page. False prints its
-    # bullets straight under the employer, which is how small pieces of client
-    # work read: naming each one is more words than the work is worth.
+    # False prints the bullets straight under the employer with no bold lead-in,
+    # which is how small pieces of client work read.
     named: bool = True
-    # True things you cannot evidence today. Each should have a blocked bullet.
     unverified: list[str] = []
-    # Repo, live demo, case study, app store listing.
     links: Links = []
     claim_boundary: ClaimBoundary = ClaimBoundary()
     bullets: list[Bullet] = []
@@ -200,11 +163,8 @@ class Experience(Loose):
     start: Str = ""
     end: Str = ""
     location: str = ""
-    # Printed only when it is not full-time: omitting a contract or a volunteer
-    # arrangement reads as a lie the moment somebody checks.
     employment_type: Token = ""
     context: str = ""
-    # What you may say about this employer in public. Not printed.
     disclosure: str = ""
     previous_roles: list[PreviousRole] = []
     priority: int = 3
@@ -218,8 +178,6 @@ class Education(Loose):
     location: str = ""
     start: Str = ""
     end: Str = ""
-    # Off the page by default, here so they can be switched on for a posting
-    # that asks. Usually a new-grad one.
     gpa: Str = ""
     coursework: list[str] = []
     notes: str = ""
@@ -256,15 +214,11 @@ class Award(BaseModel):
 class Language(BaseModel):
     name: str
     level: Token = ""  # native | fluent | professional | conversational | basic
-    # Where the level needs a caveat. Printed after the level when present.
     note: str = ""
 
 
 class Gap(BaseModel):
-    """
-    Never printed. The register of what you cannot do, so the selector reports
-    a gap instead of stretching a bullet to cover it.
-    """
+    """Never printed. What you cannot do, so the selector reports it as a gap."""
 
     skill: str
     status: Token = ""  # none | learning | personal-only | rusty
@@ -280,7 +234,6 @@ class Availability(Loose):
     earliest_start: Str = ""
     notice_period: str = ""
     employment_types: list[str] = []
-    # Free-shaped on purpose: currency, minimum, target, note, whatever else.
     compensation: dict = {}
     travel_ok: str = ""
     deal_breakers: list[str] = []
@@ -288,7 +241,7 @@ class Availability(Loose):
 
 
 class Rules(Loose):
-    """Never printed. Generation constraints that apply to every CV from this file."""
+    """Never printed. Generation limits applying to every CV from this file."""
 
     banned_words: list[str] = []
     banned_chars: list[str] = []
@@ -306,7 +259,6 @@ class Profile(Loose):
     skills: list[SkillLine] = []
     skill_evidence: list[SkillEvidence] = []
     experience: list[Experience] = []
-    # Work with no employer: personal builds, open source, academic.
     projects: list[Project] = []
     education: list[Education] = []
     certifications: list[Certification] = []
@@ -318,18 +270,12 @@ class Profile(Loose):
     rules: Rules = Rules()
 
     def all_projects(self) -> list[Project]:
-        """Every project, wherever it lives. Employment is not what makes one."""
         return [p for exp in self.experience for p in exp.projects] + self.projects
 
     @model_validator(mode="after")
     def unique_ids(self):
-        # A duplicate id means the selector can point at the wrong claim, and a
-        # duplicate project id means a section of the CV renders twice. Both are
-        # cheaper to catch here than to debug in a generated PDF.
-        #
-        # The project namespace spans Experience and Projects together: a bullet
-        # id resolves to one project, so the same id in both lists is ambiguous
-        # rather than merely repetitive.
+        # One namespace across Experience and Projects, because a bullet id has
+        # to resolve to exactly one project.
         bullets: set[str] = set()
         projects: set[str] = set()
         for proj in self.all_projects():
@@ -354,8 +300,6 @@ class ProfileIssue(BaseModel):
 
 
 class ProfileSummary(BaseModel):
-    # projects is what sits under an employer, which is what it has always
-    # meant. projects_total counts the standalone Projects section as well.
     projects: int
     projects_total: int = 0
     bullets: int
@@ -383,35 +327,23 @@ class RequiredSkill(BaseModel):
     @field_validator("importance")
     @classmethod
     def _one_to_three(cls, value: int) -> int:
-        # Clamped, not refused. Gemini answers 5 on this three-point scale often
-        # enough, and a tooltip reading "importance 5" is not worth a failed
-        # request. Every producer goes through here, so it is fixed once.
+        # Clamped, not refused: models answer 5 on this three-point scale.
         return max(1, min(3, value))
 
 
 class Fit(BaseModel):
-    """
-    How a posting lands against the profile. Never stored on its own: it either
-    becomes an Application row or the tab gets closed.
-    """
+    """How a posting lands. Never stored alone: it becomes a row or is closed."""
 
     score: int = 0
     reasoning: str = ""
-    # Each one a specific thing the posting requires and the profile does not
-    # evidence. The half of this app worth keeping when you do not apply.
     gaps: list[str] = []
 
 
 class SelectedBullet(BaseModel):
-    """
-    A bullet as it will print. `text` is copied from the profile, never composed:
-    the selector returns ids and this is assembled from them afterwards.
-    """
+    """A bullet as it will print. `text` is copied from the profile, not composed."""
 
     id: str
     text: str
-    # Which profile bullet it came from. Equal to id today, and kept separate
-    # because the short variant will eventually make them differ.
     source_id: str
     rephrased: bool = False
 
@@ -426,21 +358,14 @@ class CvSection(BaseModel):
     project_name: str
     label: str = ""
     stack: list[str] = []
-    # Carried from the profile so the page can print this project's bullets with
-    # no bold lead-in above them. See Project.named.
     named: bool = True
     bullets: list[SelectedBullet] = []
 
 
 class SkillCoverage(BaseModel):
     """
-    One thing the posting asked for, and the bullets on the page a person could
-    point at when an interviewer asks about it.
-
-    Judged by the selector, which has read both the posting and every bullet, and
-    then filtered down to ids that actually printed. An empty list is the useful
-    answer, not a failure: it says the posting wants something this page does not
-    show, which is exactly what you want to know before sending it.
+    One thing the posting asked for, and the printed bullets backing it. Empty
+    is the useful answer: the page does not show what the posting wants.
     """
 
     skill: str
@@ -463,13 +388,7 @@ class Flag(BaseModel):
 
 
 class ParsedJd(BaseModel):
-    """
-    What the JD parser pulls out, and what an application row stores.
-
-    Every field has a default so a sparse dict widens into a shape the UI can
-    render. Typed rather than left as a bare dict because the frontend contract
-    promises these arrays exist, and a missing one blanks the whole page.
-    """
+    """What the parse pulls out. All defaulted, so a sparse answer still renders."""
 
     company: str = ""
     role: str = ""

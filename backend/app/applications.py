@@ -1,9 +1,6 @@
 """
-The saved postings.
-
-Saving is its own decision, not a side effect of exporting a CV. A posting kept
-because the fit check exposed a gap you cannot close yet is worth as much as one
-you applied to, and it never had a PDF.
+The saved postings. Saving is its own decision, not a side effect of exporting:
+a posting kept for the gap it exposed never had a PDF.
 """
 
 import re
@@ -20,10 +17,7 @@ router = APIRouter(prefix="/applications", tags=["applications"])
 
 
 class ApplicationIn(BaseModel):
-    """
-    What the fit check produced, plus whatever the CV step added if it ran.
-    The PDF is never in here: export attaches it to a row that already exists.
-    """
+    """The fit check's output plus the CV step's. Export attaches the PDF later."""
 
     company: str
     role: str
@@ -47,11 +41,7 @@ class ApplicationIn(BaseModel):
 
 
 class ApplicationOut(BaseModel):
-    """
-    Everything except the PDF bytes, which would be a megabyte of base64 in a
-    list response. `has_pdf` is the flag the UI actually needs; the bytes come
-    from the /pdf route.
-    """
+    """Everything but the PDF bytes, which come from the /pdf route instead."""
 
     id: int
     company: str
@@ -90,11 +80,7 @@ class ApplicationOut(BaseModel):
 
 
 class ApplicationPatch(BaseModel):
-    """
-    Only these two. Everything else on the row is a record of what an employer
-    actually received, and an API that can rewrite it turns the archive into
-    fiction.
-    """
+    """Only these two. The rest records what was sent, and must stay true."""
 
     status: str | None = None
     notes: str | None = None
@@ -114,7 +100,6 @@ def _get(session: SessionDep, application_id: int) -> Application:
 
 @router.get("")
 def list_applications(session: SessionDep) -> list[ApplicationOut]:
-    # Sorted here rather than in the browser: the database already knows.
     rows = session.exec(select(Application).order_by(Application.created_at.desc())).all()
     return [ApplicationOut.of(row) for row in rows]
 
@@ -146,14 +131,12 @@ def patch_application(
     if "status" in changed and body.status is not None:
         _check_status(body.status)
         row.status = body.status
-        # Stamped once, the first time it goes out. Re-entering the pipeline
-        # later must not rewrite when the employer actually received it.
+        # Stamped once. Re-entering the pipeline must not move the real date.
         if body.status in SENT and row.applied_at is None:
             row.applied_at = now()
 
     if "notes" in changed:
-        # Explicit null clears them, which is why this reads fields_set rather
-        # than testing the value for None.
+        # fields_set, not a None test, so an explicit null clears the notes.
         row.notes = body.notes
 
     session.add(row)
@@ -164,11 +147,6 @@ def patch_application(
 
 @router.delete("/{application_id}", status_code=204)
 def delete_application(application_id: int, session: SessionDep) -> Response:
-    """
-    Gone, including the PDF, which is stored on the row and has no other copy.
-    The confirmation is the caller's job; by the time it reaches here the answer
-    is yes.
-    """
     session.delete(_get(session, application_id))
     session.commit()
     return Response(status_code=204)
@@ -182,7 +160,7 @@ def get_pdf(application_id: int, session: SessionDep) -> Response:
     return Response(
         content=row.pdf,
         media_type="application/pdf",
-        # inline so the in-app viewer renders it; the name still drives a download.
+        # inline so the in-app viewer renders it. The name still names a save.
         headers={"Content-Disposition": f'inline; filename="{_safe(row.filename)}"'},
     )
 

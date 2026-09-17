@@ -1,15 +1,12 @@
-"""The master profile markdown -> Profile.
+"""
+The master profile markdown -> Profile. Markdown headings wrapping YAML bodies,
+so the parser is a heading split plus yaml.safe_load.
 
-The document is markdown headings wrapping YAML bodies, so the parser is a
-heading split plus yaml.safe_load. No hand-rolled tokenizer.
+  # Section  -> a top-level section   ## Company -> an Experience entry
+  ### Project -> a Project inside that company
 
-  # Section        -> a top-level section, and only the known names below
-  ## Company       -> an Experience entry
-  ### Project      -> a Project inside that company
-
-Every failure raises ProfileError carrying the line in the file the person
-actually typed, because "line 62" is a fix and "mapping values are not allowed
-here" is a puzzle.
+Failures raise ProfileError with the line the person typed, because "line 62"
+is a fix and "mapping values are not allowed here" is not.
 """
 
 import difflib
@@ -21,9 +18,7 @@ from pydantic import ValidationError
 
 from .models import Profile, ProfileIssue, ProfileSummary, ValidationResult
 
-# The order is the emit order later, so it is the order the file should be
-# written in. "skill evidence" is two words because that is what the person
-# types; it becomes skill_evidence on the way into the model.
+# Also the emit order. Two words in "skill evidence" because that is typed.
 SECTIONS = (
     "meta",
     "identity",
@@ -43,7 +38,6 @@ SECTIONS = (
     "rules",
 )
 
-# Keyed by the normalized name. meta, availability and rules are mappings.
 _LIST_SECTIONS = (
     "titles",
     "summaries",
@@ -59,14 +53,7 @@ _LIST_SECTIONS = (
 
 
 class ProfileError(Exception):
-    """
-    A parse failure, with the file line that caused it when there is one.
-
-    `more` carries the rest when one parse produced several independent faults.
-    YAML itself is fail-fast, but the schema check is not: it sees every bad
-    field at once, and making someone fix six of them one save at a time is the
-    whole complaint this exists to answer.
-    """
+    """A parse failure with its file line. `more` carries the rest, when there is."""
 
     def __init__(
         self,
@@ -102,14 +89,12 @@ def parse_text(text: str) -> Profile:
 
     data: dict = {}
     for name in SECTIONS:
-        # Both of these hold headings rather than YAML, and are chunked below.
         if name in ("experience", "projects"):
             continue
         key = name.replace(" ", "_")
         body, start = sections.get(name, ("", 1))
         loaded = _yaml(body, start, f"# {name.title()}")
-        # A section that holds a list must not silently accept a mapping: it
-        # would parse and then come back empty, which reads as "I wrote nothing".
+        # A mapping here would parse and come back empty, reading as "nothing".
         if key in _LIST_SECTIONS and loaded and not isinstance(loaded, list):
             raise ProfileError(
                 f'"# {name.title()}" must be a list. Start each entry with "- ".', start
@@ -120,9 +105,7 @@ def parse_text(text: str) -> Profile:
     companies, _ = _chunks(body.split("\n"), start - 1, level=2)
     data["experience"] = [_company(name, body, at) for name, body, at in companies]
 
-    # Projects holds ### headings with no ## parent, so it chunks one level down
-    # and lands in its own list. A synthetic employer to hang them off would be
-    # a company that does not exist showing up on a CV.
+    # ### with no ## parent. A synthetic employer would invent a company.
     body, start = sections.get("projects", ("", 1))
     loose, _ = _chunks(body.split("\n"), start - 1, level=3)
     data["projects"] = [_project(name, body, at) for name, body, at in loose]
@@ -148,24 +131,16 @@ def _company(name: str, body: str, start: int) -> dict:
 
 def _project(name: str, body: str, start: int) -> dict:
     name = name.strip()
-    # An explicit `id:` in the body wins over the slugged heading.
     return {"id": _slug(name), "name": name, **_yaml(body, start, f"### {name}")}
 
 
 def _normalize(text: str) -> str:
-    # A BOM makes the first "# Identity" invisible to the heading match, and CRLF
-    # leaves a \r on every parsed value. Both come free with a Windows editor.
+    # A BOM hides the first heading and CRLF leaves \r on every value.
     text = text.lstrip("﻿").replace("\r\n", "\n").replace("\r", "\n")
-    # A column-zero "---" reads as a rule between sections in markdown and as a
-    # document separator in YAML, and safe_load refuses a stream holding two
-    # documents. Without this every section around one fails with "expected a
-    # single document in the stream", which says nothing about the horizontal
-    # rule that caused it. Blanked, not dropped: errors carry a line number.
+    # "---" is a rule in markdown and a document separator in YAML, which
+    # safe_load refuses. Blanked, not dropped, so line numbers stay right.
     text = re.sub(r"(?m)^---[ \t]*$", "", text)
-    # Same treatment for a code fence. The briefing asks Claude to return the
-    # file in a markdown code block, so the fence arrives pasted along with the
-    # contents often enough, and safe_load's answer to it is "found character
-    # '`' that cannot start any token", which helps nobody.
+    # Same for a code fence, which gets pasted in with the file often enough.
     return re.sub(r"(?m)^ {0,3}```[A-Za-z0-9_-]*[ \t]*$", "", text)
 
 
@@ -173,15 +148,9 @@ def _chunks(
     lines: list[str], offset: int, level: int, accept: set[str] | None = None
 ) -> tuple[list[tuple[str, str, int]], list[tuple[str, int]]]:
     """
-    Split on headings of exactly `level`, returning (title, body, body_start_line)
-    plus the headings that were not accepted.
-
-    `offset` is the file line number of lines[0] minus one, so every line number
-    that comes out of here points into the file the person typed.
-
-    Headings the caller does not accept stay in the body on purpose: "# TODO fix
-    this" at column zero is a YAML comment, and promoting it to a section would
-    silently orphan everything under it.
+    Split on headings of exactly `level` into (title, body, start_line) plus the
+    ones not accepted. Unaccepted ones stay in the body, because "# TODO" is a
+    YAML comment and promoting it would orphan everything under it.
     """
     heading = re.compile(rf"^#{{{level}}} +(.+?)\s*$")
     marks: list[tuple[int, str]] = []
@@ -205,10 +174,7 @@ def _chunks(
 
 
 def _check_misspelled(rejected: list[tuple[str, int]]) -> None:
-    """
-    "# Experiance" would otherwise be treated as a YAML comment and the entire
-    work history would vanish without a word. A near miss is a typo, not a note.
-    """
+    """"# Experiance" would read as a YAML comment and silently drop every job."""
     for title, line in rejected:
         near = difflib.get_close_matches(title.strip().lower(), SECTIONS, n=1, cutoff=0.75)
         if near:
@@ -223,8 +189,7 @@ def _yaml(text: str, start: int, what: str):
     except yaml.YAMLError as error:
         mark = getattr(error, "problem_mark", None)
         problem = getattr(error, "problem", None) or str(error)
-        # mark.line is zero-based within this section; start is the file line of
-        # the section's first body line.
+        # mark.line is zero-based within the section; start is its first line.
         raise ProfileError(
             f"{what} is not valid YAML: {problem}.",
             start + mark.line if mark else None,
@@ -232,10 +197,7 @@ def _yaml(text: str, start: int, what: str):
 
 
 def _readable(error: ValidationError, lines: list[str]) -> list[tuple[str, int | None]]:
-    """
-    Pydantic reports a path and a type. A person editing markdown needs the line
-    and the fix, so each error is matched back to the text that produced it.
-    """
+    """Pydantic gives a path and a type; this finds the line and the fix."""
     issues: list[tuple[str, int | None]] = []
     seen: set[tuple[str, int | None]] = set()
     for fault in error.errors():
@@ -254,9 +216,7 @@ def _explain(fault: dict, lines: list[str]) -> tuple[str, int | None]:
     where = _where(fault["loc"])
     value = fault.get("input")
 
-    # The colon trap, which is the one people actually hit. "- Built the flow:
-    # with OTP" is a mapping to YAML, so the item arrives as a dict and the
-    # schema rejects it with a type error that names nothing useful.
+    # The colon trap: "- Built the flow: with OTP" is a mapping to YAML.
     if isinstance(value, dict) and len(value) == 1 and "str" in fault.get("type", ""):
         key = next(iter(value))
         line = _line_of(f"{key}:", lines)
@@ -277,11 +237,7 @@ def _where(loc: tuple) -> str:
 
 
 def _line_of(needle: str, lines: list[str]) -> int | None:
-    """
-    ponytail: first line containing the text, not a real source map. Building
-    one means a YAML loader that records marks per node, which is a lot of
-    machinery for a number that is right whenever the text appears once.
-    """
+    """ponytail: first line containing the text, not a real source map."""
     if not needle or len(needle) < 3:
         return None
     for index, line in enumerate(lines):
@@ -291,7 +247,6 @@ def _line_of(needle: str, lines: list[str]) -> int | None:
 
 
 def _quoted(line: str) -> str:
-    """The same list item, quoted, ready to paste over the broken one."""
     body = line.strip().removeprefix("- ").strip().strip("'\"")
     return "- '" + body.replace("'", "''") + "'"
 
@@ -300,9 +255,7 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
-# Documented in the template as "one of", so a value outside the set is a typo
-# rather than a preference. Warnings, never errors: an unknown value still saves,
-# and the generator is what will eventually need to trust these.
+# "one of" in the template, so anything else is a typo. Warnings, never errors.
 LEVELS = ("familiar", "working", "advanced", "expert")
 CONTEXTS = ("professional", "personal", "academic")
 METRIC_SOURCES = ("measured", "estimated", "reported", "none")
@@ -313,33 +266,21 @@ PUB_TYPES = ("talk", "article", "paper", "patent", "book", "podcast")
 LANG_LEVELS = ("native", "fluent", "professional", "conversational", "basic")
 GAP_STATUS = ("none", "learning", "personal-only", "rusty")
 
-# Past this the list stops being read, so the tail is collapsed into a count.
-# A hundred warnings and none are the same thing to the person looking at them.
+# Past this nobody reads the list, so the tail collapses into a count.
 MAX_WARNINGS = 20
 
-# Errors are rarer and each one blocks the save, so the list is shorter.
 MAX_ERRORS = 8
 
 DASHES = {"\u2014": "em dash", "\u2013": "en dash"}
 
-# A digit that follows a letter is part of a name, not a measurement: Auth0,
-# HTML5, ES6, S3. Asking for a metric block on "Auth0" trains the reader to
-# ignore the warning, which is worse than not having it.
+# A digit after a letter is a name, not a measurement: Auth0, HTML5, S3.
 _NUMBER = re.compile(r"(?<![A-Za-z])\d")
 
 
 def replace_bullet_text(source: str, bullet_id: str, text: str) -> str:
     """
-    Rewrite one bullet's text in the markdown, leaving the rest of the file byte
-    for byte alone.
-
-    Surgery rather than a round trip on purpose. Parsing to a Profile and dumping
-    it back would reformat the whole document and drop every comment in it, and
-    those comments are half of why the file is readable. The cost is that this
-    has to understand the file's shape, which is why it lives beside the parser.
-
-    Raises ProfileError when the id is not there, so a stale screen cannot write
-    a bullet into a file that no longer has one.
+    Rewrite one bullet's text, leaving the rest byte for byte alone. A
+    parse-and-dump would reformat the file and drop its comments.
     """
     lines = source.split("\n")
     item = re.compile(r"^(\s*)-\s+id:\s*(\S+)\s*$")
@@ -382,16 +323,9 @@ def replace_bullet_text(source: str, bullet_id: str, text: str) -> str:
 
 def validate_text(text: str) -> ValidationResult:
     """
-    What the editor shows before you are allowed to save.
-
-    ponytail: one error at a time from YAML itself, because a broken document
-    cannot be read past the break. The schema check is different: it sees the
-    whole parsed file, so every fault it finds is reported together.
-
-    Everything below is a warning. A profile that saved yesterday has to save
-    today, because this row is the only copy of the CV data, and refusing it
-    over a missing qualifier loses more than it protects. These get promoted to
-    errors when a generator exists and there is something to protect.
+    What the editor shows before you may save. YAML reports one error at a time,
+    the schema check reports all of them, and the rest are warnings: this row is
+    the only copy of the CV data.
     """
     try:
         profile = parse_text(text)
@@ -409,8 +343,6 @@ def validate_text(text: str) -> ValidationResult:
     def warn(message: str, line: int | None = None) -> None:
         warnings.append(ProfileIssue(line=line, message=message))
 
-    # Employment is not what makes something a project, so every check below
-    # runs over both lists.
     projects = profile.all_projects()
     bullets = [bullet for project in projects for bullet in project.bullets]
     missing = [project for project in projects if not _has_boundary(project)]
@@ -554,8 +486,6 @@ def validate_text(text: str) -> ValidationResult:
         ok=True,
         warnings=warnings,
         summary=ProfileSummary(
-            # projects is what sits under an employer; projects_total counts the
-            # standalone ones too.
             projects=sum(len(employer.projects) for employer in profile.experience),
             projects_total=len(projects),
             bullets=len(bullets),
@@ -569,7 +499,6 @@ def validate_text(text: str) -> ValidationResult:
 
 
 def _enum_values(profile, projects, bullets) -> list[tuple[str, str, tuple[str, ...]]]:
-    """Everything the template documents as "one of", flattened for one loop."""
     return [
         *((f'Skill evidence "{s.name}" level', s.level, LEVELS) for s in profile.skill_evidence),
         *(

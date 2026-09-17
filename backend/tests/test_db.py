@@ -1,7 +1,6 @@
 """
-The schema's two claims worth checking: the JSON columns survive a round trip
-with their types intact, and the CHECK constraints that keep the data honest
-actually fire rather than sitting in the DDL as decoration.
+The schema's two claims worth checking: JSON columns survive a round trip with
+their types, and the CHECK constraints fire rather than sitting in the DDL.
 """
 
 import pytest
@@ -58,7 +57,6 @@ def test_status_is_constrained(session: Session):
 
 
 def test_a_kept_posting_needs_no_cv(session: Session):
-    """Nullable on purpose: a posting kept for its gaps never had one."""
     session.add(make_application(pdf=None, filename=None, title_variant=None, summary_text=None))
     session.commit()
 

@@ -1,12 +1,9 @@
 """
-Diff our CV's vertical spacing against the Google Docs original.
-
-The layout is copied from a document nobody can diff by eye, so this measures
-both PDFs instead: every baseline on page one, and the distance to the line
-above it. A spacing change that drifts shows up as a number, not a feeling.
+Diff the CV's vertical spacing against the Google Docs original, by measuring
+every baseline on page one and the gap above it. Drift comes out as a number.
 
     .venv/bin/python tools/spacing.py                     # ours vs the reference
-    .venv/bin/python tools/spacing.py some.pdf            # just dump one file
+    .venv/bin/python tools/spacing.py some.pdf            # dump one file
 
 Needs pypdf, which is not a runtime dependency:  pip install pypdf
 """

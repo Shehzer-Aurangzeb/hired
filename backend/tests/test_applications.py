@@ -73,7 +73,6 @@ def test_a_posting_can_be_kept_with_no_cv_at_all(client):
     assert body["has_pdf"] is False
     assert body["filename"] is None
     assert body["title_variant"] is None and body["summary_text"] is None
-    # The reason it was kept survives.
     assert body["gaps"] == ["Kubernetes", "Terraform"]
     assert body["applied_at"] is None
 
@@ -252,14 +251,13 @@ def test_where_you_found_it_is_kept(client):
 
 # ---------- serving the built front end ----------
 #
-# Only runs when a build exists. The guard it checks is the reason the route is
+# Only runs when a build exists. The path guard is why the route is
 # hand-written rather than a bare StaticFiles mount.
 
 
 @pytest.mark.skipif(not main.BUNDLE.is_dir(), reason="no frontend build to serve")
 class TestBundle:
     def test_a_deep_link_reaches_the_router_not_a_404(self, client):
-        """The router is in the browser, so /applications has to serve index.html."""
         response = client.get("/applications")
         assert response.status_code == 200 and "<html" in response.text
 

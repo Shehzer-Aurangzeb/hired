@@ -26,9 +26,9 @@
     box-sizing: border-box;
   }
 
-  /* .c15 minus its padding, which is the print margin. 540pt content width. */
+  /* The content box: Letter less the print margins render.py hands Chromium. */
   body {
-    width: 540pt;
+    width: {{ content_width_pt }}pt;
     font-family: Inter, "Helvetica Neue", Arial, sans-serif;
     font-size: 10pt;
     font-weight: 400;
@@ -182,7 +182,9 @@
 <span class="name">{{ section.project_name }}
 {%- set label = project_labels.get(section.project_id) %}{% if label %} · {{ label }}{% endif %}</span>
 {%- if href %} · <a href="{{ href | url }}">{{ href }}</a>{% endif %}
-{%- if section.stack %} · {{ section.stack | join(", ") }}{% endif %}
+{#- Four is enough to place a project. The full list still goes to the model
+    for matching, so trimming here costs relevance nothing and buys a line. -#}
+{%- if section.stack %} · {{ section.stack[:4] | join(", ") }}{% endif %}
 {%- endmacro -%}
 
 {#- Bullets after the first, or every bullet when the project has no lead-in. -#}

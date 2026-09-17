@@ -1,40 +1,30 @@
+"""The two tables, and the UTC helpers every timestamp goes through."""
+
 from datetime import datetime, timezone
 
 from sqlalchemy import CheckConstraint, Column, LargeBinary
 from sqlmodel import JSON, Field, SQLModel
 
-# Where you are with this employer. Whether a PDF exists is a separate fact
-# (pdf is not None), so "generated" is not a stage: it conflated the two.
+# Whether a PDF exists is a separate fact, so "generated" is not a stage.
 STATUSES = ("saved", "skipped", "applied", "replied", "interview", "rejected", "offer")
 
-# Reaching any of these means the application went out, whatever route it took.
 SENT = ("applied", "replied", "interview", "rejected", "offer")
 
 
 def now() -> datetime:
-    """
-    Naive UTC. SQLite's DATETIME drops tzinfo on the way in, so storing an aware
-    value only hides that. stamp() below puts the marker back on the way out.
-    """
+    """Naive UTC, because SQLite drops tzinfo anyway. stamp() puts it back."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def stamp(value: datetime | None) -> str | None:
-    """
-    UTC-marked ISO, the only way a timestamp should leave this app. A naive one
-    on the wire is read as local time by the browser, which shifts every
-    relative date by the reader's offset.
-    """
+    """UTC-marked ISO. A naive one is read as local time and shifts every date."""
     return value.replace(tzinfo=timezone.utc).isoformat() if value else None
 
 
 class ProfileSource(SQLModel, table=True):
     """
-    The master profile, as the markdown you typed. One row, forever.
-
-    It lives here rather than on disk because the app is deployed: a container
-    filesystem is wiped on redeploy, and this is the only copy of the CV data.
-    app/profile_parser.py turns this text into the parsed Profile the API serves.
+    The master profile, as typed. One row, forever, in the database because a
+    container filesystem is wiped on redeploy.
     """
 
     __tablename__ = "profile_source"
@@ -47,11 +37,8 @@ class ProfileSource(SQLModel, table=True):
 
 class Application(SQLModel, table=True):
     """
-    One job posting you decided to keep.
-
-    Not "one CV sent": the records worth the most are often the ones you did not
-    apply to, kept for the gaps they exposed. So every CV-shaped column is
-    nullable, and only the posting, the fit and the gaps are always there.
+    One posting you kept, not one CV sent. The rows worth most are often the
+    skipped ones, so every CV-shaped column below is nullable.
     """
 
     __table_args__ = (
@@ -63,10 +50,7 @@ class Application(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     company: str
     role: str
-    # Where you found it, and where it lived. The URL is kept because a posting
-    # is taken down the week after you apply, and an interview three weeks later
-    # is the moment you want to reread it. jd_text below is the actual snapshot;
-    # this is just the address it came from.
+    # The URL alone is not enough: postings come down, so jd_text keeps a copy.
     source: str | None = None
     url: str | None = None
 
@@ -77,21 +61,15 @@ class Application(SQLModel, table=True):
     fit_reasoning: str
     gaps: list[str] = Field(default_factory=list, sa_column=Column(JSON))
 
-    # Null until a CV is generated for this posting, which may never happen.
     title_variant: str | None = None
     summary_text: str | None = None
     selected_bullet_ids: list[str] = Field(default_factory=list, sa_column=Column(JSON))
-    # The bullet text as it was printed, not a join against today's profile. The
-    # profile keeps changing and this has to show what the employer actually read.
+    # As printed, not joined against today's profile: this is what they read.
     selected_bullets: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
-    # What the page backed, judged when it was generated. Stored for the same
-    # reason the bullet text is: the profile keeps changing and this has to say
-    # what was true of the CV the employer received.
+    # Judged at generation time, stored for the same reason as the text above.
     coverage: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
 
-    # The PDF itself, not a path. ~80 KB each, so a hundred applications is 8 MB,
-    # and keeping it here means the whole app is one file to back up and no
-    # deployment needs a writable disk. Null until export attaches one.
+    # The bytes, not a path, so the whole app stays one file to back up.
     pdf: bytes | None = Field(default=None, sa_column=Column(LargeBinary, nullable=True))
     filename: str | None = None
 

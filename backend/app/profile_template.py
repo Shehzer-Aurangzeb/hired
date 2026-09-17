@@ -1,14 +1,9 @@
 """
-The starter profile and the Claude briefing that goes with it.
+The starter profile and the Claude briefing that goes with it. Content, not
+code, copied here so the container does not have to ship the docs folder.
 
-Both are content, not code, and both get reworded far more often than anything
-around them. The editable source is docs/master_template.md and
-docs/master_interview_prompt.md; what follows is a copy, because reading them at
-runtime would mean shipping the docs folder inside the container.
-
-The defaults here make a fresh checkout work with no config.
-HIRED_PROFILE_TEMPLATE and HIRED_CLAUDE_BRIEFING override them, so rewording
-either one is an environment change and a restart rather than a code change.
+HIRED_PROFILE_TEMPLATE and HIRED_CLAUDE_BRIEFING override them, so a reword is
+a restart rather than a deploy.
 """
 
 from .settings import get_settings

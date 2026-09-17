@@ -41,7 +41,6 @@ def test_claim_boundary(profile):
     cb = profile.experience[0].projects[0].claim_boundary
     assert any("Skyflow" in c for c in cb.cannot_claim)
     assert "estimated" in cb.required_qualifiers[0]
-    # A project with no claim_boundary block still gets empty lists, not None.
     assert profile.experience[1].projects[0].claim_boundary.can_claim == []
 
 
@@ -149,8 +148,6 @@ def test_every_section_name_parses_as_itself():
     """A heading the parser does not accept is silently a YAML comment."""
     profile = parse_text(ALL_SECTIONS)
     assert profile.identity.name == "N"
-    # Empty everywhere else rather than missing, so nothing downstream branches
-    # on "did they write the section at all".
     assert profile.titles == [] and profile.gaps == [] and profile.projects == []
     assert profile.meta.schema_version == 1
 

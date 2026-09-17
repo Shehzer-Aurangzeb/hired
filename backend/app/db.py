@@ -1,3 +1,5 @@
+"""The engine, the session dependency, and SQLite's pragmas."""
+
 from collections.abc import Generator
 from typing import Annotated, Any
 
@@ -13,8 +15,8 @@ sqlite = settings.database_url.startswith("sqlite")
 
 engine = create_engine(
     settings.database_url,
-    # SQLite ties a connection to the thread that opened it, and FastAPI runs
-    # sync endpoints on a threadpool. Postgres needs neither argument.
+    # SQLite ties a connection to its thread; FastAPI runs sync routes on a
+    # threadpool. Postgres needs neither argument.
     connect_args={"check_same_thread": False} if sqlite else {},
 )
 
@@ -23,18 +25,15 @@ if sqlite:
 
     @event.listens_for(engine, "connect")
     def _sqlite_pragmas(connection: Any, _record: Any) -> None:
-        # WAL lets a read and a write overlap instead of raising "database is
-        # locked", which is otherwise reachable with a single user and two tabs.
+        # Lets a read and a write overlap instead of "database is locked",
+        # which one user with two tabs can already hit.
         connection.execute("PRAGMA journal_mode=WAL")
         # SQLite ignores CHECK and FOREIGN KEY constraints unless asked.
         connection.execute("PRAGMA foreign_keys=ON")
 
 
 def init_db() -> None:
-    """
-    ponytail: create_all, no Alembic. Two tables and one user, so a schema change
-    is an ALTER TABLE by hand. Add migrations the first time that is not true.
-    """
+    """ponytail: create_all, no Alembic. A schema change is a hand ALTER TABLE."""
     SQLModel.metadata.create_all(engine)
 
 

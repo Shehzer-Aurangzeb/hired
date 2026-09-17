@@ -1,13 +1,9 @@
 """
-The warnings in validate_text.
+The warnings in validate_text, all warnings and never errors: the profile row is
+the only copy of the CV data, so a refused save costs more than it protects.
 
-Every one of these is a warning and not an error on purpose: the profile row is
-the only copy of the CV data, and a save refused over a missing qualifier costs
-more than it protects. They get promoted when there is a generator to protect.
-
-CLEAN below is the shipped template, which is the zero-warning baseline. Each
-test breaks exactly one thing, so a warning appearing is that check and not a
-side effect of the fixture.
+CLEAN is the shipped template and the zero-warning baseline. Each test breaks
+one thing, so a warning is that check rather than a fixture side effect.
 """
 
 from pathlib import Path
@@ -315,9 +311,8 @@ def test_the_fixture_still_saves_and_what_it_warns_about():
 
 # ---------- errors that name the line and the fix ----------
 #
-# The complaint these answer: "experience -> 0 -> projects -> 0 ->
-# claim_boundary -> can_claim -> 1: Input should be a valid string" told a
-# person editing markdown nothing they could act on.
+# The complaint these answer: "experience -> 0 -> projects -> 0 -> ... Input
+# should be a valid string" is nothing a person editing markdown can act on.
 
 COLON = """# Identity
 name: N
@@ -342,11 +337,9 @@ def test_a_colon_in_a_list_item_names_the_line_and_the_repair():
     result = validate_text(COLON)
     assert not result.ok
     issue = result.errors[0]
-    # The line the colon is actually on, not the section it lives in.
     assert issue.line == 13
     assert COLON.split("\n")[issue.line - 1].strip().startswith("- Wired")
     assert "colon" in issue.message
-    # The repair is the whole line, quoted, ready to paste over the broken one.
     assert "- 'Wired the full Auth0 flow: HttpOnly cookies, OTP, passkeys'" in issue.message
 
 
@@ -379,7 +372,6 @@ def test_an_error_with_no_special_case_still_says_where_and_what():
     result = validate_text(COLON.replace("    text: Built a thing.", "    priority: soon\n    text: x."))
     generic = [i for i in result.errors if "colon" not in i.message][0]
     assert "priority" in generic.message and "integer" in generic.message
-    # The line it points at is the one with the bad value on it.
     assert COLON.replace("    text: Built a thing.", "    priority: soon\n    text: x.").split(
         "\n"
     )[generic.line - 1].strip() == "priority: soon"

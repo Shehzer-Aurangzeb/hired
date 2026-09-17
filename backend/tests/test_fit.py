@@ -1,12 +1,9 @@
 """
-The fit check.
-
-No test here reaches the network. What is worth pinning is the shape around the
-call: that a missing key reads as a setup problem, that a score outside the
-range cannot render a broken meter, that nothing is written, and that the
-context sent to the model carries the constraints rather than the CV.
+The fit check. Nothing here reaches the network: what is pinned is the shape
+around the call, and that the context sent carries the constraints, not the CV.
 """
 
+import httpx
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -110,7 +107,6 @@ def test_the_happy_path(client, monkeypatch):
     assert body["fit"]["score"] == 6
     assert body["fit"]["gaps"] == ["Kubernetes in production"]
     assert body["parsed_jd"]["company"] == "Acme"
-    # Defaulted rather than absent, because the UI maps over these.
     assert body["parsed_jd"]["preferred_skills"] == []
     assert body["parsed_jd"]["years_required"] is None
 
@@ -135,7 +131,6 @@ def test_a_sparse_answer_still_renders(client, monkeypatch):
 
 
 def test_it_writes_nothing(client, monkeypatch):
-    """Discard has to be free. Saving is a separate route and a separate decision."""
     save_profile(client)
     answers(monkeypatch, ANSWER)
     client.post("/api/fit", json={"jd_text": JD})
@@ -162,7 +157,6 @@ def test_the_prompt_carries_the_constraints_not_the_cv(client, monkeypatch):
 
     profile = parse_text(DEFAULT_TEMPLATE)
     assert JD in prompt
-    # The constraints that turn an apparent match into a gap.
     assert "cannot_claim" in prompt and "skill_evidence" in prompt
     assert profile.gaps[0].skill in prompt
     assert profile.experience[0].projects[0].claim_boundary.cannot_claim[0] in prompt
@@ -209,10 +203,83 @@ def test_the_client_refuses_before_it_calls(monkeypatch):
     assert error.value.status_code == 503
 
 
+def _reply(status, payload):
+    return httpx.Response(status, json=payload, request=httpx.Request("POST", "http://t"))
+
+
+OPENROUTER_OK = {"choices": [{"message": {"content": '{"score": 7}'}}]}
+GEMINI_OK = {"candidates": [{"content": {"parts": [{"text": '{"score": 3}'}]}}]}
+
+
+def calls(monkeypatch, settings, *replies):
+    """Answer each POST with the next reply, and record where each one went."""
+    monkeypatch.setattr(model, "get_settings", lambda: settings)
+    seen = []
+    pending = list(replies)
+
+    def post(url, **kwargs):
+        seen.append(url)
+        return pending.pop(0)
+
+    monkeypatch.setattr(model.httpx, "post", post)
+    return seen
+
+
+def test_openrouter_is_tried_first_when_its_key_is_set(monkeypatch):
+    settings = Settings(secret_key="t", openrouter_api_key="or", gemini_api_key="g")
+    seen = calls(monkeypatch, settings, _reply(200, OPENROUTER_OK))
+
+    assert model.generate_json("anything", {}) == {"score": 7}
+    assert seen == [model.OPENROUTER]
+
+
+def test_a_dead_openrouter_falls_through_to_gemini(monkeypatch):
+    """The whole point of two providers: one being rate-limited still answers."""
+    settings = Settings(secret_key="t", openrouter_api_key="or", gemini_api_key="g")
+    seen = calls(monkeypatch, settings, _reply(429, {}), _reply(200, GEMINI_OK))
+
+    assert model.generate_json("anything", {}) == {"score": 3}
+    assert len(seen) == 2 and seen[0] == model.OPENROUTER
+
+
+def test_without_a_gemini_key_openrouters_error_is_the_answer(monkeypatch):
+    settings = Settings(secret_key="t", openrouter_api_key="or")
+    calls(monkeypatch, settings, _reply(429, {}))
+
+    with pytest.raises(HTTPException) as error:
+        model.generate_json("anything", {})
+    assert error.value.status_code == 429
+
+
+def test_gemini_alone_still_works(monkeypatch):
+    settings = Settings(secret_key="t", gemini_api_key="g")
+    seen = calls(monkeypatch, settings, _reply(200, GEMINI_OK))
+
+    assert model.generate_json("anything", {}) == {"score": 3}
+    assert seen[0].startswith(model.GEMINI)
+
+
+def test_the_free_pool_is_sent_so_openrouter_picks_the_model(monkeypatch):
+    settings = Settings(secret_key="t", openrouter_api_key="or")
+    monkeypatch.setattr(model, "get_settings", lambda: settings)
+    sent = {}
+
+    def post(url, **kwargs):
+        sent.update(kwargs["json"])
+        return _reply(200, OPENROUTER_OK)
+
+    monkeypatch.setattr(model.httpx, "post", post)
+    model.generate_json("anything", {"type": "object"})
+
+    assert sent["model"] == model.FREE_POOL
+    assert sent["provider"] == {"require_parameters": True}
+    assert sent["response_format"]["json_schema"]["schema"] == {"type": "object"}
+
+
 # ---------- applying twice to the same employer ----------
 #
-# The one mistake this app is placed to catch: the company name comes back from
-# the parse, so the lookup is free and lands exactly where the decision is made.
+# The company name comes back from the parse, so the lookup is free and lands
+# where the decision is made.
 
 
 def _file(client, company, role="Front-End Developer", status="applied"):
@@ -263,7 +330,6 @@ def test_an_unnamed_company_does_not_match_every_blank_row(client, monkeypatch):
 
 
 def test_the_fit_check_still_writes_nothing(client, monkeypatch):
-    """The lookup reads. Saving stays a separate decision."""
     save_profile(client)
     answers(monkeypatch, ANSWER)
     client.post("/api/fit", json={"jd_text": JD})

@@ -1,8 +1,6 @@
 """
-The template and the briefing are environment-overridable so they can be
-reworded without a deploy of code. The branches worth pinning are the one that
-decides where the template lands inside the briefing, and the copy of the two
-documents that lives in the module rather than on disk.
+The template and briefing are environment-overridable. What is pinned: where
+the template lands inside the briefing, and the module's own fallback copy.
 """
 
 import re

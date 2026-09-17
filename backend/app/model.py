@@ -1,15 +1,10 @@
 """
-The one place that talks to a model.
+The one place that talks to a model. OpenRouter when a key is set, then Gemini
+behind it, because OpenRouter's free pool cannot help when OpenRouter is what
+is down.
 
-Gemini's REST API is a single POST, so this is httpx rather than an SDK. Both
-callers that will exist, the fit check and the selector, want the same thing:
-send a prompt, get back JSON matching a schema. Response schemas are enforced by
-Google, so "the model returned prose instead of JSON" is not a failure mode we
-have to carry.
-
-ponytail: no retry. The free tier is rationed by requests per day, so a retry
-spends tomorrow's budget to paper over a blip. Add one when a paid key makes a
-failed call cheap.
+ponytail: no retry, only failover. The free tiers are rationed per day, so a
+retry spends tomorrow's budget on a blip.
 """
 
 import json
@@ -18,9 +13,13 @@ from typing import Any
 import httpx
 from fastapi import HTTPException
 
-from .settings import get_settings
+from .settings import Settings, get_settings
 
-BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+GEMINI = "https://generativelanguage.googleapis.com/v1beta/models"
+OPENROUTER = "https://openrouter.ai/api/v1/chat/completions"
+
+# OpenRouter routes this across whatever free models are currently up.
+FREE_POOL = "openrouter/free"
 
 # Thinking models take their time, and the fit check is one call a person is
 # waiting on rather than a batch job.
@@ -29,22 +28,84 @@ TIMEOUT = 60.0
 
 def generate_json(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
     """
-    Ask for one JSON object shaped like `schema`, and return it parsed.
-
-    Every failure becomes an HTTPException carrying a sentence a person can act
-    on, because "the model call failed" is the same message whether the key is
-    missing, the quota is spent, or Google is down, and those need three
-    different responses from whoever reads it.
+    One JSON object shaped like `schema`. Failures carry a sentence, because a
+    missing key and a spent quota need different answers.
     """
     settings = get_settings()
-    if not settings.gemini_api_key:
-        # Same shape as the auth 503 when no password hash is set: not configured
-        # is a setup problem and should not read like the model refused.
-        raise HTTPException(503, "No model key is configured on this instance.")
 
+    if settings.openrouter_api_key:
+        try:
+            return _openrouter(prompt, schema, settings)
+        except HTTPException:
+            # Only swallowed when there is somewhere else to go.
+            if not settings.gemini_api_key:
+                raise
+
+    if not settings.gemini_api_key:
+        # Not configured is a setup problem, and should not read like a refusal.
+        raise HTTPException(503, "No model key is configured on this instance.")
+    return _gemini(prompt, schema, settings)
+
+
+def _openrouter(prompt: str, schema: dict[str, Any], settings: Settings) -> dict[str, Any]:
+    """
+    OpenRouter's free pool, so a dead model is its problem. require_parameters
+    keeps it off endpoints that would ignore the schema.
+
+    ponytail: no `strict: true`, which restricts the JSON Schema keywords and
+    would mean rewriting both schemas to suit one provider.
+    """
     try:
         response = httpx.post(
-            f"{BASE}/{settings.gemini_model}:generateContent",
+            OPENROUTER,
+            headers={"Authorization": f"Bearer {settings.openrouter_api_key}"},
+            json={
+                "model": FREE_POOL,
+                "messages": [{"role": "user", "content": prompt}],
+                "provider": {"require_parameters": True},
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {"name": "answer", "schema": schema},
+                },
+            },
+            timeout=TIMEOUT,
+        )
+    except httpx.TimeoutException as error:
+        raise HTTPException(504, "The model took too long. Try again.") from error
+    except httpx.HTTPError as error:
+        raise HTTPException(502, "Could not reach OpenRouter.") from error
+
+    if response.status_code == 429:
+        raise HTTPException(
+            429,
+            "OpenRouter's rate limit is spent. Free models allow 50 requests a day "
+            "without credits, and the count resets at UTC midnight.",
+        )
+    if response.status_code == 402:
+        raise HTTPException(402, f"OpenRouter refused on credit. {_message(response)}")
+    if response.status_code == 503:
+        raise HTTPException(
+            502, f"No free OpenRouter model can serve a schema. {_message(response)}"
+        )
+    if response.status_code >= 400:
+        raise HTTPException(502, f"OpenRouter refused the request. {_message(response)}")
+
+    body = response.json()
+    choices = body.get("choices") or []
+    if not choices:
+        raise HTTPException(502, "OpenRouter returned nothing. It may have been filtered.")
+    try:
+        return json.loads(choices[0]["message"]["content"])
+    except (KeyError, IndexError, TypeError, ValueError) as error:
+        served = body.get("model") or FREE_POOL
+        raise HTTPException(502, f"{served} returned something unreadable.") from error
+
+
+def _gemini(prompt: str, schema: dict[str, Any], settings: Settings) -> dict[str, Any]:
+    """Google AI Studio, which enforces the schema server-side."""
+    try:
+        response = httpx.post(
+            f"{GEMINI}/{settings.gemini_model}:generateContent",
             headers={"x-goog-api-key": settings.gemini_api_key},
             json={
                 "contents": [{"parts": [{"text": prompt}]}],
@@ -65,8 +126,7 @@ def generate_json(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
             429, "The model's rate limit is spent. The free tier resets daily."
         )
     if response.status_code == 404:
-        # Google retires model names and says so in the body, which names the
-        # replacement. Passing that through beats "404".
+        # Google retires model names and names the replacement in the body.
         raise HTTPException(502, f"{_message(response)} Set HIRED_GEMINI_MODEL.")
     if response.status_code >= 400:
         raise HTTPException(502, f"The model refused the request. {_message(response)}")
@@ -82,11 +142,7 @@ def _message(response: httpx.Response) -> str:
 
 
 def _first_json(response: httpx.Response) -> dict[str, Any]:
-    """
-    Dig the one JSON payload out of the candidate envelope. A response with no
-    candidate at all is usually a safety block, which is worth saying plainly
-    rather than surfacing as a KeyError.
-    """
+    """Dig the JSON out of Gemini's envelope. No candidate is usually a block."""
     body = response.json()
     candidates = body.get("candidates") or []
     if not candidates:

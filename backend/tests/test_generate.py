@@ -1,10 +1,6 @@
 """
-The selector and the guard.
-
-The selector's output is ids, so the tests that matter are about what happens to
-an id: one that does not exist, one that points at a blocked bullet, one that
-brings a gated skill onto the page with nothing evidencing it. Nothing here
-reaches the network; the model is a dict.
+The selector and the guard. Its output is ids, so what matters is a bad one:
+missing, blocked, or gated with nothing evidencing it. The model is a dict.
 """
 
 import re
@@ -462,10 +458,8 @@ def test_the_html_puts_projects_back_under_their_employer():
         }
     )
     html = render_html(profile, cv)
-    # The selector answers in project ids and knows nothing about employers.
     assert "Company Name" in html and "WORK EXPERIENCE" in html
     assert html.index("Company Name") < html.index("Project Name")
-    # Standalone work is its own section, not filed under a company.
     assert html.index("Side Project") > html.index("PROJECTS")
 
 
@@ -479,17 +473,14 @@ def test_every_link_on_the_page_is_clickable_and_absolute():
         profile, GeneratedCv.model_validate({**CV, "sections": [*CV["sections"], plain]})
     )
 
-    # Profiles are written "github.com/you". A href with no scheme is read as a
-    # file path by a PDF reader, so it must not survive to the page.
+    # A PDF reader reads a scheme-less href as a file path.
     hrefs = re.findall(r'href="([^"]+)"', html)
     assert hrefs, "the header has links in it, so the page should have anchors"
     assert all(re.match(r"^(https?|mailto|tel):", href) for href in hrefs), hrefs
 
     assert 'href="mailto:you@example.com"' in html
     assert 'href="https://github.com/you"' in html
-    # Written in Identity as extra header content, and once dropped on the floor.
     assert "Stack Overflow" in html
-    # A project with links has its name linked; one without stays plain text.
     assert '<a href="https://product.example.com">Project Name</a>' in html
     assert '<span class="name">Second Project' in html
 
@@ -530,13 +521,11 @@ def test_reexport_rebuilds_the_pdf_without_touching_the_record(client, monkeypat
     client.post("/api/export", json={"application_id": application_id, "cv": CV})
     before = client.get(f"/api/applications/{application_id}").json()
 
-    # A template fix lands, and the stored bytes are the only copy of the old one.
     monkeypatch.setattr(generate, "to_pdf", lambda html: (b"%PDF-1.4 rebuilt", 1))
     assert client.post("/api/reexport", json={"application_id": application_id}).status_code == 200
 
     assert client.get(f"/api/applications/{application_id}/pdf").content == b"%PDF-1.4 rebuilt"
     after = client.get(f"/api/applications/{application_id}").json()
-    # What was sent is history. Re-rendering must not rewrite it.
     for field in ("title_variant", "summary_text", "selected_bullet_ids", "selected_bullets"):
         assert after[field] == before[field], field
 
@@ -612,7 +601,6 @@ def test_a_project_leads_in_with_its_first_bullet_on_the_same_line():
     )
     html = render_html(parse_text(DEFAULT_TEMPLATE), cv)
     assert "(A product)</span> · First one." in html
-    # Everything after the first is an ordinary bullet.
     assert "<li>Second one.</li>" in html
     assert "<li>First one.</li>" not in html
 
@@ -643,13 +631,12 @@ def test_dates_are_printed_for_a_person_not_a_sorter():
 
 # ---------- filling the page ----------
 #
-# The complaint these answer: the selector returned four bullets, the page came
-# out half empty, and nothing in the code noticed.
+# The complaint these answer: four bullets came back, the page was half empty,
+# and nothing noticed.
 
 
 def test_a_short_page_is_topped_up_until_it_is_full(client, monkeypatch):
     save_profile(client)
-    # Starts at half a page, each added bullet buys 0.2, full on the third.
     fill_to(monkeypatch, [0.5, 0.7, 0.9, 0.95])
     body = run(client, monkeypatch, PICKED)
 
@@ -669,7 +656,6 @@ def test_a_page_that_is_already_full_is_left_alone(client, monkeypatch):
 
 def test_a_top_up_that_would_spill_onto_a_second_page_is_taken_back(client, monkeypatch):
     save_profile(client)
-    # The first candidate takes it straight past the limit, so it comes off again.
     fill_to(monkeypatch, [0.5, 1.6])
     body = run(client, monkeypatch, PICKED)
     assert [b["id"] for s in body["cv"]["sections"] for b in s["bullets"]] == ["project-name-perf"]
@@ -719,9 +705,8 @@ def test_no_browser_does_not_stop_a_cv_being_generated(client, monkeypatch):
 
 # ---------- coverage: what the page backs ----------
 #
-# The substring scan this replaced said "React Native" was the only one of six
-# requirements backed, because it was the only one whose exact words appeared in
-# a bullet. Meaning is the model's job; keeping it honest is this code's.
+# The substring scan this replaced backed 1 of 6 requirements, because only one
+# appeared word for word. Meaning is the model's job, honesty is this code's.
 
 
 def _jd(*names: str) -> ParsedJd:
@@ -781,9 +766,8 @@ def test_coverage_matches_the_skill_name_case_and_space_insensitively():
 
 # ---------- preview ----------
 #
-# The preview pane used to be Tailwind markup approximating the layout, and it
-# had drifted out of step with cv.html without anyone noticing. These pin the
-# only property that matters: preview and print come off the same template.
+# The preview used to be separate markup approximating the layout, and had
+# drifted from cv.html unnoticed. These pin that both come off one template.
 
 
 def test_preview_is_the_same_html_the_pdf_prints_from(client):
@@ -795,7 +779,6 @@ def test_preview_is_the_same_html_the_pdf_prints_from(client):
 
 
 def test_preview_needs_a_profile():
-    """Without one there is nothing to rejoin the sections onto."""
     from app.main import app
 
     with TestClient(app) as fresh:
@@ -836,9 +819,8 @@ def test_linkify_escapes_the_label_it_did_not_link():
 
 # ---------- when the model answers badly ----------
 #
-# Every one of these is a 502 with a sentence, not a traceback and not a
-# half-built CV. The selector cannot be trusted to answer well; it can only be
-# stopped from answering destructively.
+# Each is a 502 with a sentence, not a traceback and not a half-built CV. The
+# selector cannot be made to answer well, only stopped from doing damage.
 
 
 def _reply(monkeypatch, payload):

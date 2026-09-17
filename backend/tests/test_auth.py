@@ -1,8 +1,7 @@
 """
-The security-shaped bits: the hash round trip, that a session is actually
-required, and that the lockout expires on its own. That last one has bitten this
-project once already, in the mock, where a counter that only reset on success
-made the correct password unusable forever.
+The security-shaped bits: the hash round trip, that a session is required, and
+that the lockout expires on its own. The last one already broke once, when a
+counter that reset only on success made the right password unusable forever.
 """
 
 import pytest
@@ -81,7 +80,6 @@ def test_login_then_the_same_routes_answer(client):
     assert client.post("/api/auth/login", json={"password": PASSWORD}).status_code == 200
     assert client.get("/api/auth/session").json() == {"authenticated": True}
     assert client.get("/api/profile/template").status_code == 200
-    # 404 rather than 401: signed in, and there is simply no profile saved.
     assert client.get("/api/profile").status_code == 404
 
 
@@ -115,7 +113,6 @@ def test_lockout_after_repeated_failures(client):
     assert locked.json()["retry_after"] == auth.BASE_LOCKOUT
     assert locked.headers["Retry-After"] == str(auth.BASE_LOCKOUT)
 
-    # The right password is refused too, or the lockout would be pointless.
     assert client.post("/api/auth/login", json={"password": PASSWORD}).status_code == 429
 
 

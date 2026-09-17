@@ -1,24 +1,15 @@
 """
-Back up hired.db, and drop a plain copy of the master profile beside it.
-
-Everything this app knows lives in one SQLite file: the master profile you wrote
-by hand, every application, and every PDF you sent. Losing the container loses
-all of it, so this runs on a timer rather than on good intentions.
+Back up hired.db, and write a plain copy of master.md beside it. One SQLite
+file holds the profile, every application and every PDF, so losing it loses
+everything.
 
     .venv/bin/python tools/backup.py                  # into backups/
     .venv/bin/python tools/backup.py /some/where      # into somewhere else
 
-Daily, via crontab -e:
-
     0 3 * * * cd /path/to/hired/backend && .venv/bin/python tools/backup.py
 
-The database copy uses SQLite's online backup API rather than cp, because the
-app runs in WAL mode: copying the file while a write is in flight can capture a
-torn database that only fails when you try to restore it.
-
-master.md is written out as well. It is recoverable from the .db, but the whole
-profile is one text file and a copy you can open in any editor is worth the
-few kilobytes.
+Uses SQLite's online backup API, not cp: the app runs in WAL mode, where
+copying the file mid-write can capture a torn database.
 """
 
 import sqlite3

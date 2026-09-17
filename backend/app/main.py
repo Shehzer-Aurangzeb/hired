@@ -1,3 +1,8 @@
+"""
+App wiring: middleware, the profile routes, and the built frontend. Everything
+under /api needs a session, and the bundle is served here, so one process.
+"""
+
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -28,8 +33,6 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="hired", lifespan=lifespan)
 
-# Signed, httpOnly, and nothing readable by script. Outermost so it wraps every
-# route, including the auth ones that write to it.
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.secret_key,
@@ -40,8 +43,7 @@ app.add_middleware(
 )
 app.add_middleware(
     CORSMiddleware,
-    # The session is an httpOnly cookie, so every request carries credentials.
-    # That also forbids a wildcard origin, which is why this list is explicit.
+    # Credentialed requests forbid a wildcard origin, so this list is explicit.
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
@@ -51,30 +53,23 @@ app.add_middleware(
 
 @app.get("/api/health")
 def health() -> dict[str, str]:
-    """
-    Is the process up. Deliberately on `app` rather than the protected router,
-    because a platform health check has no session and a 401 would read as a
-    dead container. It touches nothing: a database check here would take the
-    service down for a problem it cannot fix by restarting.
-    """
+    """Unprotected on purpose: a platform probe has no session, and 401 reads as dead."""
     return {"status": "ok"}
 
 
-# One dependency on the router rather than one per route: a route added later
-# cannot forget to be protected, because there is nowhere unprotected to put it.
+# On the router, not per route, so a route added later cannot forget it.
 api = APIRouter(prefix="/api", dependencies=[Depends(auth.require_session)])
 
 
 @api.get("/profile/template")
 def get_template() -> dict[str, str]:
-    """The starter file, and the briefing that hands it to Claude."""
     return {"text": template(), "claude_prompt": claude_prompt()}
 
 
 @api.get("/profile", response_model=Profile)
 def get_profile(session: SessionDep) -> Profile:
     # ponytail: re-parsed per request. A 30KB document is sub-millisecond, so
-    # there is no cache and therefore no cache to invalidate on save.
+    # there is no cache to invalidate on save.
     row = _row(session)
     if row is None:
         raise HTTPException(404, "No profile saved yet.")
@@ -86,8 +81,6 @@ def get_profile(session: SessionDep) -> Profile:
 
 class SourceBody(BaseModel):
     text: str
-    # The updated_at the editor was opened with. None means "I believe there is
-    # nothing saved yet".
     expected_updated_at: str | None = None
 
 
@@ -96,9 +89,8 @@ class TextBody(BaseModel):
 
 
 class BulletBody(BaseModel):
+    # Same lock as the editor: one row, so a bullet edit rewrites all of it.
     text: str
-    # Same optimistic lock as the source editor: the markdown is one row, and a
-    # bullet edit is a write to all of it.
     expected_updated_at: str | None = None
 
 
@@ -127,13 +119,7 @@ def post_validate(body: TextBody) -> ValidationResult:
 
 @api.patch("/profile/bullets/{bullet_id}")
 def patch_bullet(bullet_id: str, body: BulletBody, session: SessionDep):
-    """
-    Edit one bullet from the Browse screen without opening the markdown.
-
-    It rewrites the one line in the source and then goes through the same save
-    path as the editor, so a bullet edit cannot land a profile that does not
-    parse and cannot skip the conflict check.
-    """
+    """Rewrites one line, then reuses the editor's save path for the checks."""
     row = _row(session)
     if row is None:
         raise HTTPException(404, "No profile saved yet.")
@@ -163,9 +149,7 @@ def put_source(body: SourceBody, session: SessionDep):
         )
 
     row = _row(session)
-    # A save composed against an older copy would overwrite whatever landed in
-    # between. Sending no token while a profile exists is the same mistake made
-    # by a client that did not know there was one.
+    # A save written against an older copy would overwrite what landed between.
     if row is not None and body.expected_updated_at != stamp(row.updated_at):
         return JSONResponse(
             {
@@ -193,15 +177,9 @@ app.include_router(auth.router)
 app.include_router(api)
 
 
-# ---------- the front end ----------
-#
-# Serving the built bundle from here makes the whole app one process on one
-# port. That is not just convenience: the session is a cookie, and a cookie
-# shared across two origins has to be SameSite=None, which Safari and Brave
-# refuse outright. Same origin keeps it Lax and keeps it working.
-#
-# Mounted last so it can never shadow /api, and skipped entirely when there is
-# no build, so `ng serve` and the tests are unaffected.
+# One origin keeps the session cookie on SameSite=Lax; two would need
+# SameSite=None, which Safari and Brave refuse. Mounted last so it cannot
+# shadow /api, and skipped with no build so `ng serve` is unaffected.
 
 BUNDLE = Path(__file__).resolve().parents[2] / "frontend/dist/hired/browser"
 
@@ -209,13 +187,9 @@ if BUNDLE.is_dir():
 
     @app.get("/{path:path}", include_in_schema=False)
     def spa(path: str) -> FileResponse:
-        """
-        Any path that is not a real file is index.html: the router is in the
-        browser, so a deep link and a refresh have to reach it rather than 404.
-        """
+        """Anything that is not a real file is index.html, so deep links work."""
         candidate = (BUNDLE / path).resolve()
-        # A path is only served if it stays inside the bundle. Without this,
-        # /../../.env is a file read.
+        # Must stay inside the bundle. Without this, /../../.env is a file read.
         if path and candidate.is_file() and candidate.is_relative_to(BUNDLE):
             return FileResponse(candidate)
         return FileResponse(BUNDLE / "index.html")

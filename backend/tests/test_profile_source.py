@@ -64,7 +64,6 @@ def test_save_then_read_back(client):
     saved = save(client, GOOD).json()
     assert saved["exists"] and saved["text"] == GOOD
     assert client.get("/api/profile/source").json() == saved
-    # And the parsed view now answers from the same row.
     assert client.get("/api/profile").json()["identity"]["name"] == "Test Person"
 
 
@@ -78,7 +77,6 @@ def test_a_file_that_does_not_parse_is_refused(client):
     response = save(client, "# Identity\nname: X\n- \"q\" trailing")
     assert response.status_code == 422
     assert response.json()["errors"][0]["line"] == 3
-    # Nothing was written.
     assert client.get("/api/profile/source").json()["exists"] is False
 
 
@@ -91,7 +89,6 @@ def test_a_stale_save_is_refused_and_hands_back_the_current_copy(client):
     body = conflict.json()
     assert body["updated_at"] == newer["updated_at"]
     assert body["text"] == newer["text"]
-    # The stale write did not land.
     assert client.get("/api/profile/source").json()["text"] == newer["text"]
 
 
@@ -163,11 +160,9 @@ def test_editing_a_bullet_changes_one_line_and_nothing_else(client):
         b for p in parse_text(edited).all_projects() for b in p.bullets if b.id == "dedicate-cache"
     )
     assert bullet.text == "Cut repeat API calls by an estimated 60%."
-    # Everything else on the bullet survives the edit.
     assert bullet.priority == 1 and bullet.tags == ["frontend", "performance"]
     assert bullet.short == "Cut repeat API calls by an estimated 50%."
     assert bullet.metric and bullet.metric.source == "estimated"
-    # And so does its neighbour.
     other = next(
         b for p in parse_text(edited).all_projects() for b in p.bullets if b.id == "dedicate-auth"
     )

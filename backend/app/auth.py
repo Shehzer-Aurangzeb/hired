@@ -1,10 +1,6 @@
 """
-One password guards the whole instance. There are no accounts, because there is
-only ever one person in here.
-
-The password is never stored, only an scrypt hash of it, and that hash lives in
-the environment rather than the database: there is no change-password screen to
-justify a table, and a table would need a seeding path.
+One password guards the instance, no accounts. Only an scrypt hash is stored,
+in the environment rather than the database.
 """
 
 import base64
@@ -21,7 +17,7 @@ from pydantic import BaseModel
 
 from .settings import get_settings
 
-# Interactive-login parameters. 128 * N * r is 16 MB, inside OpenSSL's default cap.
+# Interactive-login parameters. 128 * N * r is 16 MB, inside OpenSSL's cap.
 N, R, P = 2**14, 8, 1
 
 MAX_ATTEMPTS = 5
@@ -49,11 +45,9 @@ def verify_password(password: str, stored: str) -> bool:
             password.encode(), salt=_unb64(salt), n=int(n), r=int(r), p=int(p)
         )
     except (ValueError, TypeError):
-        # A malformed hash is a misconfiguration, and the safe reading of a
-        # misconfigured lock is "locked".
+        # A malformed hash is a broken lock, and a broken lock reads as locked.
         return False
-    # Comparison is constant time so a wrong password cannot be narrowed down by
-    # measuring how long the rejection took.
+    # Constant time, so a wrong password cannot be narrowed down by timing it.
     return hmac.compare_digest(candidate, _unb64(key))
 
 
@@ -75,18 +69,13 @@ class Gate:
     locked_until: float = 0.0
 
 
-# ponytail: in-process, no store. One password and one worker, so this is the
-# whole limiter. It becomes per-worker the day this runs on more than one, which
-# is when it needs Redis.
-#
-# Deliberately global rather than per-IP: there is one password, so per-IP just
-# means an attacker rotates addresses. The cost is that a stranger who finds the
-# URL can lock the owner out for a while, which is the cheaper of the two harms.
+# ponytail: in-process, so it needs Redis the day there is a second worker.
+# Global rather than per-IP, because per-IP only means rotating addresses. The
+# cost is that a stranger can lock the owner out for a while.
 _gate = Gate()
 
 
 def _locked_for() -> int:
-    """Seconds still to wait, rounded up. Zero when the door is open."""
     return max(0, math.ceil(_gate.locked_until - time.monotonic()))
 
 
@@ -94,8 +83,7 @@ def _record_failure() -> None:
     _gate.failures += 1
     if _gate.failures < MAX_ATTEMPTS:
         return
-    # Each lockout is twice the last, so a fumbled password costs half a minute
-    # and a sustained guessing run costs progressively more.
+    # Each lockout doubles, so a typo costs 30s and a guessing run costs more.
     _gate.lockouts += 1
     _gate.failures = 0
     wait = min(BASE_LOCKOUT * 2 ** (_gate.lockouts - 1), MAX_LOCKOUT)
@@ -103,10 +91,7 @@ def _record_failure() -> None:
 
 
 def _too_many(wait: int) -> JSONResponse:
-    """
-    Flat body, not HTTPException: FastAPI nests everything under "detail", and
-    the client needs retry_after beside the message rather than inside it.
-    """
+    """Flat body, not HTTPException: the client needs retry_after beside detail."""
     return JSONResponse(
         {
             "detail": "Too many attempts. Wait a moment before trying again.",
@@ -118,7 +103,6 @@ def _too_many(wait: int) -> JSONResponse:
 
 
 def reset_gate() -> None:
-    """Test seam, and what a correct password does."""
     _gate.failures = _gate.lockouts = 0
     _gate.locked_until = 0.0
 
@@ -149,8 +133,7 @@ def login(body: LoginBody, request: Request):
 
     stored = get_settings().password_hash
     if not stored:
-        # No hash configured means the instance is not set up. Letting anyone in
-        # would be the worst possible reading of "no password is set".
+        # Not set up. Letting anyone in is the worst reading of "no password".
         raise HTTPException(503, "No password is configured on this instance.")
 
     if not verify_password(body.password, stored):
@@ -161,8 +144,7 @@ def login(body: LoginBody, request: Request):
         raise HTTPException(401, "That password is not right.")
 
     reset_gate()
-    # Clear before setting: a fresh session on login means a cookie handed to the
-    # browser earlier cannot be promoted into a signed-in one.
+    # Clear first, so a cookie handed out earlier cannot be promoted to signed in.
     request.session.clear()
     request.session["auth"] = True
     return {"authenticated": True}
