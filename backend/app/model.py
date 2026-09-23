@@ -1,7 +1,6 @@
 """
-The one place that talks to a model. OpenRouter when a key is set, then Gemini
-behind it, because OpenRouter's free pool cannot help when OpenRouter is what
-is down.
+The one place that talks to a model. Gemini first because it answers fast, with
+OpenRouter's free pool behind it for when Gemini is loaded or out of quota.
 
 ponytail: no retry, only failover. The free tiers are rationed per day, so a
 retry spends tomorrow's budget on a blip.
@@ -25,6 +24,17 @@ FREE_POOL = "openrouter/free"
 # waiting on rather than a batch job.
 TIMEOUT = 60.0
 
+# One client, pinned to IPv4. Both providers resolve to a long list of IPv6
+# addresses first, and on a network whose IPv6 is blackholed every one of them
+# has to time out before Python falls back: measured at 64s to Google against
+# 0.2s over IPv4. curl hides this by racing both families (RFC 8305); httpx
+# walks them in order, and the connect timeout is per address, so it cannot
+# help. Binding a v4 source address makes getaddrinfo skip the v6 records.
+_CLIENT = httpx.Client(
+    timeout=TIMEOUT,
+    transport=httpx.HTTPTransport(local_address="0.0.0.0"),
+)
+
 
 def generate_json(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
     """
@@ -33,30 +43,31 @@ def generate_json(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
     """
     settings = get_settings()
 
-    if settings.openrouter_api_key:
+    if settings.gemini_api_key:
         try:
-            return _openrouter(prompt, schema, settings)
+            return _gemini(prompt, schema, settings)
         except HTTPException:
             # Only swallowed when there is somewhere else to go.
-            if not settings.gemini_api_key:
+            if not settings.openrouter_api_key:
                 raise
 
-    if not settings.gemini_api_key:
+    if not settings.openrouter_api_key:
         # Not configured is a setup problem, and should not read like a refusal.
         raise HTTPException(503, "No model key is configured on this instance.")
-    return _gemini(prompt, schema, settings)
+    return _openrouter(prompt, schema, settings)
 
 
 def _openrouter(prompt: str, schema: dict[str, Any], settings: Settings) -> dict[str, Any]:
     """
-    OpenRouter's free pool, so a dead model is its problem. require_parameters
-    keeps it off endpoints that would ignore the schema.
+    The fallback. OpenRouter's free pool, so a dead model is its problem, and
+    require_parameters keeps it off endpoints that would ignore the schema. The
+    free models think for a while, which is why this is second and not first.
 
     ponytail: no `strict: true`, which restricts the JSON Schema keywords and
     would mean rewriting both schemas to suit one provider.
     """
     try:
-        response = httpx.post(
+        response = _CLIENT.post(
             OPENROUTER,
             headers={"Authorization": f"Bearer {settings.openrouter_api_key}"},
             json={
@@ -68,7 +79,6 @@ def _openrouter(prompt: str, schema: dict[str, Any], settings: Settings) -> dict
                     "json_schema": {"name": "answer", "schema": schema},
                 },
             },
-            timeout=TIMEOUT,
         )
     except httpx.TimeoutException as error:
         raise HTTPException(504, "The model took too long. Try again.") from error
@@ -104,7 +114,7 @@ def _openrouter(prompt: str, schema: dict[str, Any], settings: Settings) -> dict
 def _gemini(prompt: str, schema: dict[str, Any], settings: Settings) -> dict[str, Any]:
     """Google AI Studio, which enforces the schema server-side."""
     try:
-        response = httpx.post(
+        response = _CLIENT.post(
             f"{GEMINI}/{settings.gemini_model}:generateContent",
             headers={"x-goog-api-key": settings.gemini_api_key},
             json={
@@ -114,7 +124,6 @@ def _gemini(prompt: str, schema: dict[str, Any], settings: Settings) -> dict[str
                     "responseSchema": schema,
                 },
             },
-            timeout=TIMEOUT,
         )
     except httpx.TimeoutException as error:
         raise HTTPException(504, "The model took too long. Try again.") from error

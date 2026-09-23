@@ -197,7 +197,7 @@ def test_the_client_refuses_before_it_calls(monkeypatch):
     def explode(*args, **kwargs):
         raise AssertionError("should not have reached the network")
 
-    monkeypatch.setattr(model.httpx, "post", explode)
+    monkeypatch.setattr(model._CLIENT, "post", explode)
     with pytest.raises(HTTPException) as error:
         model.generate_json("anything", {})
     assert error.value.status_code == 503
@@ -221,29 +221,30 @@ def calls(monkeypatch, settings, *replies):
         seen.append(url)
         return pending.pop(0)
 
-    monkeypatch.setattr(model.httpx, "post", post)
+    monkeypatch.setattr(model._CLIENT, "post", post)
     return seen
 
 
-def test_openrouter_is_tried_first_when_its_key_is_set(monkeypatch):
+def test_gemini_is_tried_first_when_its_key_is_set(monkeypatch):
+    """Gemini answers in seconds; the free pool thinks for a while."""
     settings = Settings(secret_key="t", openrouter_api_key="or", gemini_api_key="g")
-    seen = calls(monkeypatch, settings, _reply(200, OPENROUTER_OK))
-
-    assert model.generate_json("anything", {}) == {"score": 7}
-    assert seen == [model.OPENROUTER]
-
-
-def test_a_dead_openrouter_falls_through_to_gemini(monkeypatch):
-    """The whole point of two providers: one being rate-limited still answers."""
-    settings = Settings(secret_key="t", openrouter_api_key="or", gemini_api_key="g")
-    seen = calls(monkeypatch, settings, _reply(429, {}), _reply(200, GEMINI_OK))
+    seen = calls(monkeypatch, settings, _reply(200, GEMINI_OK))
 
     assert model.generate_json("anything", {}) == {"score": 3}
-    assert len(seen) == 2 and seen[0] == model.OPENROUTER
+    assert len(seen) == 1 and seen[0].startswith(model.GEMINI)
 
 
-def test_without_a_gemini_key_openrouters_error_is_the_answer(monkeypatch):
-    settings = Settings(secret_key="t", openrouter_api_key="or")
+def test_a_loaded_gemini_falls_through_to_openrouter(monkeypatch):
+    """The whole point of two providers: one being rate-limited still answers."""
+    settings = Settings(secret_key="t", openrouter_api_key="or", gemini_api_key="g")
+    seen = calls(monkeypatch, settings, _reply(429, {}), _reply(200, OPENROUTER_OK))
+
+    assert model.generate_json("anything", {}) == {"score": 7}
+    assert len(seen) == 2 and seen[1] == model.OPENROUTER
+
+
+def test_without_a_fallback_geminis_error_is_the_answer(monkeypatch):
+    settings = Settings(secret_key="t", gemini_api_key="g")
     calls(monkeypatch, settings, _reply(429, {}))
 
     with pytest.raises(HTTPException) as error:
@@ -251,12 +252,12 @@ def test_without_a_gemini_key_openrouters_error_is_the_answer(monkeypatch):
     assert error.value.status_code == 429
 
 
-def test_gemini_alone_still_works(monkeypatch):
-    settings = Settings(secret_key="t", gemini_api_key="g")
-    seen = calls(monkeypatch, settings, _reply(200, GEMINI_OK))
+def test_openrouter_alone_still_works(monkeypatch):
+    settings = Settings(secret_key="t", openrouter_api_key="or")
+    seen = calls(monkeypatch, settings, _reply(200, OPENROUTER_OK))
 
-    assert model.generate_json("anything", {}) == {"score": 3}
-    assert seen[0].startswith(model.GEMINI)
+    assert model.generate_json("anything", {}) == {"score": 7}
+    assert seen[0] == model.OPENROUTER
 
 
 def test_the_free_pool_is_sent_so_openrouter_picks_the_model(monkeypatch):
@@ -268,7 +269,7 @@ def test_the_free_pool_is_sent_so_openrouter_picks_the_model(monkeypatch):
         sent.update(kwargs["json"])
         return _reply(200, OPENROUTER_OK)
 
-    monkeypatch.setattr(model.httpx, "post", post)
+    monkeypatch.setattr(model._CLIENT, "post", post)
     model.generate_json("anything", {"type": "object"})
 
     assert sent["model"] == model.FREE_POOL

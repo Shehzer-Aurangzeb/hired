@@ -834,7 +834,7 @@ def _reply(monkeypatch, payload):
             return payload
 
     monkeypatch.setattr(model, "get_settings", lambda: Settings(secret_key="t", gemini_api_key="k"))
-    monkeypatch.setattr(model.httpx, "post", lambda *a, **k: Fake())
+    monkeypatch.setattr(model._CLIENT, "post", lambda *a, **k: Fake())
 
 
 def _wrapped(text: str) -> dict:

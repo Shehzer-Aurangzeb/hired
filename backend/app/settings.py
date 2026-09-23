@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     # A setting because the free tier's limits move, and retired names 404.
     gemini_model: str = "gemini-3.6-flash"
 
-    # Tried before Gemini when set. All three spellings are accepted.
+    # The fallback behind Gemini. All three spellings are accepted.
     openrouter_api_key: str = Field(
         "",
         validation_alias=AliasChoices(
