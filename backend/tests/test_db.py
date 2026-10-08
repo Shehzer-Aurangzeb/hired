@@ -65,11 +65,31 @@ def test_a_kept_posting_needs_no_cv(session: Session):
     assert saved.selected_bullet_ids == ["dedicate-frontend-scratch"]
 
 
-def test_profile_source_is_a_single_row(session: Session):
+def test_profile_source_keeps_every_version(session: Session):
+    """Append-only: the old row stays as the version you can go back to."""
     session.add(ProfileSource(text="# Identity\nname: Test"))
+    session.add(ProfileSource(text="# Identity\nname: Someone Else"))
     session.commit()
 
-    # A second profile would make "the profile" ambiguous everywhere downstream.
-    session.add(ProfileSource(id=2, text="# Identity\nname: Someone Else"))
-    with pytest.raises(IntegrityError):
-        session.commit()
+    rows = session.exec(select(ProfileSource).order_by(ProfileSource.id)).all()
+    assert [r.text.splitlines()[1] for r in rows] == ["name: Test", "name: Someone Else"]
+
+
+def test_a_version_id_is_never_reused(session: Session):
+    """
+    SQLite hands a deleted rowid to the next insert. A version id crosses to the
+    browser and comes back on restore, so one that changes meaning restores the
+    wrong file. AUTOINCREMENT is what stops it.
+    """
+    for n in range(3):
+        session.add(ProfileSource(text=f"# Identity\nname: v{n}"))
+    session.commit()
+    top = session.exec(select(ProfileSource).order_by(ProfileSource.id.desc())).first()
+    freed = top.id
+    session.delete(top)
+    session.commit()
+
+    session.add(ProfileSource(text="# Identity\nname: after the delete"))
+    session.commit()
+    fresh = session.exec(select(ProfileSource).order_by(ProfileSource.id.desc())).first()
+    assert fresh.id > freed

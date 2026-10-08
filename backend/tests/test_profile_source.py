@@ -36,6 +36,8 @@ def client(monkeypatch):
     app.dependency_overrides[get_session] = session_override
     with TestClient(app) as client:
         client.post("/api/auth/login", json={"password": PASSWORD})
+        # The pruning test has to backdate rows, which no route will do.
+        client.engine = engine
         yield client
     app.dependency_overrides.clear()
     auth.reset_gate()
@@ -56,7 +58,7 @@ def test_everything_here_needs_a_session(client):
 
 def test_empty_before_anything_is_saved(client):
     assert client.get("/api/profile/source").json() == {
-        "text": "", "exists": False, "updated_at": None
+        "text": "", "exists": False, "updated_at": None, "version": None
     }
 
 
@@ -217,3 +219,132 @@ def test_editing_a_bullet_that_is_not_there(client):
         "/api/profile/bullets/dedicate-auth", json={"text": "   ", "expected_updated_at": stamp}
     )
     assert empty.status_code == 422
+
+
+# ---------- version history ----------
+
+
+def test_every_save_appends_a_version(client):
+    save(client, GOOD)
+    first = client.get("/api/profile/source").json()
+    save(client, GOOD + "\n", first["updated_at"])
+
+    versions = client.get("/api/profile/versions").json()
+    assert [v["version"] for v in versions] == [2, 1]
+    assert [v["current"] for v in versions] == [True, False]
+
+
+def test_an_old_version_can_be_read_back(client):
+    save(client, GOOD)
+    one = client.get("/api/profile/source").json()
+    save(client, GOOD + "\n# Awards\n", one["updated_at"])
+
+    assert client.get("/api/profile/versions/1").json()["text"] == GOOD
+
+
+def test_restore_appends_rather_than_rewinding(client):
+    """Rewinding would erase the record of the mistake it is undoing."""
+    save(client, GOOD)
+    one = client.get("/api/profile/source").json()
+    save(client, GOOD + "\n# Awards\n", one["updated_at"])
+    two = client.get("/api/profile/source").json()
+
+    back = client.post(
+        "/api/profile/versions/1/restore",
+        json={"expected_updated_at": two["updated_at"]},
+    ).json()
+
+    assert back["text"] == GOOD
+    assert back["version"] == 3
+    assert [v["version"] for v in client.get("/api/profile/versions").json()] == [3, 2, 1]
+
+
+def test_restoring_against_a_stale_token_conflicts(client):
+    save(client, GOOD)
+    one = client.get("/api/profile/source").json()
+    save(client, GOOD + "\n# Awards\n", one["updated_at"])
+
+    response = client.post(
+        "/api/profile/versions/1/restore",
+        json={"expected_updated_at": one["updated_at"]},
+    )
+    assert response.status_code == 409
+
+
+def test_a_pruned_version_says_so(client):
+    save(client, GOOD)
+    assert client.get("/api/profile/versions/99").status_code == 404
+    assert "pruned" in client.get("/api/profile/versions/99").json()["detail"]
+
+
+def test_pruning_keeps_the_floor_however_old_everything_is(client):
+    """
+    Age alone would delete every version after a break longer than the window,
+    including the one in use, which is the moment undo is wanted most. So the
+    newest few survive whatever their age, and anything recent survives anyway.
+    """
+    from datetime import timedelta
+
+    from app.tables import VERSIONS_KEPT, ProfileSource, now
+
+    save(client, GOOD)                       # v1, written now
+    with Session(client.engine) as session:  # v2..v9, long past the window
+        for n in range(8):
+            session.add(
+                ProfileSource(text=f"{GOOD}\n# {n}\n", updated_at=now() - timedelta(days=400))
+            )
+        session.commit()
+
+    latest = client.get("/api/profile/source").json()
+    save(client, GOOD + "\n# fresh\n", latest["updated_at"])   # v10, and prunes
+
+    kept = [v["version"] for v in client.get("/api/profile/versions").json()]
+
+    # The newest VERSIONS_KEPT, whatever their age.
+    assert kept[:VERSIONS_KEPT] == [10, 9, 8, 7, 6]
+    # v1 is recent, so the window never applied to it.
+    assert 1 in kept
+    # The stale ones outside the floor are the only ones gone.
+    assert [v for v in (2, 3, 4, 5) if v in kept] == []
+    assert kept[0] == 10 and client.get("/api/profile/versions").json()[0]["current"]
+
+
+def test_the_diff_reads_as_what_restoring_would_do(client):
+    """
+    Current first, so a removed line is what you lose and an added line is what
+    comes back. The other direction answers a question nobody asked.
+    """
+    save(client, GOOD)
+    one = client.get("/api/profile/source").json()
+    save(client, GOOD.replace("Shipped it", "Shipped it twice"), one["updated_at"])
+
+    diff = client.get("/api/profile/versions/1/diff").json()
+
+    assert diff["from_version"] == 2 and diff["to_version"] == 1
+    assert diff["added"] == 1 and diff["removed"] == 1
+    body = {line["op"]: line["text"] for line in diff["lines"] if line["op"] in "+-"}
+    assert "twice" in body["-"]       # what the current version says
+    assert "twice" not in body["+"]   # what v1 would bring back
+
+
+def test_the_diff_carries_context_not_the_whole_file(client):
+    save(client, GOOD)
+    one = client.get("/api/profile/source").json()
+    save(client, GOOD.replace("Shipped it", "Shipped it twice"), one["updated_at"])
+
+    diff = client.get("/api/profile/versions/1/diff").json()
+    assert len(diff["lines"]) < len(GOOD.splitlines())
+
+
+def test_an_identical_version_diffs_to_nothing(client):
+    save(client, GOOD)
+    one = client.get("/api/profile/source").json()
+    save(client, GOOD, one["updated_at"])
+
+    diff = client.get("/api/profile/versions/1/diff").json()
+    assert diff["lines"] == [] and diff["added"] == 0 and diff["removed"] == 0
+
+
+def test_diffing_a_pruned_version_says_so(client):
+    save(client, GOOD)
+    assert client.get("/api/profile/versions/99/diff").status_code == 404

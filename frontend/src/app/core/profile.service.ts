@@ -4,7 +4,14 @@ import { Observable, catchError, map, of, shareReplay, tap } from 'rxjs';
 
 import { API } from './api';
 import { AuthService } from './auth.service';
-import { Profile, ProfileSource, ProfileTemplate, ValidationResult } from './models';
+import {
+  Profile,
+  ProfileDiff,
+  ProfileSource,
+  ProfileTemplate,
+  ProfileVersion,
+  ValidationResult,
+} from './models';
 
 @Injectable({ providedIn: 'root' })
 export class ProfileService {
@@ -74,6 +81,29 @@ export class ProfileService {
     return this.http
       .patch<ProfileSource>(`${API}/api/profile/bullets/${encodeURIComponent(id)}`, {
         text,
+        expected_updated_at: expectedUpdatedAt,
+      })
+      .pipe(tap(() => this.landed()));
+  }
+
+  /** Every save appends one. Newest first, the first is current. */
+  versions(): Observable<ProfileVersion[]> {
+    return this.http.get<ProfileVersion[]>(`${API}/api/profile/versions`);
+  }
+
+  /** What restoring this version would change, read against the saved profile. */
+  diff(version: number): Observable<ProfileDiff> {
+    return this.http.get<ProfileDiff>(`${API}/api/profile/versions/${version}/diff`);
+  }
+
+  /**
+   * Puts an old version back by appending it as a new one, so nothing is lost
+   * and a restore can itself be undone. Goes through the same save path, which
+   * is why it takes the same conflict token.
+   */
+  restore(version: number, expectedUpdatedAt: string | null): Observable<ProfileSource> {
+    return this.http
+      .post<ProfileSource>(`${API}/api/profile/versions/${version}/restore`, {
         expected_updated_at: expectedUpdatedAt,
       })
       .pipe(tap(() => this.landed()));

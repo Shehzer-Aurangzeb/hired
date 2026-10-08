@@ -1007,6 +1007,18 @@
             first message, then paste what Claude returns back over the source here.
           </p>
 
+          @if (version()) {
+            <button
+              type="button"
+              class="btn btn-ghost"
+              [class]="historyOpen() ? 'text-fg' : 'text-fg-muted'"
+              (click)="toggleHistory()"
+            >
+              <app-icon name="refresh" [size]="15" />
+              v{{ version() }} · history
+            </button>
+          }
+
           @if (dirty()) {
             <button type="button" class="btn btn-ghost" (click)="revert()">
               <app-icon name="arrow-left" [size]="15" />
@@ -1042,3 +1054,150 @@
     }
   }
 </div>
+
+<!-- ================================================================== -->
+<!-- History                                                            -->
+<!--                                                                    -->
+<!-- Viewing works mid-edit. Restore does not: it replaces the buffer,  -->
+<!-- so it waits for a clean one. A broken profile cannot be saved, and -->
+<!-- "what did this look like before" is the reason people open this,   -->
+<!-- so gating the whole drawer would lock the door at the worst moment.-->
+<!-- ================================================================== -->
+@if (historyOpen()) {
+  <div
+    class="bg-ink/20 fixed inset-0 z-40"
+    (click)="toggleHistory()"
+    aria-hidden="true"
+  ></div>
+
+  <aside
+    class="border-line bg-bg fixed top-0 right-0 z-50 flex h-full w-full max-w-md flex-col border-l shadow-xl"
+    role="dialog"
+    aria-label="Profile history"
+  >
+    <header class="border-line flex items-center gap-2 border-b px-4 py-3">
+      <h2 class="text-[13px] font-semibold tracking-tight">History</h2>
+      @if (historyBusy()) {
+        <app-icon name="refresh" [size]="14" class="text-fg-subtle animate-spin" />
+      }
+      <button type="button" class="btn btn-ghost ml-auto !px-2" (click)="toggleHistory()">
+        <app-icon name="x" [size]="16" />
+      </button>
+    </header>
+
+    @if (historyError()) {
+      <p
+        class="border-danger/50 bg-danger-soft text-danger m-3 rounded-card border px-3 py-2 text-[12px]"
+        role="alert"
+      >
+        {{ historyError() }}
+      </p>
+    }
+
+    @if (dirty()) {
+      <p class="border-warn/50 bg-warn-soft text-warn m-3 rounded-card border px-3 py-2 text-[12px]">
+        You have unsaved edits. Comparisons are against saved v{{ version() }}, and restoring
+        waits until you save or revert.
+      </p>
+    }
+
+    <div class="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+      @for (entry of versions(); track entry.version) {
+        <div class="mb-1.5">
+          <button
+            type="button"
+            class="border-line hover:border-ink/30 w-full rounded-card border px-3 py-2 text-left transition-colors"
+            [class]="picked() === entry.version ? 'border-ink/40 bg-surface' : ''"
+            (click)="pick(entry.version)"
+          >
+            <span class="flex items-baseline gap-2">
+              <span class="text-[13px] font-medium">v{{ entry.version }}</span>
+              @if (entry.current) {
+                <span class="badge bg-accent-soft text-accent">current</span>
+              }
+              <span class="text-fg-subtle ml-auto text-[11px]">{{ since(entry.updated_at) }}</span>
+            </span>
+            <span class="text-fg-subtle tabular text-[11px]">{{ entry.chars }} chars</span>
+          </button>
+
+          @if (picked() === entry.version && !entry.current) {
+            @if (diff(); as d) {
+              <div class="border-line mt-1.5 rounded-card border p-2">
+                <p class="text-fg-muted mb-2 text-[11px]">
+                  Restoring this would make
+                  <span class="text-accent">{{ d.added }} addition{{ d.added === 1 ? '' : 's' }}</span>
+                  and
+                  <span class="text-danger">{{ d.removed }} removal{{ d.removed === 1 ? '' : 's' }}</span>.
+                </p>
+
+                @if (!d.lines.length) {
+                  <p class="text-fg-subtle text-[12px]">Identical to the current profile.</p>
+                } @else {
+                  <pre class="mono max-h-72 overflow-auto text-[11px] leading-relaxed"><!--
+               -->@for (line of d.lines; track $index) {<!--
+                 --><div
+                      [class]="
+                        line.op === '+'
+                          ? 'bg-accent-soft text-accent'
+                          : line.op === '-'
+                            ? 'bg-danger-soft text-danger'
+                            : line.op === '@'
+                              ? 'border-line text-fg-subtle my-1.5 border-t pt-1.5'
+                              : 'text-fg-muted'
+                      "
+                    >{{ line.text }}</div><!--
+               -->}</pre>
+                }
+
+                @if (confirming() === entry.version) {
+                  <div class="border-warn/50 bg-warn-soft rounded-card mt-2 border px-3 py-2">
+                    <p class="text-warn text-[12px] font-medium">Restore v{{ entry.version }}?</p>
+                    <p class="text-fg-muted mt-1 text-[11px] leading-relaxed">
+                      This appends it as v{{ nextVersion() }}. Nothing is deleted, and v{{ version() }}
+                      stays in this list if you change your mind.
+                    </p>
+                    <div class="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        class="btn btn-primary !py-1"
+                        [disabled]="historyBusy()"
+                        (click)="restore(entry.version)"
+                      >
+                        Restore as v{{ nextVersion() }}
+                      </button>
+                      <button type="button" class="btn btn-ghost !py-1" (click)="confirming.set(null)">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                } @else {
+                  <button
+                    type="button"
+                    class="btn btn-outline mt-2 !py-1"
+                    [disabled]="!canRestore() || !d.lines.length"
+                    (click)="confirming.set(entry.version)"
+                  >
+                    <app-icon name="arrow-left" [size]="14" />
+                    Restore this version
+                  </button>
+                  @if (!canRestore()) {
+                    <span class="text-fg-subtle ml-2 text-[11px]">Save or revert first.</span>
+                  }
+                }
+              </div>
+            }
+          }
+        </div>
+      } @empty {
+        @if (!historyBusy()) {
+          <p class="text-fg-subtle px-1 py-4 text-[12px]">Nothing saved yet.</p>
+        }
+      }
+    </div>
+
+    <footer class="border-line text-fg-subtle border-t px-4 py-2.5 text-[11px] leading-relaxed">
+      Versions are kept for 60 days. The last 5 stay however old they are, so there is always
+      something to go back to.
+    </footer>
+  </aside>
+}

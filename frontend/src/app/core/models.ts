@@ -250,6 +250,32 @@ export interface ProfileSource {
   text: string;
   exists: boolean;
   updated_at: string | null;
+  /** Which saved version this text is. Null before anything has been saved. */
+  version: number | null;
+}
+
+/** One entry in the history list. The text is deliberately absent: with it, the
+ *  list would be a megabyte. */
+export interface ProfileVersion {
+  version: number;
+  updated_at: string;
+  chars: number;
+  current: boolean;
+}
+
+export interface DiffLine {
+  /** "+" added, "-" removed, " " context, "@" a jump between hunks. */
+  op: string;
+  text: string;
+}
+
+/** Already in display order. Render it straight; there is no line maths to do. */
+export interface ProfileDiff {
+  from_version: number;
+  to_version: number;
+  added: number;
+  removed: number;
+  lines: DiffLine[];
 }
 
 /** GET /api/profile/template. Both strings are backend config, not code. */

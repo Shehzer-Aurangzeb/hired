@@ -11,6 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
+import difflib
+from datetime import timedelta
+
 from sqlmodel import select
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -20,7 +23,7 @@ from .models import Profile, ValidationResult
 from .profile_parser import ProfileError, parse_text, replace_bullet_text, validate_text
 from .profile_template import claude_prompt, template
 from .settings import get_settings
-from .tables import ProfileSource, now, stamp
+from .tables import VERSION_DAYS, VERSIONS_KEPT, ProfileSource, now, stamp
 
 settings = get_settings()
 
@@ -88,6 +91,10 @@ class TextBody(BaseModel):
     text: str
 
 
+class RestoreBody(BaseModel):
+    expected_updated_at: str | None = None
+
+
 class BulletBody(BaseModel):
     # Same lock as the editor: one row, so a bullet edit rewrites all of it.
     text: str
@@ -95,7 +102,30 @@ class BulletBody(BaseModel):
 
 
 def _row(session: SessionDep) -> ProfileSource | None:
-    return session.exec(select(ProfileSource)).first()
+    """The newest version, which is the profile. There is no `active` column."""
+    return session.exec(
+        select(ProfileSource).order_by(ProfileSource.id.desc())
+    ).first()
+
+
+def _prune(session: SessionDep) -> None:
+    """
+    Drop versions past VERSION_DAYS, keeping the newest VERSIONS_KEPT whatever
+    their age. Both halves matter: on age alone, a break longer than the window
+    deletes every version including the one in use, which is exactly when undo
+    is wanted. Runs inside the save, because saving is the only thing that adds
+    a row.
+    """
+    keep = {
+        row.id
+        for row in session.exec(
+            select(ProfileSource).order_by(ProfileSource.id.desc()).limit(VERSIONS_KEPT)
+        ).all()
+    }
+    cutoff = now() - timedelta(days=VERSION_DAYS)
+    for row in session.exec(select(ProfileSource).where(ProfileSource.updated_at < cutoff)):
+        if row.id not in keep:
+            session.delete(row)
 
 
 
@@ -104,6 +134,7 @@ def _source(row: ProfileSource | None) -> dict:
         "text": row.text if row else "",
         "exists": row is not None,
         "updated_at": stamp(row.updated_at) if row else None,
+        "version": row.id if row else None,
     }
 
 
@@ -159,14 +190,107 @@ def put_source(body: SourceBody, session: SessionDep):
             status_code=409,
         )
 
-    if row is None:
-        row = ProfileSource(text=body.text)
-    row.text = body.text
-    row.updated_at = now()
-    session.add(row)
+    # Append, never overwrite. The old row stays as the version you can go back
+    # to, and nothing in the table is ever updated in place.
+    fresh = ProfileSource(text=body.text, updated_at=now())
+    session.add(fresh)
+    _prune(session)
     session.commit()
-    session.refresh(row)
+    session.refresh(fresh)
+    return _source(fresh)
+
+
+class Version(BaseModel):
+    """One saved version, without its text. The list would be megabytes with it."""
+
+    version: int
+    updated_at: str
+    chars: int
+    current: bool
+
+
+@api.get("/profile/versions")
+def list_versions(session: SessionDep) -> list[Version]:
+    rows = session.exec(select(ProfileSource).order_by(ProfileSource.id.desc())).all()
+    return [
+        Version(
+            version=row.id,
+            updated_at=stamp(row.updated_at) or "",
+            chars=len(row.text),
+            current=index == 0,
+        )
+        for index, row in enumerate(rows)
+    ]
+
+
+@api.get("/profile/versions/{version}")
+def get_version(version: int, session: SessionDep) -> dict:
+    row = session.get(ProfileSource, version)
+    if row is None:
+        raise HTTPException(404, "No such version. It may have been pruned.")
     return _source(row)
+
+
+class DiffLine(BaseModel):
+    # "+" added, "-" removed, " " unchanged context, "@" a jump between hunks.
+    op: str
+    text: str
+
+
+class Diff(BaseModel):
+    from_version: int
+    to_version: int
+    added: int
+    removed: int
+    lines: list[DiffLine]
+
+
+@api.get("/profile/versions/{version}/diff")
+def diff_version(version: int, session: SessionDep) -> Diff:
+    """
+    What restoring this version would change, current first.
+
+    That direction is the question being asked: a removed line is what you would
+    lose and an added line is what comes back. Unified diff with three lines of
+    context, so the size tracks the change rather than the file.
+    """
+    old = session.get(ProfileSource, version)
+    current = _row(session)
+    if old is None or current is None:
+        raise HTTPException(404, "No such version. It may have been pruned.")
+
+    lines = [
+        DiffLine(op=line[0], text=line)
+        for line in difflib.unified_diff(
+            current.text.splitlines(), old.text.splitlines(), lineterm="", n=3
+        )
+        if not line.startswith(("---", "+++"))
+    ]
+    return Diff(
+        from_version=current.id,
+        to_version=version,
+        added=sum(1 for line in lines if line.op == "+"),
+        removed=sum(1 for line in lines if line.op == "-"),
+        lines=lines,
+    )
+
+
+@api.post("/profile/versions/{version}/restore")
+def restore_version(version: int, body: RestoreBody, session: SessionDep):
+    """
+    Put an old version back by appending it as a new one.
+
+    Never rewinds. Rewinding would erase the record of the mistake, and makes a
+    second restore ambiguous about what it is undoing. It goes through the same
+    save path, so a restore cannot land a profile that does not parse and cannot
+    skip the conflict check.
+    """
+    row = session.get(ProfileSource, version)
+    if row is None:
+        raise HTTPException(404, "No such version. It may have been pruned.")
+    return put_source(
+        SourceBody(text=row.text, expected_updated_at=body.expected_updated_at), session
+    )
 
 
 api.include_router(applications.router)

@@ -13,7 +13,15 @@ import { ActivatedRoute, CanDeactivateFn, Router } from '@angular/router';
 import { MAX_BYTES } from '../../core/api';
 import { copyPrompt, openClaude } from '../../core/claude-draft';
 import { ago } from '../../core/dates';
-import { Bullet, Experience, Project, ProfileIssue, ValidationResult } from '../../core/models';
+import {
+  Bullet,
+  Experience,
+  Project,
+  ProfileDiff,
+  ProfileIssue,
+  ProfileVersion,
+  ValidationResult,
+} from '../../core/models';
 import { ProfileService } from '../../core/profile.service';
 import { ToastService } from '../../core/toast.service';
 import { Icon } from '../../shared/icon';
@@ -258,6 +266,7 @@ export class ProfilePage {
   /** Last text the server confirmed. Everything dirty is measured against it. */
   readonly saved = signal('');
   readonly updatedAt = signal<string | null>(null);
+  readonly version = signal<number | null>(null);
   readonly result = signal<ValidationResult | null>(null);
   readonly loading = signal(false);
   readonly checking = signal(false);
@@ -298,6 +307,7 @@ export class ProfilePage {
         this.text.set(source.text);
         this.saved.set(source.text);
         this.updatedAt.set(source.updated_at);
+        this.version.set(source.version);
         this.loading.set(false);
       },
       error: () => {
@@ -341,7 +351,11 @@ export class ProfilePage {
         this.saving.set(false);
         this.saved.set(source.text);
         this.updatedAt.set(source.updated_at);
+        this.version.set(source.version);
         this.toast.ok('Profile saved.');
+        if (this.historyOpen()) {
+          this.loadVersions();
+        }
       },
       error: (error) => {
         this.saving.set(false);
@@ -377,6 +391,113 @@ export class ProfilePage {
   revert(): void {
     this.text.set(this.saved());
     this.result.set(null);
+  }
+
+  // ---------- history ----------
+  //
+  // Viewing is allowed mid-edit on purpose. "I have just broken something, what
+  // did it look like before" is the main reason to open this, and a broken file
+  // cannot be saved, so gating the whole drawer on a clean buffer would lock the
+  // door at the moment it is wanted. Restore is what writes, so restore is what
+  // waits for clean.
+
+  readonly historyOpen = signal(false);
+  readonly versions = signal<ProfileVersion[]>([]);
+  readonly picked = signal<number | null>(null);
+  readonly diff = signal<ProfileDiff | null>(null);
+  readonly historyBusy = signal(false);
+  readonly historyError = signal<string | null>(null);
+  readonly confirming = signal<number | null>(null);
+
+  /** The restore button needs a clean buffer: it replaces what is in the editor. */
+  readonly canRestore = computed(() => !this.dirty() && !this.saving() && !this.conflict());
+
+  /** What the next version will be called, for the confirmation copy. */
+  readonly nextVersion = computed(() => (this.version() ?? 0) + 1);
+
+  toggleHistory(): void {
+    const open = !this.historyOpen();
+    this.historyOpen.set(open);
+    if (open) {
+      this.loadVersions();
+    } else {
+      this.picked.set(null);
+      this.diff.set(null);
+      this.confirming.set(null);
+    }
+  }
+
+  loadVersions(): void {
+    this.historyBusy.set(true);
+    this.historyError.set(null);
+    this.service.versions().subscribe({
+      next: (versions) => {
+        this.versions.set(versions);
+        this.historyBusy.set(false);
+      },
+      error: () => {
+        this.historyBusy.set(false);
+        this.historyError.set('Could not load the history.');
+      },
+    });
+  }
+
+  pick(version: number): void {
+    this.confirming.set(null);
+    if (this.picked() === version) {
+      this.picked.set(null);
+      this.diff.set(null);
+      return;
+    }
+    this.picked.set(version);
+    this.diff.set(null);
+    this.historyBusy.set(true);
+    this.service.diff(version).subscribe({
+      next: (diff) => {
+        this.diff.set(diff);
+        this.historyBusy.set(false);
+      },
+      error: () => {
+        this.historyBusy.set(false);
+        this.historyError.set('Could not compare that version. It may have been pruned.');
+      },
+    });
+  }
+
+  restore(version: number): void {
+    if (!this.canRestore()) {
+      return;
+    }
+    this.historyBusy.set(true);
+    this.service.restore(version, this.updatedAt()).subscribe({
+      next: (source) => {
+        this.historyBusy.set(false);
+        this.confirming.set(null);
+        this.picked.set(null);
+        this.diff.set(null);
+        this.text.set(source.text);
+        this.saved.set(source.text);
+        this.updatedAt.set(source.updated_at);
+        this.version.set(source.version);
+        this.result.set(null);
+        this.loadVersions();
+        this.toast.ok(`Restored v${version} as v${source.version}.`);
+      },
+      error: (error) => {
+        this.historyBusy.set(false);
+        this.confirming.set(null);
+        if (error.status === 409) {
+          this.conflict.set({ text: error.error?.text ?? '', updated_at: error.error?.updated_at });
+          this.historyError.set('The profile moved on while this drawer was open.');
+        } else {
+          this.historyError.set('Could not restore that version.');
+        }
+      },
+    });
+  }
+
+  since(when: string): string {
+    return ago(when);
   }
 
   onFile(event: Event): void {

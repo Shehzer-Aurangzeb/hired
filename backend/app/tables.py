@@ -21,16 +21,25 @@ def stamp(value: datetime | None) -> str | None:
     return value.replace(tzinfo=timezone.utc).isoformat() if value else None
 
 
+# How long a version survives, and the floor that outranks it. Time alone would
+# wipe every version after a break this long, including the one in use.
+VERSION_DAYS = 60
+VERSIONS_KEPT = 5
+
+
 class ProfileSource(SQLModel, table=True):
     """
-    The master profile, as typed. One row, forever, in the database because a
-    container filesystem is wiped on redeploy.
+    The master profile, as typed. An append-only log: one row per save, and the
+    newest row is the profile. Nothing is ever updated in place.
     """
 
     __tablename__ = "profile_source"
-    __table_args__ = (CheckConstraint("id = 1", name="profile_source_single_row"),)
+    # AUTOINCREMENT, because pruning deletes rows and SQLite otherwise hands the
+    # freed number to the next insert. A version id crosses to the browser and
+    # comes back on restore, so one that changes meaning restores the wrong file.
+    __table_args__ = {"sqlite_autoincrement": True}
 
-    id: int | None = Field(default=1, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     text: str
     updated_at: datetime = Field(default_factory=now)
 
