@@ -1,42 +1,36 @@
-"""The two tables, and the UTC helpers every timestamp goes through."""
+"""Database tables (profile versions, applications) and UTC timestamp helpers."""
 
 from datetime import datetime, timezone
 
 from sqlalchemy import CheckConstraint, Column, LargeBinary
 from sqlmodel import JSON, Field, SQLModel
 
-# Whether a PDF exists is a separate fact, so "generated" is not a stage.
 STATUSES = ("saved", "skipped", "applied", "replied", "interview", "rejected", "offer")
 
 SENT = ("applied", "replied", "interview", "rejected", "offer")
 
 
 def now() -> datetime:
-    """Naive UTC, because SQLite drops tzinfo anyway. stamp() puts it back."""
+    """Naive UTC, since SQLite drops tzinfo; stamp() adds it back."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def stamp(value: datetime | None) -> str | None:
-    """UTC-marked ISO. A naive one is read as local time and shifts every date."""
+    """ISO string marked UTC, so browsers do not read it as local time."""
     return value.replace(tzinfo=timezone.utc).isoformat() if value else None
 
 
-# How long a version survives, and the floor that outranks it. Time alone would
-# wipe every version after a break this long, including the one in use.
+# Versions older than VERSION_DAYS are pruned, but the newest VERSIONS_KEPT always stay.
 VERSION_DAYS = 60
 VERSIONS_KEPT = 5
 
 
 class ProfileSource(SQLModel, table=True):
-    """
-    The master profile, as typed. An append-only log: one row per save, and the
-    newest row is the profile. Nothing is ever updated in place.
-    """
+    """The master profile as an append-only log; the newest row is current."""
 
     __tablename__ = "profile_source"
-    # AUTOINCREMENT, because pruning deletes rows and SQLite otherwise hands the
-    # freed number to the next insert. A version id crosses to the browser and
-    # comes back on restore, so one that changes meaning restores the wrong file.
+    # AUTOINCREMENT so pruned ids are never reused; a reused id would make
+    # restore fetch the wrong version.
     __table_args__ = {"sqlite_autoincrement": True}
 
     id: int | None = Field(default=None, primary_key=True)
@@ -45,10 +39,7 @@ class ProfileSource(SQLModel, table=True):
 
 
 class Application(SQLModel, table=True):
-    """
-    One posting you kept, not one CV sent. The rows worth most are often the
-    skipped ones, so every CV-shaped column below is nullable.
-    """
+    """One saved job posting; CV columns are nullable since skipped ones have none."""
 
     __table_args__ = (
         CheckConstraint(
@@ -59,7 +50,7 @@ class Application(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     company: str
     role: str
-    # The URL alone is not enough: postings come down, so jd_text keeps a copy.
+    # jd_text keeps a copy because postings get taken down.
     source: str | None = None
     url: str | None = None
 
@@ -73,12 +64,11 @@ class Application(SQLModel, table=True):
     title_variant: str | None = None
     summary_text: str | None = None
     selected_bullet_ids: list[str] = Field(default_factory=list, sa_column=Column(JSON))
-    # As printed, not joined against today's profile: this is what they read.
+    # Snapshot as printed, not linked to the current profile.
     selected_bullets: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
-    # Judged at generation time, stored for the same reason as the text above.
     coverage: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
 
-    # The bytes, not a path, so the whole app stays one file to back up.
+    # Stored as bytes so the database is the only file to back up.
     pdf: bytes | None = Field(default=None, sa_column=Column(LargeBinary, nullable=True))
     filename: str | None = None
 

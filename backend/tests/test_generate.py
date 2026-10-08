@@ -1,8 +1,3 @@
-"""
-The selector and the guard. Its output is ids, so what matters is a bad one:
-missing, blocked, or gated with nothing evidencing it. The model is a dict.
-"""
-
 import re
 from contextlib import contextmanager
 
@@ -171,7 +166,6 @@ def test_a_project_that_does_not_exist_is_blocked(client, monkeypatch):
 
 
 def test_a_blocked_bullet_selected_anyway_never_prints(client, monkeypatch):
-    """It is kept out of the pool. Reaching here means the id came from nowhere."""
     save_profile(client)
     body = run(
         client,
@@ -334,18 +328,13 @@ def test_nothing_selected_is_a_block_not_an_empty_page(client, monkeypatch):
 
 
 def stub_pdf(monkeypatch, pages=1):
-    """No browser in the suite. Chromium is exercised by hand, not by pytest."""
+    """No browser in the suite."""
     monkeypatch.setattr(generate, "to_pdf", lambda html: (b"%PDF-1.4 " + html[:20].encode(), pages))
 
 
 @pytest.fixture(autouse=True)
 def no_browser(monkeypatch):
-    """
-    The fill loop measures a real page. Left alone it would launch Chromium in
-    every test in this file and top up selections the guard tests are asserting
-    on, so by default the page reports itself full and the loop does nothing.
-    Tests for the loop itself override this with fill_to().
-    """
+    """By default the page reports itself full, so the fill loop does nothing."""
     monkeypatch.setattr(generate, "measurer", lambda: _measures(lambda html: 1.0))
 
 
@@ -421,7 +410,6 @@ def test_export_attaches_the_pdf_and_records_what_was_sent(client, monkeypatch):
 
 
 def test_the_record_is_what_was_on_screen_not_what_the_selector_said(client, monkeypatch):
-    """Deselecting a bullet has to reach the archive, or the archive is fiction."""
     save_profile(client)
     stub_pdf(monkeypatch)
     application_id = make_application(client)
@@ -486,10 +474,6 @@ def test_every_link_on_the_page_is_clickable_and_absolute():
 
 
 def test_certifications_never_reach_the_page():
-    """
-    They are in the profile so the fit check knows the skills are there. They
-    have never been on this CV, earned or otherwise.
-    """
     from app.render import render_html
     from app.models import GeneratedCv
 
@@ -511,7 +495,7 @@ def test_the_filename_says_who_where_and_when():
     )
 
 
-# ---------- TEMPORARY: re-export. Delete with the route. ----------
+# ---------- re-export ----------
 
 
 def test_reexport_rebuilds_the_pdf_without_touching_the_record(client, monkeypatch):
@@ -559,15 +543,11 @@ def test_reexport_needs_something_to_rebuild(client, monkeypatch):
     assert client.post("/api/reexport", json={"application_id": 999}).status_code == 404
 
 
-# ---------- the layout, against docs/cv/ShehzarAurangzeb.html ----------
+# ---------- the layout ----------
 
 
 def test_the_fonts_survive_autoescaping():
-    """
-    Jinja escaped the quotes in format('truetype') and Chromium silently dropped
-    every @font-face, so the page printed in Helvetica while claiming Inter. The
-    escaping is invisible in the markup; only the rendered PDF showed it.
-    """
+    """Escaped quotes in format('truetype') make Chromium drop every @font-face."""
     from app.render import render_html
     from app.models import GeneratedCv
 
@@ -578,10 +558,6 @@ def test_the_fonts_survive_autoescaping():
 
 
 def test_a_project_leads_in_with_its_first_bullet_on_the_same_line():
-    """
-    The source document runs the project name straight into its first bullet.
-    It is what makes the page fit, so it is the one structural rule here.
-    """
     from app.render import render_html
     from app.models import GeneratedCv
 
@@ -630,9 +606,6 @@ def test_dates_are_printed_for_a_person_not_a_sorter():
 
 
 # ---------- filling the page ----------
-#
-# The complaint these answer: four bullets came back, the page was half empty,
-# and nothing noticed.
 
 
 def test_a_short_page_is_topped_up_until_it_is_full(client, monkeypatch):
@@ -704,9 +677,6 @@ def test_no_browser_does_not_stop_a_cv_being_generated(client, monkeypatch):
 
 
 # ---------- coverage: what the page backs ----------
-#
-# The substring scan this replaced backed 1 of 6 requirements, because only one
-# appeared word for word. Meaning is the model's job, honesty is this code's.
 
 
 def _jd(*names: str) -> ParsedJd:
@@ -743,7 +713,6 @@ def test_coverage_drops_a_bullet_that_did_not_print():
 
 
 def test_coverage_reports_every_requirement_even_the_unbacked_ones():
-    """An empty list is the answer that matters: the posting wants what you lack."""
     answer = {"coverage": [{"skill": "React Native", "bullet_ids": ["sp-app"]}]}
     result = generate._coverage(
         _jd("React Native", "Xcode"), answer, _sections(sp=["sp-app"])
@@ -765,9 +734,6 @@ def test_coverage_matches_the_skill_name_case_and_space_insensitively():
 
 
 # ---------- preview ----------
-#
-# The preview used to be separate markup approximating the layout, and had
-# drifted from cv.html unnoticed. These pin that both come off one template.
 
 
 def test_preview_is_the_same_html_the_pdf_prints_from(client):
@@ -818,9 +784,7 @@ def test_linkify_escapes_the_label_it_did_not_link():
 
 
 # ---------- when the model answers badly ----------
-#
-# Each is a 502 with a sentence, not a traceback and not a half-built CV. The
-# selector cannot be made to answer well, only stopped from doing damage.
+# Each is a 502 with a sentence, not a traceback.
 
 
 def _reply(monkeypatch, payload):
@@ -868,3 +832,10 @@ def test_a_shape_we_did_not_expect_is_a_502_not_a_keyerror(monkeypatch):
     with pytest.raises(HTTPException) as caught:
         model.generate_json("p", generate.SCHEMA)
     assert caught.value.status_code == 502
+
+
+def test_url_filter_only_passes_safe_schemes():
+    assert render._url("github.com/x") == "https://github.com/x"
+    assert render._url("mailto:a@b.c") == "mailto:a@b.c"
+    assert render._url("javascript:alert(1)").startswith("https://")
+    assert render._url("file:///etc/passwd").startswith("https://")

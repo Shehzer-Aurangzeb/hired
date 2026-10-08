@@ -1,13 +1,5 @@
-"""
-The master profile markdown -> Profile. Markdown headings wrapping YAML bodies,
-so the parser is a heading split plus yaml.safe_load.
-
-  # Section  -> a top-level section   ## Company -> an Experience entry
-  ### Project -> a Project inside that company
-
-Failures raise ProfileError with the line the person typed, because "line 62"
-is a fix and "mapping values are not allowed here" is not.
-"""
+"""Parse and validate the master profile: markdown headings (# section, ## company,
+### project) wrapping YAML bodies. Errors carry the source line."""
 
 import difflib
 import re
@@ -18,7 +10,7 @@ from pydantic import ValidationError
 
 from .models import Profile, ProfileIssue, ProfileSummary, ValidationResult
 
-# Also the emit order. Two words in "skill evidence" because that is typed.
+# Also the emit order.
 SECTIONS = (
     "meta",
     "identity",
@@ -53,7 +45,7 @@ _LIST_SECTIONS = (
 
 
 class ProfileError(Exception):
-    """A parse failure with its file line. `more` carries the rest, when there is."""
+    """A parse failure with its file line. `more` holds any further errors."""
 
     def __init__(
         self,
@@ -68,7 +60,6 @@ class ProfileError(Exception):
 
 
 def parse(path: Path) -> Profile:
-    """Convenience for tests and fixtures. The app parses a database row."""
     return parse_text(path.read_text(encoding="utf-8"))
 
 
@@ -94,7 +85,7 @@ def parse_text(text: str) -> Profile:
         key = name.replace(" ", "_")
         body, start = sections.get(name, ("", 1))
         loaded = _yaml(body, start, f"# {name.title()}")
-        # A mapping here would parse and come back empty, reading as "nothing".
+        # A mapping here would otherwise silently read as empty.
         if key in _LIST_SECTIONS and loaded and not isinstance(loaded, list):
             raise ProfileError(
                 f'"# {name.title()}" must be a list. Start each entry with "- ".', start
@@ -105,7 +96,7 @@ def parse_text(text: str) -> Profile:
     companies, _ = _chunks(body.split("\n"), start - 1, level=2)
     data["experience"] = [_company(name, body, at) for name, body, at in companies]
 
-    # ### with no ## parent. A synthetic employer would invent a company.
+    # ### with no ## parent: kept as loose projects, not under a made-up employer.
     body, start = sections.get("projects", ("", 1))
     loose, _ = _chunks(body.split("\n"), start - 1, level=3)
     data["projects"] = [_project(name, body, at) for name, body, at in loose]
@@ -137,21 +128,18 @@ def _project(name: str, body: str, start: int) -> dict:
 def _normalize(text: str) -> str:
     # A BOM hides the first heading and CRLF leaves \r on every value.
     text = text.lstrip("﻿").replace("\r\n", "\n").replace("\r", "\n")
-    # "---" is a rule in markdown and a document separator in YAML, which
-    # safe_load refuses. Blanked, not dropped, so line numbers stay right.
+    # "---" is a YAML document separator safe_load refuses. Blank it, not drop
+    # it, so line numbers stay right.
     text = re.sub(r"(?m)^---[ \t]*$", "", text)
-    # Same for a code fence, which gets pasted in with the file often enough.
+    # Same for pasted code fences.
     return re.sub(r"(?m)^ {0,3}```[A-Za-z0-9_-]*[ \t]*$", "", text)
 
 
 def _chunks(
     lines: list[str], offset: int, level: int, accept: set[str] | None = None
 ) -> tuple[list[tuple[str, str, int]], list[tuple[str, int]]]:
-    """
-    Split on headings of exactly `level` into (title, body, start_line) plus the
-    ones not accepted. Unaccepted ones stay in the body, because "# TODO" is a
-    YAML comment and promoting it would orphan everything under it.
-    """
+    """Split on level-`level` headings into (title, body, start_line), plus rejected
+    headings, which stay in the body since "# TODO" is a YAML comment."""
     heading = re.compile(rf"^#{{{level}}} +(.+?)\s*$")
     marks: list[tuple[int, str]] = []
     rejected: list[tuple[str, int]] = []
@@ -174,7 +162,7 @@ def _chunks(
 
 
 def _check_misspelled(rejected: list[tuple[str, int]]) -> None:
-    """"# Experiance" would read as a YAML comment and silently drop every job."""
+    # "# Experiance" would read as a YAML comment and silently drop every job.
     for title, line in rejected:
         near = difflib.get_close_matches(title.strip().lower(), SECTIONS, n=1, cutoff=0.75)
         if near:
@@ -197,7 +185,7 @@ def _yaml(text: str, start: int, what: str):
 
 
 def _readable(error: ValidationError, lines: list[str]) -> list[tuple[str, int | None]]:
-    """Pydantic gives a path and a type; this finds the line and the fix."""
+    """Turn pydantic errors into (message, line) pairs, deduped and capped."""
     issues: list[tuple[str, int | None]] = []
     seen: set[tuple[str, int | None]] = set()
     for fault in error.errors():
@@ -232,12 +220,11 @@ def _explain(fault: dict, lines: list[str]) -> tuple[str, int | None]:
 
 
 def _where(loc: tuple) -> str:
-    """experience -> item 1 -> projects -> item 1 -> claim_boundary -> can_claim -> item 2"""
     return " -> ".join(f"item {p + 1}" if isinstance(p, int) else str(p) for p in loc)
 
 
 def _line_of(needle: str, lines: list[str]) -> int | None:
-    """ponytail: first line containing the text, not a real source map."""
+    # First line containing the text; a heuristic, not a real source map.
     if not needle or len(needle) < 3:
         return None
     for index, line in enumerate(lines):
@@ -255,7 +242,7 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
-# "one of" in the template, so anything else is a typo. Warnings, never errors.
+# Allowed enum values. Anything else is a warning, never an error.
 LEVELS = ("familiar", "working", "advanced", "expert")
 CONTEXTS = ("professional", "personal", "academic")
 METRIC_SOURCES = ("measured", "estimated", "reported", "none")
@@ -266,7 +253,7 @@ PUB_TYPES = ("talk", "article", "paper", "patent", "book", "podcast")
 LANG_LEVELS = ("native", "fluent", "professional", "conversational", "basic")
 GAP_STATUS = ("none", "learning", "personal-only", "rusty")
 
-# Past this nobody reads the list, so the tail collapses into a count.
+# Past these, the tail collapses into a count.
 MAX_WARNINGS = 20
 
 MAX_ERRORS = 8
@@ -278,10 +265,8 @@ _NUMBER = re.compile(r"(?<![A-Za-z])\d")
 
 
 def replace_bullet_text(source: str, bullet_id: str, text: str) -> str:
-    """
-    Rewrite one bullet's text, leaving the rest byte for byte alone. A
-    parse-and-dump would reformat the file and drop its comments.
-    """
+    """Rewrite one bullet's text in place. Not parse-and-dump, which would drop
+    comments and formatting."""
     lines = source.split("\n")
     item = re.compile(r"^(\s*)-\s+id:\s*(\S+)\s*$")
 
@@ -322,11 +307,7 @@ def replace_bullet_text(source: str, bullet_id: str, text: str) -> str:
 
 
 def validate_text(text: str) -> ValidationResult:
-    """
-    What the editor shows before you may save. YAML reports one error at a time,
-    the schema check reports all of them, and the rest are warnings: this row is
-    the only copy of the CV data.
-    """
+    """Errors block saving; everything else is a warning shown in the editor."""
     try:
         profile = parse_text(text)
     except ProfileError as error:
@@ -347,8 +328,6 @@ def validate_text(text: str) -> ValidationResult:
     bullets = [bullet for project in projects for bullet in project.bullets]
     missing = [project for project in projects if not _has_boundary(project)]
 
-    # ---------- claims ----------
-
     if missing:
         warn(
             f"{_count(missing, 'project')} without a claim_boundary "
@@ -368,8 +347,6 @@ def validate_text(text: str) -> ValidationResult:
     if not projects:
         warn("No projects yet, so there is nothing to select from.")
 
-    # ---------- numbers ----------
-
     for bullet in bullets:
         if _NUMBER.search(bullet.text) and bullet.metric is None:
             warn(
@@ -383,8 +360,6 @@ def validate_text(text: str) -> ValidationResult:
                     "The qualifier has to travel with the claim, because the bullet is "
                     "what gets read and the metric block is not."
                 )
-
-    # ---------- blocked bullets ----------
 
     for bullet in bullets:
         if bullet.status != "blocked":
@@ -400,8 +375,6 @@ def validate_text(text: str) -> ValidationResult:
                 "point: an empty one cannot be unblocked because there is nothing to check."
             )
 
-    # ---------- wording ----------
-
     for number, line in enumerate(_normalize(text).split("\n"), start=1):
         for character, name in DASHES.items():
             if character in line:
@@ -416,8 +389,6 @@ def validate_text(text: str) -> ValidationResult:
         for word in banned:
             if word.lower() in lowered:
                 warn(f'Bullet "{bullet.id}" uses a banned word: "{word}".')
-
-    # ---------- skill evidence ----------
 
     listed = {
         item.lower()
@@ -443,13 +414,9 @@ def validate_text(text: str) -> ValidationResult:
                     "Stale reference, usually left behind by a rename."
                 )
 
-    # ---------- enums ----------
-
     for where, value, allowed in _enum_values(profile, projects, bullets):
         if value and value not in allowed:
             warn(f'{where} is "{value}". One of: {", ".join(allowed)}.')
-
-    # ---------- order and coverage ----------
 
     dated = [employer for employer in profile.experience if employer.start]
     out_of_order = [

@@ -1,16 +1,5 @@
-"""
-Back up hired.db, and write a plain copy of master.md beside it. One SQLite
-file holds the profile, every application and every PDF, so losing it loses
-everything.
-
-    .venv/bin/python tools/backup.py                  # into backups/
-    .venv/bin/python tools/backup.py /some/where      # into somewhere else
-
-    0 3 * * * cd /path/to/hired/backend && .venv/bin/python tools/backup.py
-
-Uses SQLite's online backup API, not cp: the app runs in WAL mode, where
-copying the file mid-write can capture a torn database.
-"""
+"""Back up hired.db (plus a plain master.md copy) into backups/ or argv[1], keeping the last 14.
+Uses SQLite's online backup API, since copying a WAL-mode file mid-write can tear it."""
 
 import sqlite3
 import sys
@@ -19,7 +8,7 @@ from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parents[1]
 LIVE = BACKEND / "hired.db"
-KEEP = 14  # ponytail: a fortnight of dailies. Longer if you ever need to go back further.
+KEEP = 14
 
 
 def backup(into: Path) -> Path:
@@ -35,9 +24,7 @@ def backup(into: Path) -> Path:
         copy = sqlite3.connect(target)
         try:
             source.backup(copy)
-            # Fold the write-ahead log into the file itself, so the backup is one
-            # file rather than three. A restore that quietly leaves the -wal
-            # behind is a restore missing its most recent writes.
+            # Fold the WAL into the file so the backup is one self-contained file.
             copy.execute("PRAGMA journal_mode=DELETE")
         finally:
             copy.close()
@@ -48,7 +35,6 @@ def backup(into: Path) -> Path:
     if row:
         (into / f"master-{stamp}.md").write_text(row[0])
 
-    # A backup that fills the disk stops being a backup.
     for old in sorted(into.glob("hired-*.db"))[:-KEEP]:
         old.unlink()
         stale = into / old.name.replace("hired-", "master-").replace(".db", ".md")
@@ -63,7 +49,7 @@ if __name__ == "__main__":
     size = written.stat().st_size
     print(f"{written}  ({size / 1024:.0f} KB)")
 
-    # A backup nobody has opened is a guess. Read it back before saying it worked.
+    # Read the backup back to verify it.
     check = sqlite3.connect(f"file:{written}?mode=ro", uri=True)
     apps = check.execute("SELECT count(*) FROM application").fetchone()[0]
     pdfs = check.execute("SELECT count(*) FROM application WHERE pdf IS NOT NULL").fetchone()[0]

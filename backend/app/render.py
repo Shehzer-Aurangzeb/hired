@@ -1,7 +1,4 @@
-"""
-The CV, as HTML and then as a PDF. Jinja renders it and Chromium prints it, so
-preview and print come off one layout engine. No model is near this step.
-"""
+"""Renders the CV to HTML with Jinja and prints it to PDF with Chromium."""
 
 import base64
 import math
@@ -20,12 +17,12 @@ from .settings import get_settings
 
 TEMPLATES = Path(__file__).parent / "templates"
 
-# A quarter inch every side, on Letter. Inches, because page.pdf refuses points.
+# Quarter-inch margins on Letter. In inches because page.pdf rejects points.
 MARGIN_IN = 0.25
 MARGIN = {side: f"{MARGIN_IN}in" for side in ("top", "bottom", "left", "right")}
 CONTENT_WIDTH_PT = (8.5 - 2 * MARGIN_IN) * 72
 
-# Letter at 96dpi less the vertical margins, for the "did it fit" measurement.
+# Printable height in CSS px (96dpi), used to count pages.
 PAGE_HEIGHT = int((11 - 2 * MARGIN_IN) * 96)
 
 _env = Environment(
@@ -38,7 +35,7 @@ _env = Environment(
 
 @lru_cache(maxsize=1)
 def _font_css() -> str:
-    """Embedded, not named: a fallback to Helvetica would reflow the page."""
+    """Inter embedded as base64, so a font fallback can't reflow the page."""
     faces = {
         "Inter-regular.ttf": ("normal", 400),
         "Inter-italic.ttf": ("italic", 400),
@@ -58,8 +55,8 @@ def _font_css() -> str:
 
 
 def _url(value: str) -> str:
-    """Add https:// when absent. A PDF reader reads a bare host as a file path."""
-    return value if re.match(r"^[a-z][a-z0-9+.-]*:", value or "", re.I) else f"https://{value}"
+    """Add https:// unless the link is http(s), mailto or tel. Blocks javascript:, file: and the like."""
+    return value if re.match(r"^(https?://|mailto:|tel:)", value or "", re.I) else f"https://{value}"
 
 
 def _month(value: str) -> str:
@@ -75,12 +72,8 @@ def _month(value: str) -> str:
 
 
 def _linkify(text: str, links) -> tuple[Markup, bool]:
-    """
-    Hyperlink any link label the description names, and say whether any matched,
-    since a label that absorbed them does not want them on the project name too.
-
-    ponytail: first-occurrence replace, longest label first.
-    """
+    """Link the first occurrence of each link label in text, longest first.
+    Also returns whether any matched."""
     out = escape(text or "")
     used = False
     for link in sorted(links, key=lambda item: len(item.label or ""), reverse=True):
@@ -98,7 +91,7 @@ _env.filters["month"] = _month
 
 
 def render_html(profile: Profile, cv: GeneratedCv) -> str:
-    """Selected bullets, refiled under employers. The selector only knows ids."""
+    """Render the CV, grouping selected projects under their employers."""
     placed = {section.project_id: section for section in cv.sections}
     employment = []
     for employer in profile.experience:
@@ -120,7 +113,7 @@ def render_html(profile: Profile, cv: GeneratedCv) -> str:
             )
     standalone = [placed[p.id] for p in profile.projects if p.id in placed]
 
-    # A label that names its links gets those words linked; otherwise the name.
+    # Link words inside the label if they match; otherwise link the project name.
     by_project = {p.id: p.links for p in profile.all_projects()}
     project_labels: dict[str, Markup] = {}
     project_links: dict[str, str] = {}
@@ -146,7 +139,7 @@ def render_html(profile: Profile, cv: GeneratedCv) -> str:
 
 @contextmanager
 def measurer():
-    """Yields html -> page count. One browser, because the fill loop asks often."""
+    """Yield a function html -> page count, reusing one browser."""
     from playwright.sync_api import sync_playwright
 
     launch = {}
@@ -169,10 +162,7 @@ def measurer():
 
 
 def to_pdf(html: str) -> tuple[bytes, int]:
-    """
-    ponytail: the page count is measured height over page height, not read out
-    of the PDF, since it only has to answer "did it fit".
-    """
+    """Print to PDF. Page count is estimated from content height, not read from the PDF."""
     from playwright.sync_api import Error, sync_playwright
 
     launch = {}
@@ -196,8 +186,7 @@ def to_pdf(html: str) -> tuple[bytes, int]:
                 browser.close()
     except Error as error:
         detail = error.message.splitlines()[0]
-        # Only a launch failure has an install fix. This message once hid a bad
-        # pdf() argument behind "run playwright install".
+        # Only suggest installing Chromium when the launch itself failed.
         if "executable doesn" in detail.lower() or "playwright install" in detail.lower():
             detail = f"{detail} Run `.venv/bin/playwright install chromium`."
         raise HTTPException(500, f"Could not print the PDF. {detail}") from error
@@ -206,7 +195,7 @@ def to_pdf(html: str) -> tuple[bytes, int]:
 
 
 def filename(name: str, company: str, role: str, when: date | None = None) -> str:
-    """Shehzar_Abbasi_AirCanada_FrontEndDeveloper_2026-08-23.pdf"""
+    """e.g. Jane_Doe_Acme_FrontEndDeveloper_2026-08-23.pdf"""
     stamp = (when or date.today()).isoformat()
     parts = [_squash(name), _squash(company), _squash(role), stamp]
     return "_".join(part for part in parts if part) + ".pdf"

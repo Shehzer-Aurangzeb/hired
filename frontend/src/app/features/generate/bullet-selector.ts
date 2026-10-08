@@ -5,11 +5,7 @@ import { ChangeDetectionStrategy, Component, model } from '@angular/core';
 import { CvSection, SelectedBullet } from '../../core/models';
 import { Icon } from '../../shared/icon';
 
-/**
- * Owns bullet order and inclusion. Deselecting keeps the bullet in the list so
- * it can be put back, which is why exclusion is a separate set rather than a
- * removal from `sections`.
- */
+// Excluded bullets live in a separate set so they stay in the list and can be put back.
 @Component({
   selector: 'app-bullet-selector',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -40,7 +36,7 @@ export class BulletSelector {
     this.move(sectionIndex, event.previousIndex, event.currentIndex);
   }
 
-  /** Keyboard path for reordering. Drag-drop alone locks out keyboard users. */
+  /** Keyboard reordering, since drag-drop alone locks out keyboard users. */
   nudge(sectionIndex: number, from: number, delta: -1 | 1): void {
     const to = from + delta;
     const length = this.sections()[sectionIndex].bullets.length;

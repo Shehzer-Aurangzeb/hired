@@ -23,7 +23,7 @@ import { ToastService } from '../../core/toast.service';
 import { Icon } from '../../shared/icon';
 import { BulletSelector } from './bullet-selector';
 
-/** Rough one-page budget in characters. The server render loop is the real judge. */
+/** Rough one-page budget in characters; the server makes the real call. */
 const PAGE_BUDGET = 3000;
 
 @Component({
@@ -40,7 +40,6 @@ export class GeneratePage {
   readonly gen = inject(GenerateService);
   readonly profile = inject(ProfileService).profile;
 
-  /** The posting form owns the screen until there is a result, then collapses. */
   readonly editing = signal(false);
   private readonly sanitizer = inject(DomSanitizer);
 
@@ -51,10 +50,7 @@ export class GeneratePage {
     title_variant: [''],
   });
 
-  /**
-   * linkedSignal, so a fresh generation resets the edits but the user can still
-   * reorder and deselect against the current result.
-   */
+  /** Resets on a new result, but stays editable. */
   readonly sections = linkedSignal<CvSection[]>(() =>
     (this.gen.result()?.cv.sections ?? []).map((s) => ({ ...s, bullets: [...s.bullets] })),
   );
@@ -64,7 +60,7 @@ export class GeneratePage {
     computation: () => new Set<string>(),
   });
 
-  /** What actually gets exported: current order, exclusions applied. */
+  /** What gets exported: current order, exclusions applied. */
   readonly finalCv = computed<GeneratedCv | null>(() => {
     const result = this.gen.result();
     if (!result) {
@@ -86,8 +82,7 @@ export class GeneratePage {
     this.finalCv()?.sections.reduce((n, s) => n + s.bullets.length, 0) ?? 0,
   );
 
-  // ponytail: character heuristic, not a real measurement. The render-and-measure
-  // loop in the backend decides. This only exists to warn before an export round trip.
+  // Character estimate only, to warn early. The backend measures the real page.
   readonly pageLoad = computed(() => {
     const cv = this.finalCv();
     if (!cv) {
@@ -97,12 +92,7 @@ export class GeneratePage {
     return Math.round(((cv.summary.length + body) / PAGE_BUDGET) * 100);
   });
 
-  /**
-   * Bullets carry the evidence; the skills line and stacks only make it visible.
-   *
-   * The selector said which bullets back which requirement, but the person can
-   * still deselect one here, so the map is narrowed to what is left on screen.
-   */
+  /** Evidence is limited to bullets still selected on screen. */
   readonly coverage = computed<Coverage[]>(() => {
     const jd = this.gen.fit()?.parsed_jd;
     const cv = this.finalCv();
@@ -133,10 +123,9 @@ export class GeneratePage {
     };
   });
 
-  /** Listed on the page with no bullet behind it. The interview risk. */
+  /** Mentioned on the page but not backed by any bullet. */
   readonly unbacked = computed(() => this.coverage().filter((c) => c.covered && !c.evidenced));
 
-  /** Required and preferred read differently, so they are not one flat list. */
   readonly coverageGroups = computed(() => [
     { label: 'Required', items: this.coverage().filter((c) => c.required) },
     { label: 'Preferred', items: this.coverage().filter((c) => !c.required) },
@@ -160,18 +149,16 @@ export class GeneratePage {
     initialValue: '',
   });
 
-  /** The headline itself, so the select is not three opaque ids. */
   readonly variantText = computed(
     () => this.profile.value()?.titles.find((t) => t.id === this.variantId())?.text ?? '',
   );
 
-  /** The posting owns the screen until it has been scored, or when reopened. */
   readonly showForm = computed(() => this.editing() || !this.gen.fit());
 
-  /** Scored, but no CV asked for yet. The decision point. */
+  /** Scored, but no CV generated yet. */
   readonly deciding = computed(() => !!this.gen.fit() && !this.gen.result());
 
-  /** Has the selection drifted from what the selector suggested. */
+  /** Selection differs from what was suggested. */
   readonly edited = computed(() => {
     const suggested = this.gen.result()?.cv.sections ?? [];
     if (this.excluded().size > 0) {
@@ -182,19 +169,10 @@ export class GeneratePage {
     return order(suggested) !== order(this.sections());
   });
 
-  /** Letter is 816px at 96dpi. The sheet renders at that width and is zoomed. */
+  /** Letter is 816px wide at 96dpi; the sheet renders at that width and scales. */
   readonly sheetScale = computed(() => (this.zoom() === 'fit' ? 0.62 : 1));
 
-  /**
-   * The preview is the PDF's own HTML, fetched and shown in an iframe.
-   *
-   * It used to be Tailwind markup in this template approximating the layout, and
-   * an approximation of a layout is a layout that silently stops matching. This
-   * cannot: it is the same render_html the exporter prints from.
-   *
-   * Debounced because it refires on every reorder and deselect, and each one is
-   * a round trip.
-   */
+  /** Same HTML the PDF is printed from. Debounced, since every edit refetches. */
   private readonly previewHtml = toSignal(
     toObservable(this.finalCv).pipe(
       debounceTime(200),
@@ -205,24 +183,17 @@ export class GeneratePage {
 
   readonly sheet = computed<SafeHtml | null>(() => {
     const html = this.previewHtml();
-    // Our own template, rendered by our own server from our own profile. The
-    // bypass is what lets it into an iframe at all; nothing user-authored
-    // reaches it that does not already reach the PDF.
+    // Safe to bypass: this is our own server-rendered template, same as the PDF.
     return html ? this.sanitizer.bypassSecurityTrustHtml(html) : null;
   });
 
-  /** The margins page.pdf applies, as padding, so the sheet matches the print.
-      Mirrors MARGIN in render.py; move one and move the other. */
+  /** PDF margins as padding. Keep in sync with MARGIN in render.py. */
   readonly sheetPad = '0.25in';
 
-  /** 11in less the two 0.25in margins, at 96dpi. One page of content. */
+  /** One page of content: 11in minus two 0.25in margins, at 96dpi. */
   readonly PAGE = 1008;
 
-  /**
-   * The iframe is sized to its content, so a page and a bit shows as a page and
-   * a bit instead of being silently cropped at the fold. The renderer is allowed
-   * up to 1.25 pages, so overflow is a normal state to look at, not an error.
-   */
+  /** The iframe grows to fit its content so overflow past one page is visible. */
   readonly sheetHeight = signal(this.PAGE);
 
   fitSheet(event: Event): void {
@@ -231,7 +202,6 @@ export class GeneratePage {
     this.sheetHeight.set(Math.max(this.PAGE, height ?? this.PAGE));
   }
 
-  /** Where page one ends, drawn on the sheet. The question is always "does it fit". */
   readonly overflows = computed(() => this.sheetHeight() > this.PAGE);
 
   startEdit(): void {
@@ -259,15 +229,12 @@ export class GeneratePage {
     this.gen.checkFit(this.form.getRawValue().jd_text).subscribe({
       next: () => this.editing.set(false),
       error: () => {
-        /* the error interceptor already raised a toast */
+        /* the error interceptor already shows a toast */
       },
     });
   }
 
-  /**
-   * Keep the posting without applying to it. Often the more valuable record:
-   * what it exposed is a gap you now know about, and no CV was ever needed.
-   */
+  /** Save the posting without generating a CV. */
   keep(): void {
     this.save('skipped').subscribe({
       next: (row) => {
@@ -278,10 +245,7 @@ export class GeneratePage {
     });
   }
 
-  /**
-   * Ask for a CV. The row is created first so export has something to attach a
-   * PDF to, and so a generation you abandon still leaves the posting on record.
-   */
+  /** Saves the row first so export has something to attach the PDF to. */
   generate(): void {
     const fit = this.gen.fit();
     if (!fit) {
@@ -303,15 +267,10 @@ export class GeneratePage {
       .subscribe({ error: () => {} });
   }
 
-  /**
-   * Where the posting came from. Fixed list rather than free text, because the
-   * whole point is grouping reply rate by it later, and "LinkedIn" typed three
-   * ways is three sources.
-   */
+  /** Fixed list so reply rate can be grouped by source later. */
   readonly sources = ['LinkedIn', 'Indeed', 'Company website', 'Job Bank', 'Wellfound', 'Referral', 'Other'];
 
-  // Asked for on the decide screen, which is the only moment the tab is still
-  // open. Remembered across postings: you tend to work one board at a time.
+  // Remembered across postings, since you usually work one job board at a time.
   readonly source = signal(localStorage.getItem('hired.last-source') ?? 'LinkedIn');
   readonly url = signal('');
 
@@ -320,7 +279,7 @@ export class GeneratePage {
     try {
       localStorage.setItem('hired.last-source', value);
     } catch {
-      // Not worth failing a save over a remembered dropdown.
+      // Ignore storage errors.
     }
   }
 
@@ -343,14 +302,9 @@ export class GeneratePage {
       .pipe(finalize(() => this.gen.saving.set(false)));
   }
 
-  /** More than one framing to switch between. One is not a choice. */
   readonly hasVariants = computed(() => (this.profile.value()?.titles.length ?? 0) > 1);
 
-  /**
-   * Cycle to the next headline and summary you wrote, keeping the pair together:
-   * they are written per framing and reading a front-end summary under a
-   * full-stack headline is worse than either alone. Nothing is generated.
-   */
+  /** Cycles to the next hand-written title and summary, kept as a pair. */
   nextVariant(): void {
     const profile = this.profile.value();
     const cv = this.gen.result()?.cv;
@@ -382,7 +336,7 @@ export class GeneratePage {
 
   readonly exported = signal(false);
 
-  /** The employer has it. Stamped once, and never rewritten by a later stage. */
+  /** applied_at is stamped once and never overwritten. */
   markApplied(): void {
     const id = this.gen.applicationId();
     if (id === null) {

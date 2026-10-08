@@ -1,8 +1,6 @@
 @import "tailwindcss";
 
-/* Beige paper, near-black ink. One theme, no dark mode: this renders a document
-   for print, and a warm light ground is the honest preview of that.
-   Every pair below is checked against WCAG AA (4.5:1 text, 3:1 control edges). */
+/* Light theme only. Colour pairs meet WCAG AA. */
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
@@ -28,8 +26,7 @@
   --color-danger: #9b2c21;
   --color-danger-soft: #f6ded9;
 
-  /* Claude's coral, deepened until white text clears AA on it. The brand value
-     (#d97757) only reaches 3.1:1, and every other button on this site passes. */
+  /* Darker than brand coral (#d97757) so white text passes AA. */
   --color-claude: #b85a38;
   --color-claude-hover: #a34d2e;
 
@@ -51,13 +48,11 @@
     line-height: 1.55;
   }
 
-  /* Numbers in tables and counters must not jitter as they change. */
   .tabular {
     font-variant-numeric: tabular-nums;
   }
 
-  /* WebKit draws its own clear button on type=search. We draw a styled one, so
-     two crosses appeared. Kill the native one everywhere rather than per input. */
+  /* Hide WebKit's native search clear button; we draw our own. */
   input[type='search']::-webkit-search-cancel-button,
   input[type='search']::-webkit-search-decoration {
     -webkit-appearance: none;
@@ -74,9 +69,6 @@
   }
 }
 
-/* Component classes. With Tailwind, a wrapper Angular component around a styled
-   <button> earns nothing, so these are plain classes. Only components that own
-   behaviour (toast, bullet selector) are real components. */
 @layer components {
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-md border px-3 py-2
@@ -86,8 +78,6 @@
     min-height: 36px;
   }
 
-  /* Ink, not the green. One primary action per screen, and on beige the
-     highest-contrast thing on the page should be the thing you press. */
   .btn-primary {
     @apply bg-ink text-ink-fg border-ink hover:bg-fg-muted hover:border-fg-muted;
   }
@@ -123,17 +113,11 @@
            px-2 py-0.5 text-[11px] text-fg-muted whitespace-nowrap;
   }
 
-  /* A count that is worth a glance. Neutral ones stay quiet; a problem count
-     carries its own colour, so the eye lands on the two that need acting on
-     rather than sweeping four identical cards. */
   .stat-chip {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1
            text-[12px] font-medium whitespace-nowrap;
   }
 
-  /* An icon that stands in for a link, with a hit area a finger can find.
-     Brand colour appears on hover rather than at rest: four saturated marks in
-     the header would outshout the name above them. */
   .icon-link {
     @apply text-fg-subtle inline-flex size-8 items-center justify-center
            rounded-full transition-colors;
@@ -144,15 +128,10 @@
     color: var(--brand, var(--color-fg));
   }
 
-  /* A panel the eye has to find the edge of: the two-column split in Ask and
-     History reads as one surface when the divider is the same hairline used
-     inside cards. */
   .panel {
     @apply border-line-strong/45 rounded-card border;
   }
 
-  /* Each service's own mark colour, applied through one variable so the hover
-     rule above does not need to know which link it is drawing. */
   .brand-gmail { --brand: #c5221f; }
   .brand-linkedin { --brand: #0a66c2; }
   .brand-github { --brand: #1f2328; }
@@ -168,7 +147,7 @@
            font-medium tracking-wide uppercase;
   }
 
-  /* Carries its own separator, so a hidden item takes its dot with it. */
+  /* Separator lives on the item, so hiding one hides its dot. */
   .contact-item + .contact-item::before {
     content: '·';
     @apply text-fg-subtle mx-1.5;
@@ -187,18 +166,14 @@
     @apply text-[11px] font-semibold tracking-[0.08em] text-fg uppercase;
   }
 
-  /* Card heading strip. Same treatment as the bullet section headers, which
-     already read clearly, so the rest of the page borrows it. */
   .card-head {
     @apply border-line bg-surface flex items-center gap-2 border-b px-3 py-2;
   }
 
-  /* One stat in the decision bar: big value, small label under it. */
   .stat {
     @apply border-line bg-raised rounded-card border px-3 py-1.5;
   }
 
-  /* Same tile, sized to lead a page rather than sit in a toolbar. */
   .stat-lg {
     @apply border-line bg-raised rounded-card border px-4 py-3 text-left;
   }
@@ -207,7 +182,6 @@
     @apply text-[26px];
   }
 
-  /* Search field with room for a leading icon and a trailing affordance. */
   .search {
     @apply border-line-strong bg-raised text-fg placeholder:text-fg-subtle
            w-full rounded-lg border py-2.5 pr-10 pl-9 text-[13px]
@@ -233,7 +207,6 @@
   }
 }
 
-/* Drag-drop visuals, shared by the CDK list. */
 .cdk-drag-preview {
   @apply rounded-md border border-line-strong bg-raised opacity-95 shadow-lg;
 }

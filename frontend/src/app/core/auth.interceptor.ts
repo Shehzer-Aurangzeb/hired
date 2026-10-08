@@ -5,11 +5,8 @@ import { catchError, throwError } from 'rxjs';
 
 import { AuthService } from './auth.service';
 
-/**
- * A 401 from anywhere means the session went away, so drop it and send the
- * person to the lock screen. Login itself is skipped: a wrong password there is
- * handled in the form, not by a redirect.
- */
+// A 401 means the session expired, so go to the lock screen.
+// Login is skipped: a wrong password is shown in the form instead.
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const auth = inject(AuthService);
   const router = inject(Router);

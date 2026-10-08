@@ -1,4 +1,4 @@
-/** "6 days ago" from an ISO string. Intl does the wording, no dependency. */
+/** "6 days ago" from an ISO string. */
 const RELATIVE = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [

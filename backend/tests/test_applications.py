@@ -1,8 +1,3 @@
-"""
-Saving is its own decision, so the branches that matter are the ones where no
-CV exists, and the ones that stop the archive being rewritten.
-"""
-
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
@@ -65,7 +60,6 @@ def attach_pdf(client, application_id, data=b"%PDF-1.4 pretend"):
 
 
 def test_a_posting_can_be_kept_with_no_cv_at_all(client):
-    """The whole point: a record worth keeping for its gaps, never applied to."""
     created = client.post("/api/applications", json=KEPT)
     assert created.status_code == 201
     body = created.json()
@@ -101,7 +95,7 @@ def test_the_pdf_comes_back_as_a_pdf(client):
     response = client.get(f"/api/applications/{application_id}/pdf")
     assert response.headers["content-type"] == "application/pdf"
     assert response.content == b"%PDF-1.4 pretend"
-    # inline so the in-app viewer renders it rather than forcing a download.
+    # Inline, so the in-app viewer renders it.
     assert response.headers["content-disposition"].startswith("inline;")
     assert "Shehzar_AirCanada.pdf" in response.headers["content-disposition"]
 
@@ -228,7 +222,6 @@ def test_deleting_something_that_is_not_there(client):
 
 
 def test_health_needs_no_session():
-    """A platform health check has no cookie, and a 401 reads as a dead container."""
     from app.main import app
 
     with TestClient(app) as anyone:
@@ -250,9 +243,6 @@ def test_where_you_found_it_is_kept(client):
 
 
 # ---------- serving the built front end ----------
-#
-# Only runs when a build exists. The path guard is why the route is
-# hand-written rather than a bare StaticFiles mount.
 
 
 @pytest.mark.skipif(not main.BUNDLE.is_dir(), reason="no frontend build to serve")
@@ -267,7 +257,6 @@ class TestBundle:
         assert client.get("/api/profile").status_code == 401
 
     def test_a_path_climbing_out_of_the_bundle_gets_index_html(self, client):
-        """Without the containment check this is a file read of anything on disk."""
         for attempt in ("../../backend/.env", "../../../etc/passwd", "..%2f..%2f.env"):
             response = client.get(f"/{attempt}")
             assert "HIRED_" not in response.text and "root:" not in response.text

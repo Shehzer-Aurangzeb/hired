@@ -1,7 +1,4 @@
-"""
-App wiring: middleware, the profile routes, and the built frontend. Everything
-under /api needs a session, and the bundle is served here, so one process.
-"""
+"""FastAPI app: middleware, profile and version routes, and the built frontend."""
 
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -34,7 +31,8 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="hired", lifespan=lifespan)
+# No /docs or /openapi.json: they would expose the API map without auth.
+app = FastAPI(title="hired", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 app.add_middleware(
     SessionMiddleware,
@@ -46,7 +44,7 @@ app.add_middleware(
 )
 app.add_middleware(
     CORSMiddleware,
-    # Credentialed requests forbid a wildcard origin, so this list is explicit.
+    # Credentialed CORS forbids a "*" origin.
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
@@ -56,11 +54,11 @@ app.add_middleware(
 
 @app.get("/api/health")
 def health() -> dict[str, str]:
-    """Unprotected on purpose: a platform probe has no session, and 401 reads as dead."""
+    # No session needed, so health probes work.
     return {"status": "ok"}
 
 
-# On the router, not per route, so a route added later cannot forget it.
+# Auth on the router so new routes cannot forget it.
 api = APIRouter(prefix="/api", dependencies=[Depends(auth.require_session)])
 
 
@@ -71,15 +69,10 @@ def get_template() -> dict[str, str]:
 
 @api.get("/profile", response_model=Profile)
 def get_profile(session: SessionDep) -> Profile:
-    # ponytail: re-parsed per request. A 30KB document is sub-millisecond, so
-    # there is no cache to invalidate on save.
     row = _row(session)
     if row is None:
         raise HTTPException(404, "No profile saved yet.")
     return parse_text(row.text)
-
-
-# ---------- the profile source ----------
 
 
 class SourceBody(BaseModel):
@@ -96,26 +89,19 @@ class RestoreBody(BaseModel):
 
 
 class BulletBody(BaseModel):
-    # Same lock as the editor: one row, so a bullet edit rewrites all of it.
     text: str
     expected_updated_at: str | None = None
 
 
 def _row(session: SessionDep) -> ProfileSource | None:
-    """The newest version, which is the profile. There is no `active` column."""
+    """The newest version is the current profile."""
     return session.exec(
         select(ProfileSource).order_by(ProfileSource.id.desc())
     ).first()
 
 
 def _prune(session: SessionDep) -> None:
-    """
-    Drop versions past VERSION_DAYS, keeping the newest VERSIONS_KEPT whatever
-    their age. Both halves matter: on age alone, a break longer than the window
-    deletes every version including the one in use, which is exactly when undo
-    is wanted. Runs inside the save, because saving is the only thing that adds
-    a row.
-    """
+    """Drop versions older than VERSION_DAYS, but always keep the newest VERSIONS_KEPT."""
     keep = {
         row.id
         for row in session.exec(
@@ -150,7 +136,7 @@ def post_validate(body: TextBody) -> ValidationResult:
 
 @api.patch("/profile/bullets/{bullet_id}")
 def patch_bullet(bullet_id: str, body: BulletBody, session: SessionDep):
-    """Rewrites one line, then reuses the editor's save path for the checks."""
+    # Reuses put_source so validation and the conflict check still apply.
     row = _row(session)
     if row is None:
         raise HTTPException(404, "No profile saved yet.")
@@ -180,7 +166,7 @@ def put_source(body: SourceBody, session: SessionDep):
         )
 
     row = _row(session)
-    # A save written against an older copy would overwrite what landed between.
+    # Reject saves made against a stale copy.
     if row is not None and body.expected_updated_at != stamp(row.updated_at):
         return JSONResponse(
             {
@@ -190,8 +176,7 @@ def put_source(body: SourceBody, session: SessionDep):
             status_code=409,
         )
 
-    # Append, never overwrite. The old row stays as the version you can go back
-    # to, and nothing in the table is ever updated in place.
+    # Append-only: every save is a new version row.
     fresh = ProfileSource(text=body.text, updated_at=now())
     session.add(fresh)
     _prune(session)
@@ -201,7 +186,7 @@ def put_source(body: SourceBody, session: SessionDep):
 
 
 class Version(BaseModel):
-    """One saved version, without its text. The list would be megabytes with it."""
+    """A saved version's metadata, without its text."""
 
     version: int
     updated_at: str
@@ -247,13 +232,7 @@ class Diff(BaseModel):
 
 @api.get("/profile/versions/{version}/diff")
 def diff_version(version: int, session: SessionDep) -> Diff:
-    """
-    What restoring this version would change, current first.
-
-    That direction is the question being asked: a removed line is what you would
-    lose and an added line is what comes back. Unified diff with three lines of
-    context, so the size tracks the change rather than the file.
-    """
+    """What restoring this version would change: "-" is lost, "+" comes back."""
     old = session.get(ProfileSource, version)
     current = _row(session)
     if old is None or current is None:
@@ -277,14 +256,7 @@ def diff_version(version: int, session: SessionDep) -> Diff:
 
 @api.post("/profile/versions/{version}/restore")
 def restore_version(version: int, body: RestoreBody, session: SessionDep):
-    """
-    Put an old version back by appending it as a new one.
-
-    Never rewinds. Rewinding would erase the record of the mistake, and makes a
-    second restore ambiguous about what it is undoing. It goes through the same
-    save path, so a restore cannot land a profile that does not parse and cannot
-    skip the conflict check.
-    """
+    """Restore by appending the old text as a new version, via the normal save path."""
     row = session.get(ProfileSource, version)
     if row is None:
         raise HTTPException(404, "No such version. It may have been pruned.")
@@ -302,19 +274,17 @@ app.include_router(auth.router)
 app.include_router(api)
 
 
-# One origin keeps the session cookie on SameSite=Lax; two would need
-# SameSite=None, which Safari and Brave refuse. Mounted last so it cannot
-# shadow /api, and skipped with no build so `ng serve` is unaffected.
-
+# Serve the SPA from the same origin so the cookie works with SameSite=Lax.
+# Mounted last so it cannot shadow /api; skipped when there is no build.
 BUNDLE = Path(__file__).resolve().parents[2] / "frontend/dist/hired/browser"
 
 if BUNDLE.is_dir():
 
     @app.get("/{path:path}", include_in_schema=False)
     def spa(path: str) -> FileResponse:
-        """Anything that is not a real file is index.html, so deep links work."""
+        # Unknown paths fall back to index.html so deep links work.
         candidate = (BUNDLE / path).resolve()
-        # Must stay inside the bundle. Without this, /../../.env is a file read.
+        # Must stay inside the bundle, or /../../.env becomes readable.
         if path and candidate.is_file() and candidate.is_relative_to(BUNDLE):
             return FileResponse(candidate)
         return FileResponse(BUNDLE / "index.html")

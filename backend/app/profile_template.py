@@ -1,10 +1,4 @@
-"""
-The starter profile and the Claude briefing that goes with it. Content, not
-code, copied here so the container does not have to ship the docs folder.
-
-HIRED_PROFILE_TEMPLATE and HIRED_CLAUDE_BRIEFING override them, so a reword is
-a restart rather than a deploy.
-"""
+"""The default starter profile and Claude briefing, overridable via settings."""
 
 from .settings import get_settings
 
@@ -452,8 +446,6 @@ max_projects: 5
 page_limit: 1
 """
 
-# {template} is where the starter file is spliced in. Without the placeholder the
-# template is appended at the end instead, so a briefing rewrite cannot lose it.
 DEFAULT_BRIEFING = """# Master profile interview
 
 You are conducting an interview to build a `master.md` file for a CV tailoring tool called **hired**. Read all of this before your first message.

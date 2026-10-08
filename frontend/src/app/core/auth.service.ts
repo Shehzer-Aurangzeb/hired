@@ -6,16 +6,13 @@ import { API } from './api';
 
 export interface LoginResult {
   ok: boolean;
-  /** Set when the server is rate limiting. Seconds until another attempt is allowed. */
+  /** Seconds until another attempt is allowed, when rate limited. */
   retryAfter?: number;
   message?: string;
 }
 
-/**
- * The session lives in an httpOnly cookie set by the backend. Nothing secret is
- * kept in the browser, so an XSS bug cannot lift it, and `withCredentials` is
- * what carries it. The only thing tracked here is whether we are in or out.
- */
+// The session is an httpOnly cookie, so nothing secret is stored in the browser.
+// This only tracks whether we are signed in.
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
@@ -25,7 +22,7 @@ export class AuthService {
 
   private probe?: Observable<boolean>;
 
-  /** Runs once per page load. The guard and the shell both wait on the same call. */
+  /** Runs once per page load; the guard and the shell share the same call. */
   ensure(): Observable<boolean> {
     if (this.authenticated()) {
       return of(true);
@@ -85,7 +82,6 @@ export class AuthService {
       .pipe(catchError(() => of(null)));
   }
 
-  /** Called by the interceptor when anything comes back 401. */
   clear(): void {
     this.authenticated.set(false);
     this.probe = undefined;

@@ -1,15 +1,5 @@
-"""
-Turn profile_source into an append-only version log.
-
-Drops CHECK (id = 1) and makes id AUTOINCREMENT. SQLite cannot alter either in
-place, so the table is rebuilt and the existing row copied across as version 1.
-
-    .venv/bin/python tools/migrate_versions.py            # migrate
-    .venv/bin/python tools/migrate_versions.py --check    # report, change nothing
-
-Safe to run twice: it checks the current shape first and exits if already done.
-Take a backup anyway, with tools/backup.py.
-"""
+"""Rebuild profile_source without CHECK (id = 1) and with AUTOINCREMENT ids.
+Idempotent; pass --check to report only. Back up first with tools/backup.py."""
 
 import sqlite3
 import sys
@@ -27,7 +17,7 @@ CREATE TABLE profile_source_new (
 
 
 def shape(con: sqlite3.Connection) -> tuple[bool, bool, int]:
-    """(has the single-row CHECK, is AUTOINCREMENT, how many rows)."""
+    """Return (has single-row CHECK, is AUTOINCREMENT, row count)."""
     sql = con.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='profile_source'"
     ).fetchone()
@@ -54,7 +44,7 @@ def main() -> None:
         print("already migrated, nothing to do")
         return
 
-    # One transaction. A crash halfway leaves the original table untouched.
+    # One transaction, so a crash leaves the original table intact.
     with con:
         con.execute(NEW_TABLE)
         con.execute(
@@ -68,9 +58,7 @@ def main() -> None:
     if after_rows != rows or after_checked or not after_autoinc:
         raise SystemExit("migration did not land as expected; restore from backups/")
 
-    # The high-water mark only exists once a row has been inserted through the
-    # new table, so seed it from the copy. Without it the next insert could
-    # reuse an id that pruning later frees.
+    # Seed sqlite_sequence from the copied rows, otherwise freed ids could be reused.
     top = con.execute("SELECT max(id) FROM profile_source").fetchone()[0] or 0
     with con:
         con.execute(

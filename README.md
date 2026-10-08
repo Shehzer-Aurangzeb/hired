@@ -1,95 +1,100 @@
 # hired
 
-Paste a job description, get a tailored one-page CV PDF, saved alongside the
-posting that produced it.
+Paste a job posting, get a tailored one-page CV as a PDF, saved next to the
+posting it was made for.
 
-The generator never invents a claim. It selects from a fixed pool of bullets in
-a hand-written master profile, each project carrying an explicit list of what
-can and cannot be claimed. The model returns bullet ids, not prose, and a
-validation layer checks that numbers and qualifiers survive any rephrasing.
+The app never invents a claim. Your experience lives in one master profile: a
+fixed pool of bullets, each project with an explicit list of what can and
+cannot be claimed. The model picks bullet ids, not prose, and the page is built
+from your own sentences after the call. A guard checks that numbers and
+qualifiers survive any rewording.
 
-Angular front-end, FastAPI back-end, Gemini for the fit check and the
-selector, Playwright for the PDF.
+## What it does
 
-**Claude does not parse the profile.** The master file is markdown headings
-wrapping YAML, and the parser is a heading split plus `yaml.safe_load`. That
-is a deliberate choice, not a stopgap. The claim guard's whole job is checking
-generated output against the boundaries in the file, and a guard whose input was
-also produced by a model is checking Claude against Claude. The grammar is in
-[docs/parser_contract.md](docs/parser_contract.md).
+- **Fit check.** Scores a posting against your profile, lists which
+  requirements you cover and which you don't, and flags postings you have
+  already applied to.
+- **Generate.** Picks the title, summary and bullets that fit the posting, lets
+  you swap any of them, previews the page and exports a PDF.
+- **Applications.** Every CV you send is saved with its posting. Track status,
+  follow-ups, notes and a daily target, and re-download any PDF.
+- **Profile.** Edit the master profile as a form, as raw source, or by
+  describing the change in a sentence ("add Docker to my skills"). Every save
+  is a version, with diffs and one-click restore.
 
-**The selector returns bullet ids, never prose.** A model that can only point at
-existing sentences cannot write a new one, and the page is assembled from the
-profile after the call. Every other honesty mechanism here is a policy a model
-could break; that one it cannot.
+## Stack
 
-## Layout
+| Part | Tech |
+| --- | --- |
+| `backend/` | FastAPI, SQLModel on SQLite, Jinja + Playwright (Chromium) for the PDF |
+| `frontend/` | Angular 20, standalone components, signals, Tailwind 4 |
+| `landing/` | Astro, deployed separately on Vercel |
+| Models | Gemini, with OpenRouter's free tier as the fallback |
 
-```
-backend/     FastAPI, profile parser, SQLite
-frontend/    Angular 20, standalone components, signals, Tailwind
-docs/        PROGRESS.md, the parser contract, the profile template
-             and the Claude briefing
-BUILD_PLAN.md
-```
+The profile is Markdown headings around YAML, parsed with `yaml.safe_load`, no
+model involved. The grammar is in [docs/parser_contract.md](docs/parser_contract.md)
+and a full example in [docs/master_template.md](docs/master_template.md).
 
-One repo, two apps, no workspace tool. They share nothing at build time and
-have separate package managers, so a build graph would be overhead with no
-payoff.
+## Run it
 
-## Run
-
-```bash
-hired          # start it and open the browser
-hired help     # every command, and what it does
-```
-
-`hired help` is the reference; `stop`, `restart`, `status`, `log`, `dev` and
-`backup` are the rest of it.
-
-Install the command once, from anywhere afterwards:
+Needs Python 3 (built on 3.14), Node 20+ and pnpm.
 
 ```bash
-ln -s "$PWD/bin/hired" ~/.local/bin/hired     # with ~/.local/bin on your PATH
+# backend
+cd backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.example .env
+.venv/bin/python -m app.hash_password      # paste the output into .env
 ```
 
-`hired` runs the whole app as **one process on one port**: FastAPI serves the
-built Angular bundle, so there is no node running and no CORS. It rebuilds the
-front end only when `frontend/src` is newer than the bundle, waits for
-`/api/health` rather than guessing at a sleep, and binds to `127.0.0.1` so
-nothing else on the network can reach it. Starting it twice just opens the tab.
+In `backend/.env`, set `HIRED_SECRET_KEY` (the app won't start without it),
+`HIRED_PASSWORD_HASH` from the command above, and `HIRED_GEMINI_API_KEY`
+from Google AI Studio. `HIRED_OPENROUTER_API_KEY` is optional.
 
-To run the two servers separately while working on the front end, use
-`hired dev`, or by hand:
+Then start everything with the launcher:
 
 ```bash
-cd backend  && .venv/bin/uvicorn app.main:app --reload   # port 8000
-cd frontend && npm install && npm start                  # port 4200, proxied to 8000
+bin/hired          # builds the frontend if needed, starts, opens the browser
+bin/hired help     # stop, restart, status, log, dev, backup, doctor
 ```
 
-Copy `backend/.env.example` to `backend/.env` first: `HIRED_SECRET_KEY` has no
-default and the app will not start without it, `HIRED_PASSWORD_HASH` comes from
-`.venv/bin/python -m app.hash_password`, and `HIRED_GEMINI_API_KEY` is what the
-fit check and the selector run on. Then `.venv/bin/playwright install chromium`,
-which is the browser that prints the PDF.
+It runs as one process on one port (8000): FastAPI serves the built Angular
+app, and it listens on `127.0.0.1` only. It installs Chromium and the frontend
+packages on first run. `bin/hired doctor` tells you what's missing and how to
+fix it.
 
-The profile lives in the database, not on disk: one row, written through the
-setup screen or the Profile tab, because a container filesystem is wiped on
-redeploy and that row is the only copy of the CV data. First run sends you to
-`/setup`, which offers a paste, a file, or the starter template.
+To put it on your PATH:
 
-## Test
+```bash
+ln -s "$PWD/bin/hired" ~/.local/bin/hired
+```
+
+On first run you land on `/setup`: paste an existing profile, upload a file,
+or start from the template. The profile is stored in the database, not on disk.
+
+### Frontend development
+
+```bash
+bin/hired dev      # backend on 8000, ng serve on 4200 with a proxy
+```
+
+### Landing page
+
+```bash
+cd landing && pnpm install && pnpm dev
+```
+
+## Tests
 
 ```bash
 cd backend && .venv/bin/python -m pytest
 ```
 
-## State
+## Docs
 
-See [docs/PROGRESS.md](docs/PROGRESS.md).
-
-**Nothing is mocked.** Every route is live: auth, the profile, the fit check,
-the selector and its claim guard, the PDF export, applications.
-
-Remaining: a real `master.md` written against
-[docs/master_template.md](docs/master_template.md), and a deploy target.
+- [docs/master_template.md](docs/master_template.md): every profile field, with examples
+- [docs/master_interview_prompt.md](docs/master_interview_prompt.md): a prompt that interviews you and writes your profile
+- [docs/parser_contract.md](docs/parser_contract.md): the profile grammar
+- [docs/profile-editing.md](docs/profile-editing.md): how editing by sentence works
+- [docs/PROGRESS.md](docs/PROGRESS.md): build log

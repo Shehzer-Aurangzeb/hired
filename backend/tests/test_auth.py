@@ -1,9 +1,3 @@
-"""
-The security-shaped bits: the hash round trip, that a session is required, and
-that the lockout expires on its own. The last one already broke once, when a
-counter that reset only on success made the right password unusable forever.
-"""
-
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine
@@ -24,8 +18,7 @@ def client(monkeypatch):
 
     from app.main import app
 
-    # An in-memory database, or the suite reads and could write the developer's
-    # real hired.db. StaticPool keeps every connection on the same one.
+    # StaticPool keeps every connection on the same in-memory database.
     from sqlalchemy.pool import StaticPool
 
     engine = create_engine(
@@ -51,7 +44,6 @@ def test_hash_round_trip():
     hashed = auth.hash_password(PASSWORD)
     assert auth.verify_password(PASSWORD, hashed)
     assert not auth.verify_password(PASSWORD + " ", hashed)
-    # The password must not be recoverable from what we store.
     assert PASSWORD not in hashed
 
 

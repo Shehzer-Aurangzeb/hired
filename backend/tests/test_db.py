@@ -1,8 +1,3 @@
-"""
-The schema's two claims worth checking: JSON columns survive a round trip with
-their types, and the CHECK constraints fire rather than sitting in the DDL.
-"""
-
 import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel, create_engine, select
@@ -66,7 +61,6 @@ def test_a_kept_posting_needs_no_cv(session: Session):
 
 
 def test_profile_source_keeps_every_version(session: Session):
-    """Append-only: the old row stays as the version you can go back to."""
     session.add(ProfileSource(text="# Identity\nname: Test"))
     session.add(ProfileSource(text="# Identity\nname: Someone Else"))
     session.commit()
@@ -76,11 +70,7 @@ def test_profile_source_keeps_every_version(session: Session):
 
 
 def test_a_version_id_is_never_reused(session: Session):
-    """
-    SQLite hands a deleted rowid to the next insert. A version id crosses to the
-    browser and comes back on restore, so one that changes meaning restores the
-    wrong file. AUTOINCREMENT is what stops it.
-    """
+    """SQLite reuses a deleted rowid unless the table uses AUTOINCREMENT."""
     for n in range(3):
         session.add(ProfileSource(text=f"# Identity\nname: v{n}"))
     session.commit()

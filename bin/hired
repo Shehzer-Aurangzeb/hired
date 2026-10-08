@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 #
-# Start hired and open it. Run from anywhere. `hired help` lists the commands;
-# usage() below is the one copy of that list, so it cannot drift from the code.
+# Start hired and open it. `hired help` lists the commands.
 
 set -euo pipefail
 
@@ -13,20 +12,15 @@ URL="http://127.0.0.1:$PORT"
 PIDFILE="$BACKEND/.hired.pid"
 LOGFILE="$BACKEND/.hired.log"
 
-# Playwright defaults to ~/Library/Caches/ms-playwright, which macOS reclaims
-# under disk pressure and every "clean up my Mac" tool deletes outright. Losing
-# it breaks PDF export, and only at export time, after a model call has already
-# been spent. Exported here so the install and the server agree on one path.
+# Keep Playwright's browser out of ~/Library/Caches, which macOS cleanup deletes.
 export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.playwright}"
 
 running() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
 
-# node_modules is not in the repo and cleanup tools treat it as junk. Without
-# it `ng` is simply absent, and npx answers with "could not determine executable
-# to run", which names neither the cause nor the fix.
+# True when frontend node_modules is installed.
 deps() { [ -x "$ROOT/frontend/node_modules/.bin/ng" ]; }
 
-# Fail here, loudly and fixably, rather than at export time with a 500.
+# True when Playwright's Chromium launches (needed for PDF export).
 browser() {
   "$BACKEND/.venv/bin/python" -c \
     'from playwright.sync_api import sync_playwright
@@ -37,7 +31,7 @@ with sync_playwright() as p:
 stop() {
   if running; then
     kill "$(cat "$PIDFILE")" 2>/dev/null || true
-    # Give uvicorn a moment to close the database before anyone reopens it.
+    # Wait up to 2s for a clean exit, then force it.
     for _ in $(seq 20); do running || break; sleep 0.1; done
     running && kill -9 "$(cat "$PIDFILE")" 2>/dev/null || true
   fi
@@ -119,13 +113,9 @@ if running; then
 fi
 rm -f "$PIDFILE"
 
-# The secret and the password hash live in .env, never in the shell or in
-# your history. No .env means no session signing key, and the app refuses to
-# start rather than inventing one.
 [ -f "$BACKEND/.env" ] || { echo "No .env at $BACKEND. Copy .env.example and fill it in." >&2; exit 1; }
 
-# Chromium prints the CV. Install it when it is missing, because the only other
-# option is an app that looks fine until the last step of the one thing it does.
+# Install Chromium up front so PDF export does not fail later.
 if ! browser; then
   echo "chromium is missing. Downloading into $PLAYWRIGHT_BROWSERS_PATH (~100MB, once)..."
   "$BACKEND/.venv/bin/playwright" install chromium || {
@@ -135,8 +125,7 @@ if ! browser; then
   browser || { echo "chromium installed but will not launch." >&2; exit 1; }
 fi
 
-# Rebuild only when the sources are newer than the bundle. A no-op start
-# should not cost an Angular build.
+# Rebuild the frontend only when sources are newer than the bundle.
 if [ ! -f "$BUNDLE/index.html" ] || [ -n "$(find "$ROOT/frontend/src" -newer "$BUNDLE/index.html" -print -quit)" ]; then
   if ! deps; then
     echo "installing front-end dependencies (once)..."
@@ -158,8 +147,7 @@ cd "$BACKEND"
 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port "$PORT" >>"$LOGFILE" 2>&1 &
 echo $! > "$PIDFILE"
 
-# Wait for it to answer rather than guessing at a sleep. /api/health needs no
-# session, which is exactly what it is for.
+# Poll /api/health (no session needed) for up to 10s.
 for _ in $(seq 100); do
   if curl -fsS --max-time 1 "$URL/api/health" >/dev/null 2>&1; then
     open "$URL" 2>/dev/null || true

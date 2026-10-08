@@ -12,16 +12,9 @@ import { SEGMENTS, inSegment, scoreTone, statusClass, waitingDays } from '../../
 import { ToastService } from '../../core/toast.service';
 import { Icon } from '../../shared/icon';
 
-/**
- * Progression, left to right. Rejected and skipped sit outside it: one is the
- * employer's answer and the other is yours, and neither is a step forward.
- */
+/** Forward stages only; rejected and skipped are not steps. */
 const TRACK: ApplicationStatus[] = ['saved', 'applied', 'replied', 'interview', 'offer'];
 
-/**
- * The interview-prep view. Months after applying this is where you see exactly
- * what they read: the posting, the parsed requirements, the score and the gaps.
- */
 @Component({
   selector: 'app-application-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -46,10 +39,9 @@ export class ApplicationDetail {
   readonly savedAt = signal<number | null>(null);
   readonly viewing = signal(false);
   readonly deleting = signal(false);
-  /** TEMPORARY, with reexport(). Cache-buster so a rebuilt PDF actually shows. */
+  /** Temporary, with reexport(). `stamp` busts the cache so a rebuilt PDF shows. */
   readonly rebuilding = signal(false);
   readonly stamp = signal<number | null>(null);
-  /** No export endpoint yet, so there is no file to frame. */
   readonly local = signal<Application | null>(null);
 
   private readonly loaded = toSignal<Application | null | undefined>(
@@ -60,7 +52,7 @@ export class ApplicationDetail {
     { initialValue: undefined },
   );
 
-  /** local wins once a change has been saved, so the view does not refetch. */
+  /** Local copy wins after a save, so there is no refetch. */
   readonly record = computed(() => this.local() ?? this.loaded());
 
   readonly ghosted = computed(() => {
@@ -68,7 +60,7 @@ export class ApplicationDetail {
     return !!current && inSegment(current, 'ghosted');
   });
 
-  /** Where it sits on the track, or -1 when it was rejected. */
+  /** Index on the track, or -1 when rejected. */
   readonly stage = computed(() => {
     const current = this.record();
     return current ? TRACK.indexOf(current.status) : -1;
@@ -83,16 +75,7 @@ export class ApplicationDetail {
     return key ?? '#8b8378';
   });
 
-  /**
-   * Which of the posting's requirements a bullet on the page actually backed,
-   * as judged when the CV was generated and stored on the row since.
-   *
-   * ponytail: two states here, not the three on the generate page. The record
-   * keeps the bullets and the summary but not the skills line, so "on the page
-   * but unbacked" cannot be told apart from "absent". The labels say backed /
-   * not backed and stop there. Rows exported before coverage was stored have an
-   * empty map and read as nothing backed; regenerate one to see the truth.
-   */
+  /** Only backed / not backed here: the record does not store the skills line. */
   readonly coverage = computed<Coverage[]>(() => {
     const current = this.record();
     if (!current) {
@@ -106,14 +89,7 @@ export class ApplicationDetail {
     );
   });
 
-  /**
-   * No coverage on the record is unknown, not zero.
-   *
-   * Rows exported before the selector started reporting coverage have an empty
-   * map. Counting that as "0 of 6 backed" states something false with a badge
-   * behind it, which is worse than saying nothing: the whole point of this panel
-   * is that you can trust the crosses.
-   */
+  /** Older rows have no coverage stored; treat that as unknown, not zero. */
   readonly unrecorded = computed(() => {
     const current = this.record();
     return !!current?.selected_bullets?.length && !current.coverage?.length;
@@ -124,7 +100,6 @@ export class ApplicationDetail {
     return { hit: required.filter((c) => c.evidenced).length, total: required.length };
   });
 
-  /** Bullets grouped by the project they came from, in the order they printed. */
   readonly groups = computed<{ project: string; bullets: SentBullet[] }[]>(() => {
     const groups: { project: string; bullets: SentBullet[] }[] = [];
     for (const bullet of this.record()?.selected_bullets ?? []) {
@@ -151,7 +126,7 @@ export class ApplicationDetail {
     this.save(current.id, { status }, `Marked as ${status}.`);
   }
 
-  /** Saves on blur. Nothing to press, nothing to forget after a recruiter call. */
+  /** Saves on blur. */
   saveNotes(current: Application, notes: string): void {
     const next = notes.trim() || null;
     if (next === (current.notes ?? null)) {
@@ -173,11 +148,6 @@ export class ApplicationDetail {
     });
   }
 
-  /**
-   * ponytail: native confirm(). It is one line, it cannot be clicked past by
-   * accident, and this is the only destructive action in the app. A styled
-   * dialog is worth building the day there is a second one.
-   */
   remove(current: Application): void {
     const what = current.has_pdf ? ', and the CV that was sent with it,' : '';
     if (!confirm(`Delete ${current.company} - ${current.role}${what} permanently?`)) {
@@ -193,21 +163,16 @@ export class ApplicationDetail {
     });
   }
 
-  /**
-   * TEMPORARY, paired with POST /api/reexport. For rows whose PDF was printed
-   * by an older version of the template. Delete with the route.
-   */
+  /** Temporary: remove with POST /api/reexport. */
   reexport(current: Application): void {
     this.rebuilding.set(true);
     this.api.reexport(current.id).subscribe({
       next: (res) => {
         this.rebuilding.set(false);
-        // Same URL, new bytes. Without this the browser serves the old file
-        // from cache and the button looks like it did nothing.
+        // Same URL, new file, so bust the browser cache.
         this.stamp.set(Date.now());
         if (res.dropped?.length) {
-          // Rebuilding against an edited profile can lose bullets. Saying so
-          // beats handing back a shorter CV with no explanation.
+          // Rebuilding against an edited profile can drop bullets; say which.
           this.toast.error(
             `Rebuilt without ${res.dropped.length} bullet(s) no longer in your profile: ` +
               res.dropped.join(', '),
@@ -220,7 +185,7 @@ export class ApplicationDetail {
     });
   }
 
-  /** Angular blocks iframe src bindings. The URL is our own API plus a numeric id. */
+  /** Angular blocks iframe src bindings; safe because this is our own API URL. */
   safePdfUrl(id: number): SafeResourceUrl {
     return this.sanitizer.bypassSecurityTrustResourceUrl(this.pdfUrl(id));
   }
@@ -230,10 +195,6 @@ export class ApplicationDetail {
     return stamp ? `${this.api.pdfUrl(id)}?v=${stamp}` : this.api.pdfUrl(id);
   }
 
-  /**
-   * ponytail: native <dialog> plus an iframe. The browser already has a PDF
-   * viewer, so embedding one would be a dependency for something built in.
-   */
   openPdf(dialog: HTMLDialogElement): void {
     this.viewing.set(true);
     dialog.showModal();

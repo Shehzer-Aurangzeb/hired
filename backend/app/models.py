@@ -1,19 +1,19 @@
-"""Pydantic models mirroring the master profile. These are the API contract."""
+"""Pydantic models for the profile file, parsed postings and generated CVs."""
 
 from typing import Annotated, Any
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, BeforeValidator, field_validator, model_validator
 
-# ponytail: YAML turns 2024-11-01 into a date object; coerce back to string.
+# YAML parses 2024-11-01 as a date; coerce it back to a string.
 Str = Annotated[str, BeforeValidator(str)]
 
-# Lowercased so "Native" and "native" both match. Code branches on these.
+# Enum-like strings, lowercased so matching is case-insensitive.
 Token = Annotated[str, BeforeValidator(lambda v: str(v).strip().lower() if v else "")]
 
 
 class Loose(BaseModel):
-    """Reads a written-but-empty list as [], which YAML hands over as None."""
+    """Treat an empty YAML list (None) as []."""
 
     @model_validator(mode="before")
     @classmethod
@@ -51,8 +51,6 @@ Links = Annotated[list[Link], BeforeValidator(lambda v: [_as_link(x) for x in v 
 
 
 class Meta(BaseModel):
-    """Bookkeeping. schema_version is what lets an old file be migrated later."""
-
     schema_version: int = 1
     updated: Str = ""
 
@@ -90,7 +88,7 @@ class SkillLine(Loose):
 
 
 class SkillEvidence(Loose):
-    """Never printed. Answers "5+ years of React" and gates unevidenced skills."""
+    """Not printed. Used for years-of-experience answers and to gate skills."""
 
     name: str
     years: float | None = None
@@ -108,7 +106,7 @@ class ClaimBoundary(Loose):
 
 
 class Metric(BaseModel):
-    """Where a number in a bullet came from. Absent is itself an answer."""
+    """Where a number in a bullet came from."""
 
     value: str = ""
     source: Token = "none"  # measured | estimated | reported | none
@@ -140,8 +138,7 @@ class Project(Loose):
     priority: int = 3
     tags: list[str] = []
     disclosure: str = ""
-    # False prints the bullets straight under the employer with no bold lead-in,
-    # which is how small pieces of client work read.
+    # False prints the bullets under the employer with no bold project lead-in.
     named: bool = True
     unverified: list[str] = []
     links: Links = []
@@ -189,8 +186,7 @@ class Certification(BaseModel):
     name: str
     issuer: str = ""
     date: Str = ""
-    # "earned" on purpose: a file written before this field existed has no
-    # status, and everything in it was real.
+    # Defaults to earned so older files without this field stay correct.
     status: Token = "earned"  # earned | in_progress | expired
     expires: Str = ""
     url: str = ""
@@ -218,7 +214,7 @@ class Language(BaseModel):
 
 
 class Gap(BaseModel):
-    """Never printed. What you cannot do, so the selector reports it as a gap."""
+    """Not printed. A skill the person lacks."""
 
     skill: str
     status: Token = ""  # none | learning | personal-only | rusty
@@ -227,7 +223,7 @@ class Gap(BaseModel):
 
 
 class Availability(Loose):
-    """Never printed. What lets a posting be scored before an hour goes into it."""
+    """Not printed. Used to score a posting's fit."""
 
     work_modes: list[str] = []
     locations: list[str] = []
@@ -241,7 +237,7 @@ class Availability(Loose):
 
 
 class Rules(Loose):
-    """Never printed. Generation limits applying to every CV from this file."""
+    """Not printed. Limits applied to every generated CV."""
 
     banned_words: list[str] = []
     banned_chars: list[str] = []
@@ -274,8 +270,7 @@ class Profile(Loose):
 
     @model_validator(mode="after")
     def unique_ids(self):
-        # One namespace across Experience and Projects, because a bullet id has
-        # to resolve to exactly one project.
+        # Ids are unique across experience and projects so a bullet id maps to one project.
         bullets: set[str] = set()
         projects: set[str] = set()
         for proj in self.all_projects():
@@ -289,13 +284,8 @@ class Profile(Loose):
         return self
 
 
-# ---------- validation (POST /api/profile/validate) ----------
-
-
 class ProfileIssue(BaseModel):
-    """1-indexed line in the file the person typed, or None when not line-bound."""
-
-    line: int | None = None
+    line: int | None = None  # 1-indexed, None when not tied to a line
     message: str
 
 
@@ -317,9 +307,6 @@ class ValidationResult(BaseModel):
     summary: ProfileSummary | None = None
 
 
-# ---------- the parsed posting ----------
-
-
 class RequiredSkill(BaseModel):
     name: str
     importance: int = 2
@@ -327,20 +314,18 @@ class RequiredSkill(BaseModel):
     @field_validator("importance")
     @classmethod
     def _one_to_three(cls, value: int) -> int:
-        # Clamped, not refused: models answer 5 on this three-point scale.
+        # Clamp rather than reject: models sometimes answer out of range.
         return max(1, min(3, value))
 
 
 class Fit(BaseModel):
-    """How a posting lands. Never stored alone: it becomes a row or is closed."""
-
     score: int = 0
     reasoning: str = ""
     gaps: list[str] = []
 
 
 class SelectedBullet(BaseModel):
-    """A bullet as it will print. `text` is copied from the profile, not composed."""
+    """A bullet as printed. `text` is copied from the profile, never written by the model."""
 
     id: str
     text: str
@@ -363,10 +348,7 @@ class CvSection(BaseModel):
 
 
 class SkillCoverage(BaseModel):
-    """
-    One thing the posting asked for, and the printed bullets backing it. Empty
-    is the useful answer: the page does not show what the posting wants.
-    """
+    """A skill the posting asks for and the printed bullets that back it. Empty means a gap."""
 
     skill: str
     bullet_ids: list[str] = []
@@ -381,14 +363,14 @@ class GeneratedCv(BaseModel):
 
 
 class Flag(BaseModel):
-    """block stops the export. warn is a decision a person has to make."""
+    """block stops the export; warn needs a person to decide."""
 
     type: str  # block | warn
     message: str
 
 
 class ParsedJd(BaseModel):
-    """What the parse pulls out. All defaulted, so a sparse answer still renders."""
+    """Parsed job posting. Everything defaults so a sparse parse still works."""
 
     company: str = ""
     role: str = ""

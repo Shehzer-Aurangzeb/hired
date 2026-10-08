@@ -1,8 +1,3 @@
-"""
-The fit check. Nothing here reaches the network: what is pinned is the shape
-around the call, and that the context sent carries the constraints, not the CV.
-"""
-
 import httpx
 import pytest
 from fastapi import HTTPException
@@ -69,7 +64,7 @@ def save_profile(client, text=DEFAULT_TEMPLATE):
 
 
 def answers(monkeypatch, payload):
-    """Stand in for the model. Records the prompt so the context can be read."""
+    """Stand in for the model and record the prompt."""
     sent = {}
 
     def fake(prompt, schema):
@@ -112,7 +107,6 @@ def test_the_happy_path(client, monkeypatch):
 
 
 def test_a_score_outside_the_range_is_clamped(client, monkeypatch):
-    """Gemini has returned 55 for this request shape. A 55 renders as a broken meter."""
     save_profile(client)
     answers(monkeypatch, {**ANSWER, "score": 55})
     assert client.post("/api/fit", json={"jd_text": JD}).json()["fit"]["score"] == 10
@@ -122,7 +116,6 @@ def test_a_score_outside_the_range_is_clamped(client, monkeypatch):
 
 
 def test_a_sparse_answer_still_renders(client, monkeypatch):
-    """A missing array is what blanked the whole detail page once before."""
     save_profile(client)
     answers(monkeypatch, {"score": 4})
     body = client.post("/api/fit", json={"jd_text": JD}).json()
@@ -160,7 +153,7 @@ def test_the_prompt_carries_the_constraints_not_the_cv(client, monkeypatch):
     assert "cannot_claim" in prompt and "skill_evidence" in prompt
     assert profile.gaps[0].skill in prompt
     assert profile.experience[0].projects[0].claim_boundary.cannot_claim[0] in prompt
-    # Nothing here decides what to print, so bullet text is dead weight.
+    # Bullet text is not needed for fit, so it is left out.
     assert profile.experience[0].projects[0].bullets[0].text not in prompt
 
 
@@ -177,7 +170,6 @@ def test_the_schema_asks_for_a_one_to_ten_score():
 
 
 def test_skill_importance_is_clamped_to_the_three_point_scale(client, monkeypatch):
-    """Gemini answers 5 on this scale, and the tooltip prints the number."""
     save_profile(client)
     answers(
         monkeypatch,
@@ -191,7 +183,6 @@ def test_skill_importance_is_clamped_to_the_three_point_scale(client, monkeypatc
 
 
 def test_the_client_refuses_before_it_calls(monkeypatch):
-    """No key means no request at all, rather than a 400 from Google."""
     monkeypatch.setattr(model, "get_settings", lambda: Settings(secret_key="t"))
 
     def explode(*args, **kwargs):
@@ -226,7 +217,6 @@ def calls(monkeypatch, settings, *replies):
 
 
 def test_gemini_is_tried_first_when_its_key_is_set(monkeypatch):
-    """Gemini answers in seconds; the free pool thinks for a while."""
     settings = Settings(secret_key="t", openrouter_api_key="or", gemini_api_key="g")
     seen = calls(monkeypatch, settings, _reply(200, GEMINI_OK))
 
@@ -235,7 +225,6 @@ def test_gemini_is_tried_first_when_its_key_is_set(monkeypatch):
 
 
 def test_a_loaded_gemini_falls_through_to_openrouter(monkeypatch):
-    """The whole point of two providers: one being rate-limited still answers."""
     settings = Settings(secret_key="t", openrouter_api_key="or", gemini_api_key="g")
     seen = calls(monkeypatch, settings, _reply(429, {}), _reply(200, OPENROUTER_OK))
 
@@ -278,9 +267,6 @@ def test_the_free_pool_is_sent_so_openrouter_picks_the_model(monkeypatch):
 
 
 # ---------- applying twice to the same employer ----------
-#
-# The company name comes back from the parse, so the lookup is free and lands
-# where the decision is made.
 
 
 def _file(client, company, role="Front-End Developer", status="applied"):
@@ -319,7 +305,7 @@ def test_the_match_ignores_case_and_surrounding_space(client, monkeypatch):
 def test_a_different_company_is_not_a_duplicate(client, monkeypatch):
     save_profile(client)
     answers(monkeypatch, ANSWER)
-    _file(client, "Acme Corp")  # ponytail: exact match, so this is deliberately missed
+    _file(client, "Acme Corp")  # exact match only
     assert client.post("/api/fit", json={"jd_text": JD}).json()["seen"] == []
 
 
@@ -339,10 +325,7 @@ def test_the_fit_check_still_writes_nothing(client, monkeypatch):
 
 
 def test_the_prompt_says_what_an_unpinned_skill_means(client, monkeypatch):
-    """
-    Ask can record a tool used on no listed project. Without this rule the fit
-    check had no idea what to do with one, so the two files disagreed.
-    """
+    """A skill with no evidence projects is breadth, never depth."""
     save_profile(client)
     sent = answers(monkeypatch, ANSWER)
     client.post("/api/fit", json={"jd_text": JD})

@@ -1,15 +1,10 @@
-"""
-python -m app.hash_password
-
-Prints the line to paste into the environment. The password itself is never
-written anywhere: only the scrypt hash leaves this script.
-"""
+"""Prompt for a password and print HIRED_PASSWORD_HASH=<scrypt hash> for .env.
+Usage: python -m app.hash_password"""
 
 import getpass
 
 from .auth import hash_password
 
-# One password guards everything, and there is no second factor behind it.
 MIN_LENGTH = 12
 
 

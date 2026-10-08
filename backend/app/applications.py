@@ -1,7 +1,4 @@
-"""
-The saved postings. Saving is its own decision, not a side effect of exporting:
-a posting kept for the gap it exposed never had a PDF.
-"""
+"""CRUD routes for saved job applications and their generated CV PDFs."""
 
 import re
 
@@ -17,7 +14,7 @@ router = APIRouter(prefix="/applications", tags=["applications"])
 
 
 class ApplicationIn(BaseModel):
-    """The fit check's output plus the CV step's. Export attaches the PDF later."""
+    """Fit check plus CV step output. Export attaches the PDF later."""
 
     company: str
     role: str
@@ -41,7 +38,7 @@ class ApplicationIn(BaseModel):
 
 
 class ApplicationOut(BaseModel):
-    """Everything but the PDF bytes, which come from the /pdf route instead."""
+    """Everything but the PDF bytes, which come from the /pdf route."""
 
     id: int
     company: str
@@ -80,7 +77,7 @@ class ApplicationOut(BaseModel):
 
 
 class ApplicationPatch(BaseModel):
-    """Only these two. The rest records what was sent, and must stay true."""
+    """Only status and notes are editable; the rest records what was sent."""
 
     status: str | None = None
     notes: str | None = None
@@ -131,12 +128,12 @@ def patch_application(
     if "status" in changed and body.status is not None:
         _check_status(body.status)
         row.status = body.status
-        # Stamped once. Re-entering the pipeline must not move the real date.
+        # Stamped once, so re-entering the pipeline keeps the real date.
         if body.status in SENT and row.applied_at is None:
             row.applied_at = now()
 
     if "notes" in changed:
-        # fields_set, not a None test, so an explicit null clears the notes.
+        # fields_set, not a None check, so an explicit null clears the notes.
         row.notes = body.notes
 
     session.add(row)
@@ -160,11 +157,11 @@ def get_pdf(application_id: int, session: SessionDep) -> Response:
     return Response(
         content=row.pdf,
         media_type="application/pdf",
-        # inline so the in-app viewer renders it. The name still names a save.
+        # inline so the in-app viewer renders it.
         headers={"Content-Disposition": f'inline; filename="{_safe(row.filename)}"'},
     )
 
 
 def _safe(name: str | None) -> str:
-    """A newline in a filename would let it write its own response headers."""
+    # Stops header injection via the filename.
     return re.sub(r"[^A-Za-z0-9._-]", "_", name or "cv.pdf")

@@ -9,10 +9,7 @@ import { Application } from './models';
 export class ApplicationsService {
   private readonly http = inject(HttpClient);
 
-  /**
-   * Keep this posting. Independent of whether a CV was ever made for it: the
-   * records worth the most are often the ones you did not apply to.
-   */
+  /** Saves a posting, whether or not a CV was made for it. */
   create(body: Partial<Application>): Observable<Application> {
     return this.http.post<Application>(`${API}/api/applications`, body);
   }
@@ -25,16 +22,11 @@ export class ApplicationsService {
     return this.http.get<Application>(`${API}/api/applications/${id}`);
   }
 
-  /** One patch rather than a method per field. Status and notes are the only two. */
   patch(id: number, changes: Partial<Application>): Observable<Application> {
     return this.http.patch<Application>(`${API}/api/applications/${id}`, changes);
   }
 
-  /**
-   * TEMPORARY, paired with POST /api/reexport. Rebuilds the PDF from what the
-   * row already stores, for rows exported before a template fix. Delete this
-   * and the button on the detail page together.
-   */
+  /** Temporary: rebuilds the stored PDF. Remove with POST /api/reexport and its button. */
   reexport(id: number): Observable<{ filename: string; page_count: number; dropped: string[] }> {
     return this.http.post<{ filename: string; page_count: number; dropped: string[] }>(
       `${API}/api/reexport`,
@@ -42,7 +34,7 @@ export class ApplicationsService {
     );
   }
 
-  /** Takes the PDF with it. Ask before calling this. */
+  /** Also deletes the PDF. Confirm before calling. */
   delete(id: number): Observable<void> {
     return this.http.delete<void>(`${API}/api/applications/${id}`);
   }

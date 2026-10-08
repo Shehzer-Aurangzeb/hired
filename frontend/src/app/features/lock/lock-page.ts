@@ -51,7 +51,6 @@ export class LockPage {
     });
   }
 
-  /** ponytail: setInterval, not a timer library. One counter, one screen. */
   private countdown(seconds: number): void {
     this.lockedFor.set(seconds);
     const tick = setInterval(() => {

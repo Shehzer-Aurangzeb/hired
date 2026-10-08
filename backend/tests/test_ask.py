@@ -1,10 +1,4 @@
-"""
-Ask: the guard and the splicer.
-
-Nothing here reaches the network; the model is a dict. What is worth pinning is
-that the model cannot write the file's shape, that a change touching anything
-outside its target is refused, and that the result still parses.
-"""
+"""Ask: the guard and the splicer."""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -131,12 +125,11 @@ def test_a_new_skill_entry_lands_in_its_section(client, monkeypatch):
     profile = parse_text(body["text"])
     redux = next(s for s in profile.skill_evidence if s.name == "Redux")
     assert redux.level == "working" and redux.evidence == ["thing"]
-    # Everything else is untouched, including the React entry above it.
     assert len(profile.skill_evidence) == 2
 
 
 def test_the_rest_of_the_file_is_byte_for_byte_the_same(client, monkeypatch):
-    """A splice, not a rewrite. Reformatting is how a round trip loses comments."""
+    """A splice, not a rewrite."""
     answers(
         monkeypatch,
         {
@@ -153,7 +146,7 @@ def test_the_rest_of_the_file_is_byte_for_byte_the_same(client, monkeypatch):
 
 
 def test_an_item_joins_a_skills_row_that_wraps(client, monkeypatch):
-    """The list spans two lines in the fixture, so a one-line regex would miss it."""
+    """The list spans two lines in the fixture."""
     answers(
         monkeypatch,
         {
@@ -170,7 +163,6 @@ def test_an_item_joins_a_skills_row_that_wraps(client, monkeypatch):
 
 
 def test_a_bullet_gets_an_id_the_app_chose(client, monkeypatch):
-    """The model never picks ids, so it cannot collide with one already there."""
     answers(
         monkeypatch,
         {
@@ -230,7 +222,6 @@ def test_a_project_that_does_not_exist_is_refused(client, monkeypatch):
 
 
 def test_a_number_with_no_source_is_refused(client, monkeypatch):
-    """The failure this app exists to prevent: a plausible number nobody gave it."""
     answers(
         monkeypatch,
         {
@@ -297,7 +288,7 @@ def test_an_estimate_that_says_so_goes_through(client, monkeypatch):
 
 
 def test_a_version_number_in_a_name_is_not_a_measurement(client, monkeypatch):
-    """Auth0 and S3 are names. Demanding a metric for them trains you to ignore it."""
+    """Auth0 and S3 are names, not metrics."""
     answers(
         monkeypatch,
         {
@@ -316,7 +307,6 @@ def test_a_version_number_in_a_name_is_not_a_measurement(client, monkeypatch):
 
 
 def test_an_operation_outside_the_list_is_refused(client, monkeypatch):
-    """Loosening is not an operation Ask has, whatever the model returns."""
     answers(
         monkeypatch,
         {
@@ -360,7 +350,6 @@ def test_nothing_is_saved_until_it_is_confirmed(client, monkeypatch):
 
 
 def test_confirming_is_an_ordinary_save(client, monkeypatch):
-    """So it validates, takes the lock, and lands in the history drawer."""
     answers(
         monkeypatch,
         {
@@ -382,7 +371,6 @@ def test_confirming_is_an_ordinary_save(client, monkeypatch):
 
 
 def test_questions_come_back_with_no_changes(client, monkeypatch):
-    """Being asked is the point. A form would have taken a blank level."""
     answers(
         monkeypatch,
         {
@@ -417,7 +405,7 @@ def test_adding_an_item_that_is_already_there_is_refused():
 
 
 def test_a_colon_in_a_bullet_gets_quoted():
-    """Unquoted, YAML reads it as a mapping and the save fails on a type error."""
+    """Unquoted, YAML reads it as a mapping."""
     out = ask._apply(
         PROFILE,
         Change(op="add_bullet", project_id="thing", text="Built the flow: with OTP"),
@@ -426,11 +414,7 @@ def test_a_colon_in_a_bullet_gets_quoted():
 
 
 def test_years_nobody_mentioned_are_dropped(client, monkeypatch):
-    """
-    Caught on the first real call: asked for a level and a date, the model
-    answered with years: 3. A duration can only come from the person, so no
-    digit in anything they typed means there was nothing to round.
-    """
+    """Years only stand if the user typed a digit."""
     answers(
         monkeypatch,
         {
@@ -474,11 +458,6 @@ def test_years_the_person_gave_are_kept(client, monkeypatch):
 
 
 def test_a_question_mid_thread_does_not_lose_the_proposal(client, monkeypatch):
-    """
-    The RTK Query report. Four turns in, after answering "do I already have
-    this?", the next turn emitted a change carrying nothing but a name: its own
-    earlier answer was never shown back to it, only the prose around it.
-    """
     answers(
         monkeypatch,
         {
@@ -496,7 +475,6 @@ def test_a_question_mid_thread_does_not_lose_the_proposal(client, monkeypatch):
     first = say(client, "I used RTK Query on Thing, working level").json()
     assert first["text"] is not None
 
-    # The question turn: a correct answer, and no changes of its own.
     answers(monkeypatch, {"reply": "No, it is not in your skills yet.", "changes": []})
     asked = say(
         client,
@@ -504,7 +482,7 @@ def test_a_question_mid_thread_does_not_lose_the_proposal(client, monkeypatch):
         history=[{"role": "you", "text": "I used RTK Query on Thing, working level"}],
     ).json()
 
-    # Hand the standing proposal back, as the browser now does.
+    # The browser hands the standing proposal back.
     sent = answers(monkeypatch, {"reply": "Added it.", "changes": []})
     body = client.post(
         "/api/profile/ask",
@@ -560,7 +538,6 @@ def test_a_correction_replaces_only_the_field_it_names(client, monkeypatch):
 
 
 def test_an_entry_with_only_a_name_is_refused(client, monkeypatch):
-    """`- name: RTK Query` on its own parses and says nothing. It landed once."""
     answers(
         monkeypatch,
         {"reply": "ok", "changes": [{"op": "add_skill_evidence", "target": "RTK Query"}]},

@@ -27,11 +27,7 @@ export type IconName =
   | 'more'
   | 'claude';
 
-/**
- * Inline SVG from the Lucide set, drawn with @switch.
- * ponytail: 18 icons do not justify a dependency, and inlining avoids the
- * DomSanitizer dance that a path-map version would need.
- */
+// Inline Lucide SVGs. Inlining avoids an icon dependency and DomSanitizer.
 @Component({
   selector: 'app-icon',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -51,8 +47,7 @@ export type IconName =
     >
       @switch (name()) {
         @case ('claude') {
-          <!-- The Claude burst, drawn with the shared stroke settings rather
-               than dropped in as brand artwork. -->
+          <!-- Claude burst -->
           <path d="M14.2 12.0L21.6 12.0" />
           <path d="M13.9 13.1L20.3 16.8" />
           <path d="M13.1 13.9L16.8 20.3" />

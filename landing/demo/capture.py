@@ -1,17 +1,4 @@
-"""
-Screenshots for the landing page, taken from the real app on fake data.
-
-Runs the actual backend against a throwaway SQLite file and the fictional
-profile in master.md beside this script. The only thing replaced is the model
-call: generate_json returns canned answers, so the selector, the claim guard,
-the page measurer and the PDF renderer all run for real. Nothing touches
-backend/hired.db or your profile.
-
-    cd backend && .venv/bin/python ../landing/demo/capture.py
-
-Needs a built frontend (frontend/dist), which `hired` keeps fresh.
-"""
-
+# Captures the landing screenshots. Run: cd backend && .venv/bin/python ../landing/demo/capture.py
 import os
 import sys
 import tempfile
@@ -27,8 +14,7 @@ PORT = 8765
 URL = f"http://127.0.0.1:{PORT}"
 PASSWORD = "demo-password-for-screenshots"
 
-# Before any app import: settings and the engine are read at import time, and
-# these win over backend/.env.
+# Must be set before importing the app, which reads settings at import time.
 tmp = Path(tempfile.mkdtemp(prefix="hired-demo-"))
 os.environ.update(
     HIRED_DATABASE_URL=f"sqlite:///{tmp / 'demo.db'}",
@@ -137,7 +123,7 @@ SELECTION = {
 
 
 def fake_model(_prompt, schema):
-    """Stands in for Gemini. The selector's schema is the one with title_id."""
+    """Fake model call. The selector's schema is the one with title_id."""
     return SELECTION if "title_id" in schema["properties"] else FIT
 
 

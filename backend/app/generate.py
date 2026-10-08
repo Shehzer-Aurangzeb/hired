@@ -1,8 +1,5 @@
-"""
-The selector, and the guard that checks it. The model returns bullet ids, never
-prose, so it cannot write a sentence that is not already in the profile. The
-guard is plain code, for what it can still get wrong while obeying the format.
-"""
+"""CV generation: the model picks bullet ids from the profile, plain code checks
+the pick and fills the page, then preview and PDF export."""
 
 import json
 
@@ -146,11 +143,8 @@ def generate(body: GenerateRequest, session: SessionDep) -> GenerateResponse:
     return GenerateResponse(cv=cv, flags=flags)
 
 
-# ---------- what the model sees ----------
-
-
 def _pool(profile: Profile) -> list[Bullet]:
-    """Blocked bullets never reach the model. Excluded, not discouraged."""
+    """Bullets the model may pick from. Blocked ones are left out entirely."""
     return [
         bullet
         for project in profile.all_projects()
@@ -204,9 +198,6 @@ def _prompt(profile: Profile, jd_text: str, body: GenerateRequest) -> str:
         f"\n\nWHAT THE POSTING ASKS FOR:\n{body.parsed_jd.model_dump_json()}"
         f"\n\nPOSTING:\n{jd_text}"
     )
-
-
-# ---------- assembly, and the guard ----------
 
 
 def _assemble(
@@ -311,12 +302,8 @@ def _bullets(project: Project, ids: list, rules, flags: list[Flag]) -> list[Sele
 
 
 def _coverage(jd: ParsedJd, answer: dict, sections: list[CvSection]) -> list[SkillCoverage]:
-    """
-    What the page backs, minus ids that did not print.
-
-    ponytail: bullets the fill loop added are not in the answer, so they back
-    nothing. They were picked for length, so under-crediting is the safe way.
-    """
+    """The model's coverage claims, limited to bullets that printed.
+    Bullets added by the fill loop back nothing, on purpose."""
     printed = {bullet.id for section in sections for bullet in section.bullets}
     claimed: dict[str, list[str]] = {}
     for entry in answer.get("coverage") or []:
@@ -335,13 +322,12 @@ def _coverage(jd: ParsedJd, answer: dict, sections: list[CvSection]) -> list[Ski
 
 
 def _check_qualifiers(sections, projects, printed: str, flags: list[Flag]) -> None:
-    """Wording that must travel with a claim. Checked against the printed page."""
+    """Warn when a project's required qualifier is missing from the printed page."""
     lowered = printed.lower()
     for section in sections:
         project = projects[section.project_id]
         for qualifier in project.claim_boundary.required_qualifiers:
-            # ponytail: keyword overlap, not entailment, since a whole sentence
-            # never appears verbatim. Needs the qualifier written as a phrase.
+            # Keyword overlap, since the qualifier rarely appears word for word.
             words = [w for w in _words(qualifier) if len(w) > 4]
             if words and not any(word in lowered for word in words):
                 flags.append(
@@ -368,19 +354,13 @@ def _check_banned(rules, printed: str, flags: list[Flag]) -> None:
             )
 
 
-# What "a full page" means. Under MIN reads as a thin candidate and gets topped
-# up; over MAX is two pages pretending to be one. Between them is left alone.
+# Below MIN_FILL the page gets topped up; a bullet that pushes it past MAX_FILL is undone.
 MIN_FILL = 0.90
 MAX_FILL = 1.25
 
 
 def _fill_page(profile, title, summary, sections, projects, rules, flags) -> None:
-    """
-    Top the page up until full, measured in a real browser.
-
-    ponytail: no second model call. Top-ups follow the author's priority field,
-    which is the right trade at the bottom of a page.
-    """
+    """Add unused bullets in priority order until the page is full, measured in Chromium."""
     def build() -> GeneratedCv:
         return GeneratedCv(
             title=title.text if title else "",
@@ -408,8 +388,7 @@ def _fill_page(profile, title, summary, sections, projects, rules, flags) -> Non
             added = 0
             while filled < MIN_FILL and spare:
                 project, bullet = spare.pop(0)
-                # Looked up, not remembered, or a project's second bullet would
-                # start a duplicate section.
+                # Look the section up each time so a second bullet doesn't start a duplicate.
                 section = next((s for s in sections if s.project_id == project.id), None)
                 fresh = section is None
                 if fresh:
@@ -456,15 +435,14 @@ def _fill_page(profile, title, summary, sections, projects, rules, flags) -> Non
                     )
                 )
     except Exception as error:  # noqa: BLE001
-        # No browser, no measurement. The CV is still correct, only unchecked
-        # for length, and refusing to generate over that is worse.
+        # Without a browser the CV is still valid, just unmeasured, so warn instead of failing.
         flags.append(
             Flag(type="warn", message=f"Could not measure the page length. {error}")
         )
 
 
 def _target(rules) -> str:
-    """ponytail: derived from the caps, so there is no second number to sync."""
+    """Target bullet count for the prompt, derived from the caps."""
     most = rules.max_projects * rules.max_bullets_per_project
     return f"{max(6, most // 2)} to {max(8, int(most * 0.7))}"
 
@@ -496,7 +474,7 @@ def _words(text: str) -> list[str]:
 
 
 def _codepoint(raw: str) -> str:
-    """Rules writes banned characters as U+2014 so the file holds none of them."""
+    """Turn "U+2014" into the character; anything else passes through."""
     token = raw.strip().upper()
     if token.startswith("U+"):
         try:
@@ -506,19 +484,13 @@ def _codepoint(raw: str) -> str:
     return raw
 
 
-# ---------- export ----------
-
-
 class ExportRequest(BaseModel):
-    """The CV as the person left it. What prints is what was on screen."""
-
     application_id: int
     cv: GeneratedCv
 
 
 class ExportResponse(BaseModel):
-    # Bullets a re-export could not find. Shipping a shorter CV silently is
-    # how one came back half a page.
+    # Bullet ids a re-export could not find in the profile.
     dropped: list[str] = []
     id: int
     filename: str
@@ -531,7 +503,7 @@ class PreviewRequest(BaseModel):
 
 @router.post("/preview", response_class=HTMLResponse)
 def preview(body: PreviewRequest, session: SessionDep) -> str:
-    """The preview iframe's HTML, off the same render_html the PDF goes through."""
+    """Preview HTML, from the same render_html the PDF uses."""
     source = session.exec(select(ProfileSource)).first()
     if source is None:
         raise HTTPException(404, "No profile saved yet.")
@@ -553,7 +525,7 @@ def export(body: ExportRequest, session: SessionDep) -> ExportResponse:
 
     row.pdf = pdf
     row.filename = filename(profile.identity.name, row.company, row.role)
-    # What was sent, as printed. See Application.selected_bullets.
+    # Snapshot of what was sent, as printed.
     row.title_variant = body.cv.title
     row.summary_text = body.cv.summary
     row.selected_bullet_ids = [b.id for s in body.cv.sections for b in s.bullets]
@@ -569,14 +541,8 @@ def export(body: ExportRequest, session: SessionDep) -> ExportResponse:
     return ExportResponse(id=row.id, filename=row.filename, page_count=pages)
 
 
-# ---------- TEMPORARY: re-export ----------
-#
-# ponytail: the CV template changed after PDFs were stored and the bytes are the
-# only copy. Rebuilds from the row, no model. Delete this route, ReexportRequest
-# and the detail-page button together once the template settles.
-#
-# Ceiling: bullet text comes off the row, but labels and skills come from
-# today's profile, so the second PDF is not always the first.
+# Temporary: rebuilds a stored PDF with the current template, no model call.
+# Bullet text comes from the row but labels and skills from today's profile.
 
 
 class ReexportRequest(BaseModel):

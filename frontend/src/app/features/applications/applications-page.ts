@@ -52,17 +52,16 @@ export class ApplicationsPage {
   readonly query = signal('');
   readonly filter = signal<'all' | Segment>('all');
   readonly saving = signal<number | null>(null);
-  /** Which band segment the pointer is over, so the others can recede. */
   readonly hovered = signal<Segment | null>(null);
 
   private readonly searchBox = viewChild<ElementRef<HTMLInputElement>>('searchBox');
 
-  /** Slash focuses search, the way every tool with a list does it. */
+  /** "/" focuses search. */
   onKey(event: KeyboardEvent): void {
     if (event.key !== '/') {
       return;
     }
-    // target is document when nothing is focused, and document has no closest()
+    // target is document when nothing is focused, which has no closest()
     const target = event.target;
     if (target instanceof HTMLElement && target.closest('input, textarea, select')) {
       return;
@@ -81,17 +80,13 @@ export class ApplicationsPage {
     { initialValue: null },
   );
 
-  /** Writable copy, so a status change updates the row without refetching. */
+  /** Writable copy so status changes update without refetching. */
   readonly rows = linkedSignal(() => this.loaded());
 
   readonly total = computed(() => (this.rows() ?? []).length);
   readonly sent = computed(() => (this.rows() ?? []).filter(isSent).length);
 
-  // ---------- the daily target ----------
-  //
-  // ponytail: the number lives in localStorage, not the database. It is a
-  // preference rather than a record: losing it costs nothing, and it does not
-  // belong in the file you back up to keep your application history.
+  // Daily target is a preference, so it lives in localStorage.
 
   private static readonly KEY = 'hired.daily-target';
 
@@ -102,7 +97,7 @@ export class ApplicationsPage {
       const saved = Number(localStorage.getItem(ApplicationsPage.KEY));
       return saved >= 1 && saved <= 50 ? Math.round(saved) : 3;
     } catch {
-      // Private windows and blocked site data both throw on access.
+      // Throws in private windows or with blocked site data.
       return 3;
     }
   }
@@ -113,17 +108,11 @@ export class ApplicationsPage {
     try {
       localStorage.setItem(ApplicationsPage.KEY, String(target));
     } catch {
-      // The number still works for this session; it just will not persist.
+      // Not saved; still works for this session.
     }
   }
 
-  /**
-   * Applications sent today, in your timezone.
-   *
-   * applied_at is stamped the first time a row reaches a sent status, so this
-   * counts the act of applying rather than the act of saving a posting. Saving
-   * ten tabs is not a day's work.
-   */
+  /** Applications sent today (local time), counted by applied_at, not when saved. */
   readonly today = computed(() => {
     const midnight = new Date();
     midnight.setHours(0, 0, 0, 0);
@@ -134,12 +123,10 @@ export class ApplicationsPage {
 
   readonly hitTarget = computed(() => this.today() >= this.target());
 
-  /** Capped at 100 so overshooting does not overflow the bar. */
   readonly targetPercent = computed(() =>
     Math.min(100, Math.round((this.today() / this.target()) * 100)),
   );
 
-  /** Of everything actually sent, how much came back. */
   readonly replyRate = computed(() => {
     const sent = this.sent();
     if (!sent) {
@@ -172,7 +159,7 @@ export class ApplicationsPage {
             a.company.toLowerCase().includes(query) ||
             a.role.toLowerCase().includes(query)),
       )
-      // Anything waiting on a reply floats up. That is the point of the list.
+      // Items waiting on a reply sort first.
       .sort((a, b) => {
         const chase = Number(this.inSegment(b, 'ghosted')) - Number(this.inSegment(a, 'ghosted'));
         return chase || b.created_at.localeCompare(a.created_at);
@@ -186,7 +173,7 @@ export class ApplicationsPage {
     this.filter.update((current) => (current === segment ? 'all' : segment));
   }
 
-  /** The whole row opens the record, except where a real control lives. */
+  /** Clicking a row opens it, unless the click was on a control inside it. */
   openRow(event: Event, id: number): void {
     if ((event.target as HTMLElement).closest('a, button, select, input, label')) {
       return;

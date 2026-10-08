@@ -11,20 +11,13 @@ import {
   GeneratedCv,
 } from './models';
 
-/**
- * Holds the current draft. It lives in the service rather than the page so a
- * route change to /applications and back does not throw away a generation that
- * cost two model calls.
- */
+// Holds the current draft here, not in the page, so it survives navigating away.
 @Injectable({ providedIn: 'root' })
 export class GenerateService {
   private readonly http = inject(HttpClient);
 
-  /** What the posting is, and whether it is worth an evening. Nothing is saved. */
   readonly fit = signal<FitResponse | null>(null);
-  /** The CV, once one has been asked for. Null while the fit is all there is. */
   readonly result = signal<GenerateResponse | null>(null);
-  /** The saved row, once one exists. Export attaches its PDF to this. */
   readonly applicationId = signal<number | null>(null);
   readonly jdText = signal('');
 
@@ -39,7 +32,6 @@ export class GenerateService {
       tap((res) => {
         this.fit.set(res);
         this.jdText.set(jdText);
-        // A new posting is a new decision, so nothing from the last one carries.
         this.result.set(null);
         this.applicationId.set(null);
       }),
@@ -55,14 +47,7 @@ export class GenerateService {
     );
   }
 
-  /**
-   * Swap the headline and its paragraph for another pair you already wrote.
-   *
-   * Not a regeneration. Summaries are hand-written per framing in master.md, so
-   * asking a model to re-roll one means prose on your CV that you never wrote,
-   * which is the single thing this whole app is built not to do. Local, free,
-   * and it leaves the bullet selection alone.
-   */
+  /** Swaps in another hand-written title and summary. No model call. */
   useVariant(title: string, summary: string): void {
     const current = this.result();
     if (current) {
@@ -70,7 +55,7 @@ export class GenerateService {
     }
   }
 
-  /** The page as the PDF renderer draws it. One template, so no second layout. */
+  /** HTML from the PDF renderer, for the preview. */
   preview(cv: GeneratedCv): Observable<string> {
     return this.http.post(`${API}/api/preview`, { cv }, { responseType: 'text' });
   }

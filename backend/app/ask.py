@@ -1,15 +1,5 @@
-"""
-Ask: edit the profile by describing the change, instead of editing markdown.
-
-The model never writes the file. It returns what it understood as a list of
-typed changes, and this module renders the YAML and splices it in. Same bargain
-as the CV selector, which answers in bullet ids: a model that cannot write the
-file's shape cannot corrupt it.
-
-Nothing is saved here. The spliced text comes back with a diff, the person keeps
-talking until it is right, and confirming is an ordinary save through
-PUT /api/profile/source, so it validates, takes the lock and appends a version.
-"""
+"""Edit the profile by describing a change: the model returns typed changes, this
+module splices the YAML in and returns a diff. Nothing is saved here."""
 
 import difflib
 import json
@@ -27,10 +17,8 @@ from .tables import ProfileSource
 
 router = APIRouter(tags=["ask"])
 
-# What a change may do. Everything here either adds a fact or corrects one the
-# person is describing. Loosening a claim boundary, clearing a gap or unblocking
-# a bullet are deliberately absent: the profile can get more honest by itself and
-# only ever gets bolder by hand.
+# Only adds or corrects facts. Loosening a claim boundary, clearing a gap or
+# unblocking a bullet is deliberately left to hand edits.
 OPS = (
     "add_skill_evidence",
     "update_skill_evidence",
@@ -53,23 +41,15 @@ class Turn(BaseModel):
 
 class AskRequest(BaseModel):
     message: str
-    # The whole conversation so far. Gemini is stateless, so every turn carries
-    # it. Tokens grow, requests do not, and requests are what the free tier
-    # rations.
+    # The model is stateless, so every turn resends the conversation.
     history: list[Turn] = []
-    # What is already proposed and not yet saved. Replaying only the model's
-    # prose lost the fields behind it: after answering a question mid-thread it
-    # would say "added RTK Query at working level on two projects" and emit a
-    # change carrying nothing but the name, because its own earlier answer was
-    # never shown back to it.
+    # Proposed but unsaved changes. Resent as fields, because replaying only the
+    # prose made the model drop them on later turns.
     pending: list["Change"] = []
 
 
 class Change(BaseModel):
-    """
-    Flat on purpose. A response schema wants concrete types, so one shape with
-    optional fields beats a map the model fills in however it likes.
-    """
+    """Flat on purpose: a response schema wants one concrete shape."""
 
     op: str
     target: str = ""
@@ -201,8 +181,7 @@ def ask(body: AskRequest, session: SessionDep) -> AskResponse:
     fresh, refused = _allowed(
         [Change.model_validate(c) for c in answer.get("changes") or []], profile, said
     )
-    # A turn that only answers a question must not throw away what was already
-    # agreed. Later wins on the same target, so a correction still lands.
+    # Keep what was already agreed; a later change on the same target wins.
     changes = _merge(body.pending, fresh)
 
     updated = row.text
@@ -220,8 +199,7 @@ def ask(body: AskRequest, session: SessionDep) -> AskResponse:
             refused=refused,
         )
 
-    # A proposal that does not parse is not a proposal. Better to say so than to
-    # hand over text that cannot be saved.
+    # Never hand back text that cannot be saved.
     result = validate_text(updated)
     if not result.ok:
         return AskResponse(
@@ -250,7 +228,6 @@ def ask(body: AskRequest, session: SessionDep) -> AskResponse:
 
 
 def _key(change: Change) -> tuple[str, str]:
-    """What makes two changes the same edit, so a correction replaces rather than repeats."""
     target = change.target or change.bullet_id or change.project_id or change.line
     return change.op, target.casefold()
 
@@ -262,8 +239,7 @@ def _merge(pending: list[Change], fresh: list[Change]) -> list[Change]:
         if existing is None:
             merged[_key(change)] = change
             continue
-        # Only overwrite a field the new change actually filled in, so "make it
-        # advanced" does not wipe the projects agreed three turns ago.
+        # Only overwrite fields the new change filled in.
         filled = {
             name: value
             for name, value in change.model_dump().items()
@@ -274,13 +250,7 @@ def _merge(pending: list[Change], fresh: list[Change]) -> list[Change]:
 
 
 def _prompt(profile: Profile, source: str, body: AskRequest) -> str:
-    """
-    The whole file, plus the conversation, plus real bullets as the style guide.
-
-    Showing six of their own bullets carries voice and length better than any
-    rule could: they are verb-first, one claim each, and the ones with a number
-    already say "estimated" out loud where the metric says estimated.
-    """
+    """The whole file, the conversation, and six real bullets as a style guide."""
     samples = [
         bullet.text
         for project in profile.all_projects()
@@ -293,8 +263,6 @@ def _prompt(profile: Profile, source: str, body: AskRequest) -> str:
         "skills_with_evidence": [s.name for s in profile.skill_evidence],
     }
     talk = "\n".join(f"{turn.role}: {turn.text}" for turn in body.history)
-    # The fields, not just the prose. Without these a later turn has to guess
-    # back what it already worked out, and it guesses badly.
     proposed = json.dumps(
         [
             {k: v for k, v in change.model_dump().items() if v not in ("", [], None, False)}
@@ -320,16 +288,11 @@ def _prompt(profile: Profile, source: str, body: AskRequest) -> str:
 def _allowed(
     changes: list[Change], profile: Profile, said: str = ""
 ) -> tuple[list[Change], list[str]]:
-    """
-    The guard. Everything here is checked in code rather than asked for in the
-    prompt, because a prompt is a request and this is a rule.
-    """
+    """Enforce in code what the prompt only asks for. Returns (allowed, refusals)."""
     ok: list[Change] = []
     refused: list[str] = []
-    # A duration can only have come from the person. Asked for a level and a
-    # date, the model answered with "years: 3" on the first real call, which is
-    # the invention this whole app exists to prevent. No digit in anything they
-    # typed means there was nothing to round, so the field goes.
+    # Years can only come from the person. If they typed no digit, the model
+    # invented it, so the field is dropped.
     told_a_number = bool(re.search(r"\d", said))
     projects = {p.id for p in profile.all_projects()}
     lines = {row.line.casefold() for row in profile.skills}
@@ -437,11 +400,8 @@ def _evidence_yaml(change: Change) -> list[str]:
 
 
 def _section_bounds(lines: list[str], name: str) -> tuple[int, int]:
-    """
-    Where a section's body starts and ends. The end is one past the last line
-    with anything on it, so an insert lands before the blank and the rule that
-    separate sections rather than after them.
-    """
+    """Body bounds of a section. End stops before trailing blanks so inserts land
+    before the separator."""
     try:
         start = lines.index(f"# {name}") + 1
     except ValueError as error:
@@ -463,10 +423,7 @@ def _append_to_section(source: str, name: str, block: list[str]) -> str:
 
 
 def _replace_evidence(source: str, change: Change) -> str:
-    """
-    Swap one entry for a rewritten one, leaving every other line untouched. The
-    entry runs from its `- name:` to the next one at the same indent.
-    """
+    """Rewrite one Skill Evidence entry in place, leaving other lines untouched."""
     lines = source.split("\n")
     start, end = _section_bounds(lines, "Skill Evidence")
     head = None
@@ -483,8 +440,7 @@ def _replace_evidence(source: str, change: Change) -> str:
             tail = i
             break
 
-    # Keep whatever they already wrote and let the change win field by field, so
-    # a correction to the level does not quietly drop the years.
+    # Merge field by field so correcting one field keeps the others.
     kept = {}
     for line in lines[head + 1 : tail]:
         if ":" in line:
@@ -517,10 +473,7 @@ def _list(value: str | None) -> list[str]:
 
 
 def _add_skill_item(source: str, line_name: str, item: str) -> str:
-    """
-    Add one item to a Skills row. The list can wrap over several lines, so this
-    works on the whole `items: [...]` span rather than a single line.
-    """
+    """Add an item to a Skills row; the `items: [...]` list may span several lines."""
     lines = source.split("\n")
     start, end = _section_bounds(lines, "Skills")
     head = None
@@ -546,11 +499,8 @@ def _add_skill_item(source: str, line_name: str, item: str) -> str:
 
 
 def _append_bullet(source: str, change: Change) -> str:
-    """
-    Add a bullet to a project's existing `bullets:` block, with an id derived
-    from the project and the opening words. The app generates the id rather than
-    the model, so it cannot collide with one already in the file.
-    """
+    """Append a bullet to a project's `bullets:` block. The id is generated here so
+    it cannot collide."""
     lines = source.split("\n")
     anchor = None
     for i, line in enumerate(lines):
@@ -593,7 +543,7 @@ def _append_bullet(source: str, change: Change) -> str:
 
 
 def _quote(text: str) -> str:
-    """A colon turns a scalar into a mapping, which is the trap people hit most."""
+    # Quote when there is a colon, or YAML reads the scalar as a mapping.
     return f"'{text.replace(chr(39), chr(39) * 2)}'" if ":" in text else text
 
 

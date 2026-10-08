@@ -22,13 +22,7 @@
       </button>
     </div>
   } @else if (resource.value(); as profile) {
-    <!-- ============ who ============ -->
-    <!--                                                                     -->
-    <!-- One band, not three. The four stat cards used to cost about 90px    -->
-    <!-- above every tab, for numbers nobody acts on from here; they are now -->
-    <!-- one line, and the two that are problems are the only ones that      -->
-    <!-- carry colour or a link.                                             -->
-    <!-- ===================================================================== -->
+    <!-- ============ header ============ -->
     <header class="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <h1 class="truncate text-lg font-semibold tracking-tight">{{ profile.identity.name }}</h1>
 
@@ -48,8 +42,7 @@
           Ask
         </button>
 
-        <!-- Export, import and reload are occasional. They were competing with
-             the one thing this screen is for. -->
+        <!-- Less common actions live in this menu. -->
         <div class="relative">
           <button
             type="button"
@@ -156,12 +149,6 @@
     </header>
 
     <!-- ============ tabs ============ -->
-    <!--                                                                     -->
-    <!-- Four ways in, not two with things bolted on. Ask is a third way to  -->
-    <!-- edit and History a second way to read, so both are destinations     -->
-    <!-- with names rather than a dashed bar and a drawer nobody found.      -->
-    <!-- Sticky, so the header scrolls away and the tab keeps its space.     -->
-    <!-- ===================================================================== -->
     <div
       class="border-line bg-bg sticky top-0 z-20 mb-3 flex items-center gap-1 overflow-x-auto border-b"
       role="tablist"
@@ -193,9 +180,7 @@
     </div>
 
     @switch (tab()) {
-      <!-- ================================================================ -->
-      <!-- Browse                                                            -->
-      <!-- ================================================================ -->
+      <!-- ============ Browse ============ -->
       @case ('browse') {
         <div class="mb-3 flex flex-wrap items-center gap-3">
           <h2 class="section-title">Experience</h2>
@@ -249,8 +234,7 @@
           </nav>
 
           <div class="min-w-0">
-            <!-- The one list on this page that is a to-do rather than a record.
-                 Blocked bullets and unverified notes are the same job. -->
+            <!-- To-do list: blocked bullets and unverified notes. -->
             @if (unresolved().length) {
               <section class="border-danger/40 bg-danger-soft rounded-card mb-3 border p-3.5">
                 <h3 class="text-danger mb-2 flex items-center gap-1.5 text-[12px] font-semibold tracking-wide uppercase">
@@ -290,11 +274,7 @@
               </section>
             }
 
-            <!-- titles and summaries -->
-            <!-- titles, skills and summaries
-                 Skills sits under Title variants rather than starting a new row,
-                 because the summaries column runs long and left the space beside
-                 it empty. Two columns that fill, instead of one that waits. -->
+            <!-- titles, skills and summaries -->
             <div class="mb-3 grid gap-3 md:grid-cols-2 md:items-start">
               <div class="flex flex-col gap-3">
                 <section class="card p-3.5">
@@ -507,8 +487,7 @@
                                     </span>
                                   </p>
                                 } @else {
-                                  <!-- A button rather than a click handler on the
-                                       paragraph, so it is reachable by keyboard. -->
+                                  <!-- A button so it is keyboard reachable. -->
                                   <button
                                     type="button"
                                     class="hover:bg-surface -mx-1 block w-full rounded px-1 text-left text-[13px] leading-relaxed"
@@ -549,8 +528,6 @@
                           }
                         </ul>
 
-                        <!-- The boundary is the reason this tool is trustworthy, so it
-                             is on the card rather than behind a disclosure. -->
                         @if (hasBoundary(project)) {
                           <div class="border-line mt-3 grid gap-3 border-t pt-2.5 text-[12px] sm:grid-cols-3">
                             <div>
@@ -752,9 +729,7 @@
                 }
               </div>
 
-              <!-- Nothing below here ever reaches a CV. It is what lets the tool
-                   score a posting honestly and refuse to overclaim, so it is
-                   shown read-only: the file is the editor. -->
+              <!-- Never printed on a CV. Read-only here; edit in the source. -->
               @if (
                 profile.skill_evidence.length || profile.gaps.length || hasAvailability() || hasRules()
               ) {
@@ -918,18 +893,7 @@
         </div>
       }
 
-      <!-- ================================================================ -->
-      <!-- Edit source                                                       -->
-      <!-- ================================================================ -->
-      <!-- ================================================================ -->
-      <!-- Ask                                                              -->
-      <!--                                                                  -->
-      <!-- The model proposes and never writes. Each turn returns the       -->
-      <!-- profile as it would be, shown as a diff, and confirming runs the -->
-      <!-- ordinary save, so nothing here escapes validation, the lock or   -->
-      <!-- history. Conversation left, diff right: the diff is the thing    -->
-      <!-- being decided on, so it gets the width.                          -->
-      <!-- ================================================================ -->
+      <!-- ============ Ask ============ -->
       @case ('ask') {
         <div id="panel-ask" role="tabpanel" class="grid gap-3 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
           <section class="flex min-h-[26rem] flex-col lg:min-h-[32rem]">
@@ -994,9 +958,6 @@
               }
             </div>
 
-            <!-- The composer: one bordered field that owns the send button, so it
-                 reads as somewhere to type rather than an input with a button
-                 parked beside it. -->
             <div class="mt-2.5">
               <label class="sr-only" for="ask-input">
                 {{ turns().length ? 'Correct it, or add more' : 'Describe what changed' }}
@@ -1102,14 +1063,7 @@
         </div>
       }
 
-      <!-- ================================================================ -->
-      <!-- History                                                          -->
-      <!--                                                                  -->
-      <!-- Every save appends a version. Restoring appends too, so the      -->
-      <!-- mistake it undoes stays on record. Viewing works mid-edit on     -->
-      <!-- purpose: a broken profile cannot be saved, and "what did this    -->
-      <!-- look like before" is why anyone opens this.                      -->
-      <!-- ================================================================ -->
+      <!-- ============ History ============ -->
       @case ('history') {
         <div id="panel-history" role="tabpanel" class="grid gap-3 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
           <section>
@@ -1243,6 +1197,7 @@
         </div>
       }
 
+      <!-- ============ Edit source ============ -->
       @case ('edit') {
         <div
           id="panel-edit"
@@ -1341,8 +1296,7 @@
               }
             </div>
           } @else {
-            <!-- Gutter and textarea scroll as one. Both are 19px lines so the
-                 numbers stay next to their line without measuring anything. -->
+            <!-- Gutter and textarea share a 19px line height, so numbers stay aligned. -->
             <div class="flex min-h-0 flex-1 overflow-hidden">
               <div
                 #gutter

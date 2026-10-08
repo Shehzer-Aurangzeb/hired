@@ -1,5 +1,4 @@
-/* The app's tokens, copied from frontend/src/styles.css. Beige paper, near-black
-   ink, one green. One theme, same as the app: it is a document tool. */
+/* Copied from frontend/src/styles.css. */
 :root {
   --bg: #f0eadc;
   --surface: #e6dfcd;
@@ -40,7 +39,7 @@
   box-sizing: border-box;
 }
 
-/* The ground colour sits on html so the grain on body::before can go between it and the page. */
+/* Background on html so the body::before grain sits between it and the page. */
 html {
   background: var(--bg);
   font-family: var(--sans);
@@ -101,7 +100,6 @@ p {
   padding: 0 var(--gutter);
 }
 
-/* Same treatment as .section-title in the app. */
 .label {
   font-size: 12px;
   font-weight: 600;
@@ -130,7 +128,6 @@ p {
   transition: background-color 150ms, border-color 150ms;
 }
 
-/* Ink, not green: same rule as the app's one primary action per screen. */
 .btn-primary {
   background: var(--ink);
   border-color: var(--ink);
@@ -150,7 +147,7 @@ p {
   background: var(--surface);
 }
 
-/* Paper grain. Fixed and behind everything, so it costs one layer, not a repaint per scroll. */
+/* Paper grain. Fixed, so it does not repaint on scroll. */
 body::before {
   content: '';
   position: fixed;
@@ -167,8 +164,7 @@ h2 {
   font-optical-sizing: auto;
 }
 
-/* Fades up once when it first scrolls into view. Gated on .js so the page
-   still reads with scripts off; the script adds .in. */
+/* Fade in on scroll. Gated on .js so content shows with scripts off. */
 .js [data-reveal] {
   opacity: 0;
   transform: translateY(14px);

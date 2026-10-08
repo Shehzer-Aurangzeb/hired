@@ -11,7 +11,6 @@
       <div class="bg-surface h-3 w-3/4 animate-pulse rounded"></div>
     </div>
   } @else if (record(); as application) {
-    <!-- ---------- header ---------- -->
     <header class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-3">
       <div class="min-w-0">
         <h1 class="flex items-center gap-2 text-xl font-semibold tracking-tight">
@@ -48,7 +47,7 @@
           >
             <app-icon name="download" [size]="15" />
           </a>
-          <!-- TEMPORARY, paired with POST /api/reexport. Delete with the route. -->
+          <!-- Temporary: remove with POST /api/reexport. -->
           <button
             type="button"
             class="btn btn-outline"
@@ -75,7 +74,6 @@
       </div>
     </header>
 
-    <!-- ---------- headline numbers ---------- -->
     <div class="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
       <div class="stat-lg" title="The selector's judgement of the match when this was generated.">
         <p class="stat-value" [class]="scoreTone(application.fit_score)">
@@ -110,7 +108,6 @@
       </div>
     </div>
 
-    <!-- ---------- status track ---------- -->
     <section class="card mb-4 overflow-hidden">
       <header class="card-head">
         <h2 class="section-title">Status</h2>
@@ -122,7 +119,6 @@
       </header>
 
       <div class="flex flex-wrap items-center gap-2 p-3.5">
-        <!-- Progression reads left to right; rejected is a terminal state, not a step. -->
         <div class="flex flex-wrap items-center gap-1" role="group" aria-label="Move through the pipeline">
           @for (status of track; track status; let i = $index) {
             @if (i > 0) {
@@ -154,7 +150,6 @@
           }
         </div>
 
-        <!-- The two ways out. One is their answer, one is yours. -->
         <div class="ml-auto flex items-center gap-1">
           <button
             type="button"
@@ -192,7 +187,6 @@
     </section>
 
     <div class="grid gap-3 lg:grid-cols-2 lg:items-start">
-      <!-- ---------- what was sent ---------- -->
       <section class="card overflow-hidden">
         <header class="card-head">
           <h2 class="section-title shrink-0">
@@ -214,8 +208,7 @@
               Bullets on the page ({{ application.selected_bullets.length }})
             </h3>
 
-            <!-- The text as printed, stored on the record. Joining ids against the
-                 live profile would show today's wording, not what they read. -->
+            <!-- Stored text as sent, not today's profile wording. -->
             @for (group of groups(); track group.project) {
               <p class="mt-2.5 text-[12px] font-semibold">{{ group.project }}</p>
               <ul class="mt-1 flex flex-col gap-1.5">
@@ -230,7 +223,6 @@
               <p class="text-fg-subtle text-[12px]">No bullet text stored on this record.</p>
             }
           } @else {
-            <!-- Kept for the gaps, which is the whole reason this record exists. -->
             <p class="text-fg-muted text-[13px] leading-relaxed">
               No CV was generated for this posting.
               {{
@@ -244,7 +236,6 @@
       </section>
 
       <div class="flex flex-col gap-3">
-        <!-- ---------- what they asked for ---------- -->
         <section class="card overflow-hidden">
           <header class="card-head">
             <h2 class="section-title">What they asked for</h2>
@@ -310,7 +301,6 @@
           </div>
         </section>
 
-        <!-- ---------- why the score ---------- -->
         <section class="card overflow-hidden">
           <header class="card-head">
             <h2 class="section-title">Why this score</h2>
@@ -328,7 +318,6 @@
           </div>
         </section>
 
-        <!-- ---------- notes ---------- -->
         <section class="card overflow-hidden">
           <header class="card-head">
             <h2 class="section-title">Notes</h2>
@@ -356,7 +345,6 @@
       </div>
     </div>
 
-    <!-- ---------- the posting ---------- -->
     <section class="card mt-3 overflow-hidden">
       <header class="card-head">
         <h2 class="section-title">Job description</h2>
@@ -374,8 +362,6 @@
             <span class="chip">{{ application.source }}</span>
           }
           @if (application.url) {
-            <!-- The posting itself is usually gone by now; the text below is the
-                 copy that survives. This is here for the week it still works. -->
             <a class="link truncate" [href]="application.url" target="_blank" rel="noopener noreferrer">
               {{ application.url }}
             </a>
@@ -385,7 +371,7 @@
       <pre class="text-fg-muted max-h-96 overflow-y-auto p-3.5 text-[12px] leading-relaxed whitespace-pre-wrap">{{ application.jd_text }}</pre>
     </section>
 
-    <!-- the PDF, in place. Loaded only once opened. -->
+    <!-- PDF preview, loaded only when opened. -->
     <dialog
       #pdfDialog
       class="rounded-card border-line bg-raised m-auto h-[92dvh] w-[min(60rem,94vw)] border p-0 backdrop:bg-black/50"

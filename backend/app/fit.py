@@ -1,7 +1,4 @@
-"""
-The fit check. One model call answers what the posting asks for and how that
-lands against the profile. Writes nothing, so discarding is free.
-"""
+"""Fit check: one model call parses a job posting and scores it against the profile."""
 
 import json
 
@@ -34,7 +31,7 @@ class PriorApplication(BaseModel):
 class FitResponse(BaseModel):
     parsed_jd: ParsedJd
     fit: Fit
-    # Applying twice is the one mistake this app can prevent, and it is a lookup.
+    # Earlier applications to the same company.
     seen: list[PriorApplication] = []
 
 
@@ -153,8 +150,7 @@ def check_fit(body: FitRequest, session: SessionDep) -> FitResponse:
         parsed_jd=parsed_jd,
         seen=_seen(session, parsed_jd.company),
         fit=Fit(
-            # Clamped, not trusted. The schema says 1 to 10 and a model has
-            # handed back 55, which renders as a broken meter.
+            # Clamp: the model sometimes returns scores outside 1-10.
             score=max(1, min(10, int(answer.get("score", 0)))),
             reasoning=str(answer.get("reasoning", "")),
             gaps=[str(gap) for gap in answer.get("gaps") or []],
@@ -163,10 +159,7 @@ def check_fit(body: FitRequest, session: SessionDep) -> FitResponse:
 
 
 def _seen(session: SessionDep, company: str) -> list[PriorApplication]:
-    """
-    ponytail: exact case-insensitive match, so "Shopify Inc." reads as a
-    different employer. Missing a warning is safer than crying wolf.
-    """
+    # Exact case-insensitive match, so "Shopify Inc." and "Shopify" differ.
     name = (company or "").strip()
     if not name:
         return []
@@ -189,7 +182,7 @@ def _seen(session: SessionDep, company: str) -> list[PriorApplication]:
 
 
 def context(profile: Profile) -> dict:
-    """What scoring needs. Bullet text is out: nothing here decides what prints."""
+    """The slice of the profile that scoring needs (no bullet text)."""
     return {
         "titles": [{"id": t.id, "use_when": t.use_when} for t in profile.titles],
         "skills": [

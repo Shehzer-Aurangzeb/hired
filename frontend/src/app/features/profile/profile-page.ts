@@ -31,14 +31,10 @@ import { Icon } from '../../shared/icon';
 
 type Tab = 'browse' | 'ask' | 'edit' | 'history';
 
-/**
- * An employer, or the standalone Projects section wearing the same shape. The
- * two are separate lists in the model on purpose, but they render identically,
- * and one group type beats a second copy of the project card markup.
- */
+/** An employer, or the standalone projects shaped like one so both render the same. */
 type Group = Experience & { standalone: boolean };
 
-/** One thing waiting on you: a blocked bullet, or something you cannot evidence. */
+/** A blocked bullet or an unverified claim. */
 export interface Unresolved {
   project: string;
   kind: 'blocked' | 'unverified';
@@ -47,21 +43,15 @@ export interface Unresolved {
   reason: string;
 }
 
-/** The gutter and the textarea must agree, so the number is in one place. */
+/** Shared by the line-number gutter and the textarea. */
 const LINE_HEIGHT = 19;
 
-/**
- * Two jobs, two tabs. Browse is the parsed profile, which is how you check that
- * a hand edit landed the way you meant. Edit is the raw markdown, which is the
- * only thing that is actually stored. The file is the format, so there is no
- * form-based editor to keep in sync with it.
- */
 @Component({
   selector: 'app-profile-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Icon, KeyValuePipe],
   templateUrl: './profile-page.html',
-  // Closing the tab bypasses the router, so the browser gets its own warning.
+  // Closing the tab bypasses the router guard, so warn here too.
   host: { '(window:beforeunload)': 'onUnload($event)' },
 })
 export class ProfilePage {
@@ -79,9 +69,7 @@ export class ProfilePage {
   );
 
   constructor() {
-    // Up front, not on first sight of the Edit tab. The header says when the
-    // profile was last saved and that has to be true on both tabs, and an editor
-    // that renders empty is one Save away from wiping the real profile.
+    // Load up front so the editor is never empty (saving that would wipe the profile).
     this.load();
   }
 
@@ -89,15 +77,14 @@ export class ProfilePage {
 
   readonly query = signal('');
 
-  // ---------- editing one bullet in place ----------
+  // ---------- inline bullet edit ----------
 
   readonly editingBullet = signal<string | null>(null);
   readonly bulletDraft = signal('');
   readonly bulletSaving = signal(false);
 
   startBullet(id: string, text: string): void {
-    // The source editor holds the whole file. Letting a bullet edit land while
-    // that buffer is dirty means the next Save there silently reverts it.
+    // With unsaved editor changes, the next Save there would undo this edit.
     if (this.dirty()) {
       this.toast.error('Save or revert your source edits first.');
       return;
@@ -120,7 +107,6 @@ export class ProfilePage {
     this.bulletSaving.set(true);
     this.service.saveBullet(id, text, this.updatedAt()).subscribe({
       next: (source) => {
-        // The editor buffer is the same document, so it moves with it.
         this.text.set(source.text);
         this.saved.set(source.text);
         this.updatedAt.set(source.updated_at);
@@ -132,7 +118,7 @@ export class ProfilePage {
     });
   }
 
-  /** Employment is not what makes something a project, so both lists count. */
+  /** Projects from both employers and the standalone list. */
   private readonly projects = computed<Project[]>(() => {
     const profile = this.resource.value();
     return profile ? [...profile.experience.flatMap((e) => e.projects), ...profile.projects] : [];
@@ -148,11 +134,7 @@ export class ProfilePage {
     missing: this.projects().filter((p) => !hasBoundary(p)).length,
   }));
 
-  /**
-   * Blocked bullets and unverified notes are one queue, not two lists. They are
-   * the same job — go and check something — and splitting them means the shorter
-   * half never gets looked at.
-   */
+  /** Blocked bullets and unverified notes, as one list. */
   readonly unresolved = computed<Unresolved[]>(() =>
     this.projects().flatMap((project) => [
       ...project.unverified.map((text) => ({
@@ -183,8 +165,6 @@ export class ProfilePage {
     if (!profile.projects.length) {
       return employers;
     }
-    // A display grouping, not an employer: the header prints no role or dates
-    // because there are none, rather than because they are missing.
     return [
       ...employers,
       {
@@ -223,15 +203,13 @@ export class ProfilePage {
       .filter((group) => group.projects.length > 0);
   });
 
-  /** "3 of 12" — a filter that hides things has to say how many. */
   readonly shown = computed(() => this.groups().reduce((n, g) => n + g.projects.length, 0));
 
-  /** Availability is all optional, so "did they write any of it" needs asking. */
   readonly hasAvailability = computed(() =>
     Object.values(this.resource.value()?.availability ?? {}).some(nonEmpty),
   );
 
-  /** The three numbers always have defaults, so only the written parts count. */
+  /** The numeric rules always have defaults, so only the text parts count. */
   readonly hasRules = computed(() => {
     const rules = this.resource.value()?.rules;
     return !!rules && [rules.banned_words, rules.banned_chars, rules.preferred_phrasing].some(nonEmpty);
@@ -239,14 +217,11 @@ export class ProfilePage {
 
   hasBoundary = hasBoundary;
 
-  /** The named fields and the free-form list, as one row of anchors. */
   readonly identityLinks = computed(() => {
     const identity = this.resource.value()?.identity;
     if (!identity) {
       return [];
     }
-    // An icon costs one tile; a spelled-out URL costs a third of the header.
-    // The label stays as the accessible name and the tooltip, so nothing is lost.
     return [
       { text: 'LinkedIn', icon: 'linkedin', brand: 'brand-linkedin', url: identity.linkedin },
       { text: 'GitHub', icon: 'github', brand: 'brand-github', url: identity.github },
@@ -260,7 +235,7 @@ export class ProfilePage {
     ].filter((link) => !!link.url);
   });
 
-  /** Profiles are written "github.com/you", which a bare href reads as relative. */
+  /** Adds https:// so "github.com/you" is not treated as a relative link. */
   href(url: string): string {
     return /^https?:\/\//i.test(url) ? url : `https://${url}`;
   }
@@ -272,7 +247,7 @@ export class ProfilePage {
   // ---------- edit ----------
 
   readonly text = signal('');
-  /** Last text the server confirmed. Everything dirty is measured against it. */
+  /** Last text the server confirmed; dirty is measured against it. */
   readonly saved = signal('');
   readonly updatedAt = signal<string | null>(null);
   readonly version = signal<number | null>(null);
@@ -295,7 +270,6 @@ export class ProfilePage {
 
   readonly updatedLabel = computed(() => ago(this.updatedAt()));
 
-  /** Shown in the tab bar, in the order they appear. */
   readonly TABS: { id: Tab; label: string; icon: string }[] = [
     { id: 'browse', label: 'Browse', icon: 'user' },
     { id: 'ask', label: 'Ask', icon: 'claude' },
@@ -318,7 +292,7 @@ export class ProfilePage {
     });
   }
 
-  /** Re-reading would throw away edits, so this only ever runs on a clean buffer. */
+  /** Only call with no unsaved edits. */
   load(): void {
     if (this.loading() || this.dirty()) {
       return;
@@ -342,7 +316,6 @@ export class ProfilePage {
 
   update(text: string): void {
     this.text.set(text);
-    // A stale green tick is worse than no tick.
     this.result.set(null);
   }
 
@@ -389,7 +362,7 @@ export class ProfilePage {
     });
   }
 
-  /** Throw away my edits and take what is on the server. */
+  /** Discard my edits and take the server version. */
   takeTheirs(): void {
     const theirs = this.conflict();
     if (!theirs) {
@@ -402,7 +375,7 @@ export class ProfilePage {
     this.conflict.set(null);
   }
 
-  /** Keep my edits and rebase onto their version, so the next save goes through. */
+  /** Keep my edits on top of the server version so the next save succeeds. */
   keepMine(): void {
     const theirs = this.conflict();
     if (theirs) {
@@ -417,13 +390,9 @@ export class ProfilePage {
   }
 
   // ---------- ask ----------
-  //
-  // The model proposes, it never writes. Each turn returns the profile as it
-  // would be, and confirming runs the ordinary save, so an Ask edit validates,
-  // takes the lock and lands in history like any other. Nothing here can do
-  // something the history drawer cannot undo.
+  // The model only proposes. Confirming goes through the normal save.
 
-  /** Shown on an empty Ask panel. Two concrete sentences beat describing it. */
+  /** Shown on an empty Ask panel. */
   readonly ASK_EXAMPLES = [
     'I used Redux on Union AI and Stanley Paden',
     'Add i18next to the Frontend skills row',
@@ -436,7 +405,7 @@ export class ProfilePage {
   readonly askError = signal<string | null>(null);
 
   readonly canAsk = computed(() => !!this.draft().trim() && !this.asking());
-  /** Confirming replaces the buffer, so it waits for one nobody is mid-edit in. */
+  /** Confirming replaces the editor text, so wait for no unsaved edits. */
   readonly canConfirm = computed(
     () => !!this.pending()?.text && !this.dirty() && !this.saving() && !this.conflict(),
   );
@@ -457,8 +426,7 @@ export class ProfilePage {
           { role: 'you' as const, text: message },
           { role: 'model' as const, text: reply.reply },
         ]);
-        // A turn that only answers a question comes back with no proposal.
-        // Replacing the live one with it threw away what was already agreed.
+        // A question-only reply has no proposal, so keep the current one.
         this.pending.set(reply.text ? reply : { ...reply, ...this.keptProposal(reply) });
       },
       error: (error) => {
@@ -470,7 +438,6 @@ export class ProfilePage {
     });
   }
 
-  /** Keep the standing diff when this turn only asked something. */
   private keptProposal(reply: AskReply): Partial<AskReply> {
     const held = this.pending();
     return held?.text
@@ -478,7 +445,6 @@ export class ProfilePage {
       : {};
   }
 
-  /** The proposal is a scratchpad. Dropping it costs nothing, since it never saved. */
   discard(): void {
     this.turns.set([]);
     this.pending.set(null);
@@ -516,12 +482,7 @@ export class ProfilePage {
   }
 
   // ---------- history ----------
-  //
-  // Viewing is allowed mid-edit on purpose. "I have just broken something, what
-  // did it look like before" is the main reason to open this, and a broken file
-  // cannot be saved, so gating the whole drawer on a clean buffer would lock the
-  // door at the moment it is wanted. Restore is what writes, so restore is what
-  // waits for clean.
+  // Viewing works mid-edit; only restore needs no unsaved edits.
 
   readonly versions = signal<ProfileVersion[]>([]);
   readonly picked = signal<number | null>(null);
@@ -530,10 +491,8 @@ export class ProfilePage {
   readonly historyError = signal<string | null>(null);
   readonly confirming = signal<number | null>(null);
 
-  /** The restore button needs a clean buffer: it replaces what is in the editor. */
   readonly canRestore = computed(() => !this.dirty() && !this.saving() && !this.conflict());
 
-  /** What the next version will be called, for the confirmation copy. */
   readonly nextVersion = computed(() => (this.version() ?? 0) + 1);
 
   loadVersions(): void {
@@ -633,10 +592,7 @@ export class ProfilePage {
 
   readonly copied = signal(false);
 
-  /**
-   * Same briefing as first-run setup, for a rewrite rather than a first draft.
-   * Fetched on use: the prompt is backend config and this is not the hot path.
-   */
+  /** Same prompt as first-run setup, fetched on demand. */
   draftWithClaude(open: boolean): void {
     this.service.template().subscribe({
       next: async ({ claude_prompt }) => {
@@ -661,17 +617,15 @@ export class ProfilePage {
     });
   }
 
-  /** A local copy before you break something. Exports the buffer on screen. */
+  /** Downloads the current editor text. */
   export(): void {
     download(this.text());
   }
 
-  /** Browse card to the exact spot in the source that produced it. */
+  /** Jumps from a Browse card to its spot in the source. */
   editProject(name: string): void {
     this.setTab('edit');
-    // The textarea does not exist until the tab renders and the source lands,
-    // so this waits on loading() rather than on a frame count. A heading that is
-    // genuinely absent stops the wait instead of spinning it out.
+    // Wait for the textarea and source to load; give up if the heading is missing.
     let tries = 0;
     const attempt = () => {
       const area = this.editor()?.nativeElement;
@@ -687,8 +641,7 @@ export class ProfilePage {
       }
       area.focus();
       area.setSelectionRange(at, at);
-      // ponytail: line height times line count. Exact enough because the font is
-      // monospace and the box does not wrap headings.
+      // Line count times line height; fine because the font is monospace.
       area.scrollTop = this.text().slice(0, at).split('\n').length * LINE_HEIGHT - LINE_HEIGHT * 2;
     };
     requestAnimationFrame(attempt);
@@ -702,7 +655,7 @@ export class ProfilePage {
     this.resource.reload();
   }
 
-  // ---------- leaving with unsaved work ----------
+  // ---------- unsaved changes ----------
 
   onUnload(event: BeforeUnloadEvent): void {
     if (this.dirty()) {
@@ -710,7 +663,6 @@ export class ProfilePage {
     }
   }
 
-  /** ponytail: native confirm. A styled modal for one prompt is not worth owning. */
   confirmLeave(): boolean {
     return (
       !this.dirty() ||

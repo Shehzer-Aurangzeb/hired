@@ -1,11 +1,3 @@
-"""
-The warnings in validate_text, all warnings and never errors: the profile row is
-the only copy of the CV data, so a refused save costs more than it protects.
-
-CLEAN is the shipped template and the zero-warning baseline. Each test breaks
-one thing, so a warning is that check rather than a fixture side effect.
-"""
-
 from pathlib import Path
 
 import pytest
@@ -297,22 +289,13 @@ FIXTURE = Path(__file__).parent / "fixtures" / "master.md"
 
 
 def test_the_fixture_still_saves_and_what_it_warns_about():
-    """
-    Pinned rather than fixed. The fixture is a real profile written before any of
-    these checks existed, and it is the proof that such a file still saves: seven
-    warnings, zero errors, ok=True. Changing the fixture to silence them would
-    throw away exactly the case worth keeping. It was seven until enum tokens
-    started case-folding, which took "Native" out of the list.
-    """
+    """A real profile written before these checks still saves, with warnings only."""
     result = validate_text(FIXTURE.read_text(encoding="utf-8"))
     assert result.ok and result.errors == []
     assert len(result.warnings) == 6
 
 
 # ---------- errors that name the line and the fix ----------
-#
-# The complaint these answer: "experience -> 0 -> projects -> 0 -> ... Input
-# should be a valid string" is nothing a person editing markdown can act on.
 
 COLON = """# Identity
 name: N
@@ -344,7 +327,6 @@ def test_a_colon_in_a_list_item_names_the_line_and_the_repair():
 
 
 def test_the_repair_it_suggests_actually_parses():
-    """A fix that does not work is worse than no fix at all."""
     suggestion = validate_text(COLON).errors[0].message.split("single quotes: ")[1]
     fixed = COLON.replace(
         "    - Wired the full Auth0 flow: HttpOnly cookies, OTP, passkeys",

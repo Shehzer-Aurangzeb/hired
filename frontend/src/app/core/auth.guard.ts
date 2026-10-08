@@ -4,7 +4,6 @@ import { map } from 'rxjs';
 
 import { AuthService } from './auth.service';
 
-/** No session, no screens. Every route but /login goes through this. */
 export const authGuard: CanActivateFn = (_route, state) => {
   const auth = inject(AuthService);
   const router = inject(Router);
@@ -20,7 +19,6 @@ export const authGuard: CanActivateFn = (_route, state) => {
     );
 };
 
-/** Already in? Then /login is not a place you need to be. */
 export const guestGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
   const router = inject(Router);

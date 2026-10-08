@@ -21,22 +21,16 @@ export class ProfileService {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
 
-  /** Null until the first check. The guard and the shell share one call. */
+  /** Null until the first check. */
   readonly exists = signal<boolean | null>(null);
 
-  // ponytail: httpResource gives value/error/isLoading signals in one line. It is
-  // experimental in v20; swap for toSignal + catchError if the API churns.
-  //
-  // The URL is conditional so the resource stays idle until there is something to
-  // fetch and someone allowed to fetch it. Unconditional, it fired on the lock
-  // screen, where the answer is a 401 once auth lands and a 404 before then.
+  // Only fetches once signed in with a saved profile, so the lock screen never hits a 401.
   readonly profile = httpResource<Profile>(() =>
     this.auth.authenticated() && this.exists() ? `${API}/api/profile` : undefined,
   );
 
   private probe?: Observable<boolean>;
 
-  /** Has a profile been saved yet. Answers the "first run" question. */
   ensure(): Observable<boolean> {
     if (this.exists() === true) {
       return of(true);
@@ -62,10 +56,7 @@ export class ProfileService {
     return this.http.post<ValidationResult>(`${API}/api/profile/validate`, { text });
   }
 
-  /**
-   * `expectedUpdatedAt` guards against clobbering a change made elsewhere. The
-   * backend rejects with 409 when the stored value has moved on.
-   */
+  /** The backend returns 409 if the profile changed since `expectedUpdatedAt`. */
   save(text: string, expectedUpdatedAt: string | null): Observable<ProfileSource> {
     return this.http
       .put<ProfileSource>(`${API}/api/profile/source`, {
@@ -75,7 +66,6 @@ export class ProfileService {
       .pipe(tap(() => this.landed()));
   }
 
-  /** One bullet's wording, edited in place. The rest of the file is untouched. */
   saveBullet(
     id: string,
     text: string,
@@ -89,29 +79,21 @@ export class ProfileService {
       .pipe(tap(() => this.landed()));
   }
 
-  /**
-   * Describe a change and get back a proposal. Saves nothing: the reply carries
-   * the profile as it would be, and confirming is an ordinary save().
-   */
+  /** Returns a proposed change. Saves nothing; confirming calls save(). */
   ask(message: string, history: AskTurn[], pending: AskChange[]): Observable<AskReply> {
     return this.http.post<AskReply>(`${API}/api/profile/ask`, { message, history, pending });
   }
 
-  /** Every save appends one. Newest first, the first is current. */
+  /** Newest first; the first is current. */
   versions(): Observable<ProfileVersion[]> {
     return this.http.get<ProfileVersion[]>(`${API}/api/profile/versions`);
   }
 
-  /** What restoring this version would change, read against the saved profile. */
   diff(version: number): Observable<ProfileDiff> {
     return this.http.get<ProfileDiff>(`${API}/api/profile/versions/${version}/diff`);
   }
 
-  /**
-   * Puts an old version back by appending it as a new one, so nothing is lost
-   * and a restore can itself be undone. Goes through the same save path, which
-   * is why it takes the same conflict token.
-   */
+  /** Saves the old version as a new one, so a restore can be undone too. */
   restore(version: number, expectedUpdatedAt: string | null): Observable<ProfileSource> {
     return this.http
       .post<ProfileSource>(`${API}/api/profile/versions/${version}/restore`, {

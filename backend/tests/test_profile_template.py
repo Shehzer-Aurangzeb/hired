@@ -1,8 +1,3 @@
-"""
-The template and briefing are environment-overridable. What is pinned: where
-the template lands inside the briefing, and the module's own fallback copy.
-"""
-
 import re
 from pathlib import Path
 from urllib.parse import quote
@@ -32,11 +27,7 @@ def override(monkeypatch, **fields):
 
 
 def test_the_constants_match_their_editable_source():
-    """
-    docs/ is where these are edited and the module holds a copy, because reading
-    them at runtime would mean shipping the docs folder inside the container. A
-    copy nothing checks is a copy that drifts.
-    """
+    """The module's copies must not drift from the docs/ sources."""
     template = (DOCS / "master_template.md").read_text(encoding="utf-8")
     briefing = (DOCS / "master_interview_prompt.md").read_text(encoding="utf-8")
     assert profile_template.DEFAULT_TEMPLATE.rstrip("\n") == template.rstrip("\n")
@@ -46,11 +37,6 @@ def test_the_constants_match_their_editable_source():
 
 
 def test_the_briefing_holds_one_placeholder_and_no_other_braces():
-    """
-    claude_prompt() splices on a bare {template}. The source document writes
-    {{TEMPLATE}}, which has to be converted rather than left to miss quietly,
-    and any other brace would read as a second placeholder.
-    """
     assert re.findall(r"\{[^}]*\}", profile_template.DEFAULT_BRIEFING) == ["{template}"]
     assert "{" not in profile_template.DEFAULT_TEMPLATE
     assert "}" not in profile_template.DEFAULT_TEMPLATE
@@ -60,7 +46,6 @@ def test_the_briefing_holds_one_placeholder_and_no_other_braces():
 
 
 def test_the_shipped_template_actually_parses():
-    """It did not, once: four column-0 comments were read as section breaks."""
     profile = parse_text(profile_template.template())
     assert len(profile.titles) == 2
     projects = profile.all_projects()
@@ -70,10 +55,6 @@ def test_the_shipped_template_actually_parses():
 
 
 def test_the_shipped_template_validates_silently():
-    """
-    It is what a first run starts from, so a warning on it would be one nobody
-    can act on and everybody learns to scroll past.
-    """
     result = validate_text(profile_template.template())
     assert result.ok and result.warnings == []
     assert result.summary.projects_total == 4
@@ -81,10 +62,6 @@ def test_the_shipped_template_validates_silently():
 
 
 def test_the_shipped_template_demonstrates_every_field():
-    """
-    It is the only documentation of the format, so a field the models support
-    and the template never shows is a field nobody will ever use.
-    """
     profile = parse_text(profile_template.template())
 
     assert profile.meta.schema_version == 1 and profile.meta.updated
@@ -167,23 +144,18 @@ def test_a_briefing_without_the_placeholder_still_gets_the_template(monkeypatch)
 
 
 def test_the_prompt_is_far_too_large_for_a_query_string():
-    """The reason the button copies instead of linking. Roughly 33KB, 49KB encoded."""
+    """Why the button copies the prompt instead of linking to it."""
     assert len(quote(profile_template.claude_prompt())) > 40_000
 
 
 def test_the_bootstrap_url_stays_under_2000_characters():
-    """
-    A request line past ~2000 gets refused or silently cut by something in the
-    path, and a truncated briefing produces an interview that looks like it is
-    working. Read out of the frontend, because that is where the URL is built.
-    """
+    """Longer request lines get refused or truncated along the way."""
     bootstrap = "".join(re.findall(r"'([^']*)'", _assignment("BOOTSTRAP")))
     assert bootstrap
     assert len(f"https://claude.ai/new?q={quote(bootstrap)}") < 2000
 
 
 def test_the_frontend_never_puts_the_prompt_in_the_url():
-    """The check that actually protects: not the length, but what is interpolated."""
     url = _assignment("CLAUDE_URL")
     assert "BOOTSTRAP" in url and "prompt" not in url
 

@@ -13,8 +13,7 @@ import cv from '../assets/shots/cv.png';
 
 const REPO = 'https://github.com/Shehzer-Aurangzeb/hired';
 
-// Screenshots are the real app on a fictional profile. Any 1440x900 capture
-// can replace a file in src/assets/shots without touching this page.
+// Shots come from demo/capture.py; any 1440x900 image can replace one.
 const steps = [
   {
     title: 'Write your profile once',
@@ -412,7 +411,6 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
     <script>
       const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-      // Reveal on first sight, once.
       const reveal = new IntersectionObserver(
         (entries) =>
           entries.forEach((entry) => {
@@ -424,13 +422,12 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
       );
       document.querySelectorAll('[data-reveal]').forEach((el) => reveal.observe(el));
 
-      // Header picks up a border once the page has moved.
       const top = document.querySelector('[data-top]');
       const onScroll = () => top?.classList.toggle('scrolled', scrollY > 8);
       addEventListener('scroll', onScroll, { passive: true });
       onScroll();
 
-      // Tour: the step crossing the middle of the screen drives the laptop.
+      // The step crossing mid-screen picks the laptop screenshot.
       const tour = document.querySelector('[data-tour]');
       if (tour) {
         const steps = [...tour.querySelectorAll<HTMLElement>('[data-step-index]')];
@@ -452,7 +449,7 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
         show(0);
       }
 
-      // Ids light up in both panes, and wires join them on wide screens.
+      // Highlight matching ids in both panes; draw connecting lines on wide screens.
       const proof = document.querySelector<HTMLElement>('[data-proof]');
       if (proof) {
         const refs = [...proof.querySelectorAll<HTMLElement>('[data-id]')];
@@ -476,7 +473,7 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
           svg.innerHTML = ids
             .map((id) => {
               const [from, to] = refs.filter((r) => r.dataset.id === id).map((r) => r.getBoundingClientRect());
-              // Stacked panes on a phone: no room for a wire, the highlight is enough.
+              // No line when the panes are stacked.
               if (!from || !to || to.left < from.right) return '';
               const x1 = from.right - box.left + 6;
               const y1 = from.top + from.height / 2 - box.top;
@@ -492,7 +489,6 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
         document.fonts?.ready.then(draw);
       }
 
-      // The CV sheet leans toward the pointer, a few degrees at most.
       const tilt = document.querySelector<HTMLElement>('[data-tilt]');
       if (tilt && !reduced && matchMedia('(hover: hover)').matches) {
         tilt.addEventListener('pointermove', (e) => {
@@ -506,7 +502,6 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
         });
       }
 
-      // Terminal types its commands once, when it comes into view.
       const term = document.querySelector<HTMLElement>('[data-terminal]');
       if (term) {
         const lines = [...term.querySelectorAll<HTMLElement>('[data-line]')];
@@ -647,7 +642,6 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
         padding: 64px 0 120px;
         overflow-x: clip;
       }
-      /* One soft pool of light behind the demo, nothing more. */
       .hero::before {
         content: '';
         position: absolute;
@@ -806,7 +800,6 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
       .vs-bad .vs-bullet {
         color: var(--fg-muted);
       }
-      /* Underlines draw in once the card is on screen. */
       .flag,
       .ok {
         background-repeat: no-repeat;
@@ -1143,7 +1136,6 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
         align-content: center;
         gap: 12px;
       }
-      /* Each tile's inner motion waits for its own reveal. */
       .meter-num {
         font-size: 14px;
         color: var(--fg-muted);

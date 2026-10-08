@@ -1,14 +1,10 @@
 import { Application, ApplicationStatus } from './models';
 import { daysSince } from './dates';
 
-/** Sitting in Applied this long with no reply means it needs chasing. */
+/** Days in Applied with no reply before it counts as ghosted. */
 export const FOLLOW_UP_DAYS = 10;
 
-/**
- * Pipeline stages. `waiting` and `ghosted` are both status 'applied'; the split
- * is derived from how long it has been sitting, because "gone quiet" is the
- * state you actually care about and the schema has no column for it.
- */
+/** `waiting` and `ghosted` are both status 'applied', split by days since sent. */
 export type Segment =
   | 'saved'
   | 'waiting'
@@ -19,19 +15,8 @@ export type Segment =
   | 'rejected'
   | 'skipped';
 
-/**
- * Validated with the dataviz palette checker against the beige card surface
- * (#faf7f0): lightness band, CVD separation, normal-vision floor and 3:1
- * contrast all pass in this exact left-to-right order. Reordering can break the
- * adjacent-pair checks, so re-run the validator if you change it.
- *
- * ponytail: ghosted is intentionally below the chroma floor. "Nothing happened"
- * should read as absence of colour, and the legend carries the label anyway.
- *
- * The two never-sent stages have no hue at all. They share one neutral and are
- * told apart by hatch angle, which is the texture channel rather than a seventh
- * and eighth colour the CVD checks would have to survive.
- */
+// Colours are checked for contrast and colour-blindness in this order, so recheck if reordered.
+// The two never-sent stages share a grey and differ only by hatch angle.
 export const SEGMENTS: {
   key: Segment;
   label: string;
@@ -49,10 +34,7 @@ export const SEGMENTS: {
   { key: 'skipped', label: 'Passed on', color: '#b9ae95', hatch: 135 },
 ];
 
-/**
- * Reaching any of these means it went out, whatever route it took. Mirrors
- * SENT in backend/app/tables.py; both answer "did an employer see this".
- */
+/** Statuses that mean it was sent. Keep in sync with SENT in backend/app/tables.py. */
 export const SENT_STATUSES: ApplicationStatus[] = [
   'applied',
   'replied',
@@ -65,7 +47,6 @@ export function isSent(application: Application): boolean {
   return SENT_STATUSES.includes(application.status);
 }
 
-/** Whole days the application has been sitting since it was sent. */
 export function waitingDays(application: Application): number {
   return Math.floor(daysSince(application.applied_at));
 }
@@ -80,7 +61,6 @@ export function inSegment(application: Application, segment: Segment): boolean {
   return application.status === segment;
 }
 
-/** Tailwind classes for a status pill. Shared so the list and detail agree. */
 export function statusClass(status: ApplicationStatus): string {
   switch (status) {
     case 'offer':
@@ -91,7 +71,6 @@ export function statusClass(status: ApplicationStatus): string {
     case 'rejected':
       return 'bg-danger-soft text-danger';
     case 'skipped':
-      // A deliberate pass is not a failure, so it gets no colour.
       return 'bg-surface text-fg-subtle';
     default:
       return 'bg-surface text-fg-muted';
@@ -104,12 +83,7 @@ export function scoreTone(score: number): string {
   return 'text-danger';
 }
 
-/**
- * The score as a verdict, on the bands the scoring prompt itself defines:
- * 7-10 is a good fit, 4-6 is real overlap with a gap, 1-3 is a different
- * discipline. Derived rather than asked for, because a threshold is not worth
- * a model call and a stored answer would go stale the moment the profile does.
- */
+/** Bands match the scoring prompt: 7-10 good fit, 4-6 partial, 1-3 different field. */
 export function verdict(score: number): 'Apply' | 'Consider' | 'Skip' {
   if (score >= 7) return 'Apply';
   if (score >= 4) return 'Consider';

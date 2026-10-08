@@ -92,7 +92,6 @@ def test_duplicate_project_id_rejected():
 
 
 def test_yaml_error_points_at_the_real_file_line():
-    """The whole reason the parser tracks offsets: a usable line number."""
     lines = FIXTURE.read_text().split("\n")
     at = next(i for i, line in enumerate(lines) if "must always carry" in line)
     # Drop the outer quotes and the value becomes two YAML scalars on one line.
@@ -104,7 +103,6 @@ def test_yaml_error_points_at_the_real_file_line():
 
 
 def test_a_stray_hash_comment_is_not_a_section():
-    """It used to swallow everything below it. Now it is just a YAML comment."""
     text = FIXTURE.read_text().replace(
         "# Titles", "# TODO come back to the titles\n\n# Titles"
     )
@@ -154,11 +152,7 @@ def test_every_section_name_parses_as_itself():
 
 @pytest.mark.parametrize("section", SECTIONS)
 def test_a_near_miss_on_any_section_is_caught(section):
-    """
-    Sixteen names, several of them four letters, all going through difflib at
-    cutoff 0.75. A typo must still be a typo and not a comment that swallows
-    everything under it.
-    """
+    """A misspelt heading must error, not become a YAML comment."""
     typo = section[:-1]
     with pytest.raises(ProfileError) as error:
         parse_text(f"# Identity\nname: N\n\n# {typo.title()}\n- id: x\n")
@@ -166,10 +160,6 @@ def test_a_near_miss_on_any_section_is_caught(section):
 
 
 def test_a_markdown_rule_between_sections_is_not_a_yaml_document_break():
-    """
-    A column-zero --- is a horizontal rule to the person typing and a second
-    document to safe_load, which refuses the stream outright.
-    """
     profile = parse_text("# Identity\nname: N\n\n---\n\n# Titles\n- id: a\n  text: A\n")
     assert profile.identity.name == "N"
     assert [t.id for t in profile.titles] == ["a"]
@@ -261,11 +251,6 @@ bullets:
 
 
 def test_a_code_fence_around_the_whole_file_is_stripped():
-    """
-    The briefing asks Claude for a markdown code block, so the fence arrives
-    pasted with the contents. safe_load's answer to a backtick is "found
-    character that cannot start any token", which helps nobody.
-    """
     profile = parse_text("```markdown\n# Identity\nname: N\n\n# Titles\n- id: a\n  text: A\n```\n")
     assert profile.identity.name == "N" and profile.titles[0].id == "a"
 
@@ -276,10 +261,7 @@ def test_a_fence_inside_one_section_is_stripped_too():
 
 
 def test_a_written_but_empty_list_is_empty_not_an_error():
-    """
-    Mid-draft is not a reason to refuse the only copy of the CV data. YAML reads
-    a bare "cannot_claim:" as None, and Pydantic reads None as a type error.
-    """
+    """A bare "key:" is YAML None and must read as an empty list."""
     profile = parse_text(
         "# Identity\nname: N\n\n# Experience\n## Co\n### P\n"
         "claim_boundary:\n  can_claim:\n  cannot_claim:\n"
@@ -290,16 +272,11 @@ def test_a_written_but_empty_list_is_empty_not_an_error():
 
 
 def test_an_empty_section_body_is_still_empty():
-    """The base class must not turn a whole missing section into something else."""
     profile = parse_text("# Identity\nname: N\n\n# Titles\n\n# Gaps\n")
     assert profile.titles == [] and profile.gaps == []
 
 
 def test_enum_tokens_are_case_folded():
-    """
-    "Native" is the same answer as "native", and the code branches on these:
-    a capitalised "Earned" certification would silently never print.
-    """
     profile = parse_text(
         "# Identity\nname: N\n\n# Languages\n- name: English\n  level: Native\n\n"
         "# Certifications\n- name: C\n  status: Earned\n"

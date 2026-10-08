@@ -1,4 +1,4 @@
-"""The engine, the session dependency, and SQLite's pragmas."""
+"""Database engine, request session dependency, and SQLite pragmas."""
 
 from collections.abc import Generator
 from typing import Annotated, Any
@@ -25,15 +25,14 @@ if sqlite:
 
     @event.listens_for(engine, "connect")
     def _sqlite_pragmas(connection: Any, _record: Any) -> None:
-        # Lets a read and a write overlap instead of "database is locked",
-        # which one user with two tabs can already hit.
+        # WAL lets reads and writes overlap instead of "database is locked".
         connection.execute("PRAGMA journal_mode=WAL")
         # SQLite ignores CHECK and FOREIGN KEY constraints unless asked.
         connection.execute("PRAGMA foreign_keys=ON")
 
 
 def init_db() -> None:
-    """ponytail: create_all, no Alembic. A schema change is a hand ALTER TABLE."""
+    """create_all, no migrations: a schema change is a hand ALTER TABLE."""
     SQLModel.metadata.create_all(engine)
 
 

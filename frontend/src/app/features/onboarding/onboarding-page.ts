@@ -28,7 +28,6 @@ export class OnboardingPage {
   readonly saving = signal(false);
   readonly loadError = signal<string | null>(null);
   readonly fileName = signal<string | null>(null);
-  /** Backend config, fetched with the template it belongs to. */
   readonly prompt = signal('');
   readonly copied = signal(false);
 
@@ -83,7 +82,7 @@ export class OnboardingPage {
 
   update(text: string): void {
     this.text.set(text);
-    // Stale results are worse than none, so drop them the moment the text moves.
+    // Drop stale results as soon as the text changes.
     this.result.set(null);
   }
 
@@ -133,7 +132,6 @@ export class OnboardingPage {
     const ok = await copyPrompt(this.prompt());
     this.copied.set(ok);
     if (ok) {
-      // A tick on the button says it better than a toast that covers the page.
       setTimeout(() => this.copied.set(false), 2000);
     } else {
       this.loadError.set('Could not reach the clipboard. Select the prompt and copy it by hand.');
@@ -148,7 +146,6 @@ export class OnboardingPage {
     this.loadError.set(null);
   }
 
-  /** The offending line, so an error is readable without counting rows. */
   lineText(issue: ProfileIssue): string {
     return issue.line ? (this.lines()[issue.line - 1] ?? '').trim() : '';
   }

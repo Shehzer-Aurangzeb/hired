@@ -1,5 +1,4 @@
 @if (!source()) {
-  <!-- ============ pick a way in ============ -->
   <div class="mx-auto max-w-3xl px-4 py-10">
     <header class="mb-6">
       <span class="border-line bg-surface text-fg-muted mb-3 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]">
@@ -69,9 +68,7 @@
     </p>
   </div>
 } @else {
-  <!-- ============ review and save ============
-       One screen, one scroll region. The editor takes the height that is left,
-       so the file scrolls and the page does not. -->
+  <!-- The editor fills the remaining height, so it scrolls and the page does not. -->
   <div class="mx-auto flex max-w-5xl flex-col gap-2.5 p-4 md:h-[calc(100dvh-3rem)]">
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
       <button type="button" class="btn btn-ghost !px-2" (click)="restart()">
@@ -83,8 +80,6 @@
         <span class="chip mono">{{ fileName() }}</span>
       }
 
-      <!-- Counts live in the bar rather than in tiles: they stay on screen while
-           you edit, and the error list below scrolls so its count cannot. -->
       @if (result()?.errors?.length; as errors) {
         <span class="chip tabular border-danger/40 text-danger">
           <app-icon name="ban" [size]="11" />
@@ -155,7 +150,7 @@
       </div>
     }
 
-    <!-- Capped, so a file with twenty errors cannot push the editor off screen. -->
+    <!-- Height capped so many errors cannot push the editor off screen. -->
     @if (result() || loadError()) {
       <div class="max-h-[26vh] shrink-0 space-y-2 overflow-y-auto">
         @if (loadError()) {
@@ -196,10 +191,7 @@
       </div>
     }
 
-    <!-- the file -->
-    <!-- The single-scroll layout is a desktop one. Below md the page scrolls
-         normally, because a phone with a screen of errors would otherwise leave
-         a hundred-pixel editor nobody can work in. -->
+    <!-- Below md the page scrolls normally so the editor keeps a usable height. -->
     <section class="card flex h-[60vh] flex-col overflow-hidden md:h-auto md:min-h-0 md:flex-1">
       <header class="card-head shrink-0">
         <h2 class="section-title">master.md</h2>
@@ -217,8 +209,7 @@
         </span>
       </header>
 
-      <!-- Gutter and textarea scroll as one. Both are 19px lines, so the numbers
-           stay beside their line without measuring anything. -->
+      <!-- Gutter and textarea share a 19px line height, so numbers stay aligned. -->
       <div class="flex min-h-0 flex-1 overflow-hidden">
         <div
           #gutter

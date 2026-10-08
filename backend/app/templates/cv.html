@@ -2,22 +2,12 @@
 <meta charset="utf-8" />
 <title>{{ identity.name }}</title>
 <style>
-  {#- safe: this is CSS this module built from its own files, and autoescaping
-      it turns format('truetype') into format(&#39;truetype&#39;), which makes
-      Chromium drop every @font-face without a word. -#}
+  {#- safe: autoescaping would break format('truetype') and Chromium would drop the fonts. -#}
   {{ font_css | safe }}
 
   /*
-    Every number below was read out of docs/cv/ShehzarAurangzeb.html, the Google
-    Docs export of the CV this template exists to reproduce. The class names in
-    the comments are that file's, so the two can be compared line by line.
-
-    The page box lives in render.py MARGIN, not here: Chromium is handed the
-    margins directly when printing, so an @page rule would only be a second
-    place to keep the same numbers.
-
-    Do not tune these by eye. If the layout needs to change, change the document
-    and re-read the export.
+    Sizes match a Google Docs CV export. Page margins are set in render.py
+    (MARGIN), so there is no @page rule here.
   */
 
   * {
@@ -32,9 +22,7 @@
     font-family: Inter, "Helvetica Neue", Arial, sans-serif;
     font-size: 10pt;
     font-weight: 400;
-    /* The export says line-height:1.0, but that is Google Docs' "single", which
-       is the font's own leading rather than exactly one em. Taking the export
-       literally set the lines tighter than the document. */
+    /* Docs' "single" spacing is the font's normal leading, not 1.0. */
     line-height: normal;
     color: #000;
   }
@@ -44,13 +32,11 @@
     widows: 2;
   }
 
-  /* .c5 / .c12. Links are blue and underlined in the source document. */
   a {
     color: #1155cc;
     text-decoration: underline;
   }
 
-  /* .c24, .c14 */
   .fullname {
     font-size: 18pt;
     text-align: center;
@@ -70,27 +56,18 @@
     font-size: 9pt;
   }
 
-  /* .c20 */
   h2 {
     font-size: 10pt;
     font-weight: 700;
-    /* Measured off the source PDF, not copied from the export: the gap into a
-       heading is 19.1pt and the gap out of it 20.7pt, baseline to baseline. The
-       export's 12/6 split put the same total in the wrong places and the rule
-       ended up crowding the line under it. */
+    /* Spacing measured from the source PDF, not the export's 12/6 split. */
     padding-top: 11pt;
-    /* The rule sits 4.1pt under the heading's baseline in the source document.
-       Raising this and dropping the margin by the same amount moves the rule
-       without moving the line under it. */
     padding-bottom: 5pt;
     line-height: 0.5;
     border-bottom: 0.5pt solid #999999;
     margin-bottom: 6pt;
   }
 
-  /* .c1, and the role line under it. The export spaces the right-hand column
-     with runs of non-breaking spaces; a flex row puts it where it was meant to
-     be without changing anything else. */
+  /* Name on the left, location or dates on the right. */
   .employer,
   .role {
     display: flex;
@@ -104,10 +81,7 @@
     padding-top: 8pt;
   }
 
-  /* The 8pt above an employer separates it from the project above. Directly
-     under a section rule there is nothing to separate from, and stacking it on
-     the heading's own gap makes WORK EXPERIENCE sit lower than every other
-     section. */
+  /* No extra gap for the first employer right under a heading. */
   h2 + .employer {
     padding-top: 0.85pt;
   }
@@ -118,7 +92,6 @@
     font-style: italic;
   }
 
-  /* .c6: the project name and its first bullet are one paragraph. */
   .project {
     padding-top: 5pt;
   }
@@ -127,9 +100,7 @@
     font-weight: 700;
   }
 
-  /* .c13 .c9, and the "\0000b7   " marker on .lst-kix_list_1-0. 24pt less the
-     9pt the export writes as an invalid negative padding, which is how Docs
-     renders it. */
+  /* Middle-dot bullets with a 9pt hanging indent. */
   ul {
     list-style: none;
     margin-left: 15pt;
@@ -144,9 +115,7 @@
     display: inline-block;
     min-width: 9pt;
     white-space: nowrap;
-    /* text-indent inherits, and an inline-block is a block container, so the
-       hanging indent above would apply a second time inside this box and carry
-       the glyph off the left edge of the page. */
+    /* Reset the inherited indent or the dot is pushed off the page. */
     text-indent: 0;
   }
 
@@ -162,9 +131,7 @@
   }
 </style>
 
-{#- Inside Experience: the project name, its label in brackets, then the first
-    selected bullet running on after a middle dot. That is one paragraph in the
-    source document, and it is what makes the page as dense as it is. -#}
+{#- Experience: project name, label, then the first bullet on the same line. -#}
 {%- macro lead_in(section) -%}
 {%- set href = project_links.get(section.project_id) -%}
 <span class="name">
@@ -174,16 +141,13 @@
 {%- if section.bullets %} · {{ section.bullets[0].text }}{% endif %}
 {%- endmacro -%}
 
-{#- Under Projects the shape is different: name, label, link and stack on the
-    line, and every bullet below it. Matched to the source document rather than
-    made consistent with the one above. -#}
+{#- Projects: name, label, link and stack on one line, bullets below. -#}
 {%- macro project_head(section) -%}
 {%- set href = project_links.get(section.project_id) -%}
 <span class="name">{{ section.project_name }}
 {%- set label = project_labels.get(section.project_id) %}{% if label %} · {{ label }}{% endif %}</span>
 {%- if href %} · <a href="{{ href | url }}">{{ href }}</a>{% endif %}
-{#- Four is enough to place a project. The full list still goes to the model
-    for matching, so trimming here costs relevance nothing and buys a line. -#}
+{#- Print at most four stack items; the model still sees the full list. -#}
 {%- if section.stack %} · {{ section.stack[:4] | join(", ") }}{% endif %}
 {%- endmacro -%}
 
@@ -230,10 +194,7 @@
     {%- if group.location %}<span class="where">{{ group.location }}</span>{% endif -%}
   </p>
   <p class="role">
-    {#- The type is printed unless the employer's own name already says it:
-        omitting a contract or volunteer arrangement reads as a lie the moment
-        somebody checks, but "Contract Engineer (Freelance)" saying freelance
-        twice is the renderer talking over the document. -#}
+    {#- Employment type is shown unless it's full-time or already in the employer name. -#}
     <span>{{ group.role }}{% if group.show_type %} ({{ group.employment_type }}){% endif %}</span>
     <span>{{ group.start | month }}{% if group.end %} - {{ group.end | month }}{% endif %}</span>
   </p>

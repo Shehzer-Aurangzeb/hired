@@ -1,7 +1,4 @@
 ---
-// The product in six seconds, drawn in HTML so it stays sharp at any size:
-// a posting goes in, a verdict comes back, and bullets you already wrote land
-// on the page with the id they came from. Plays when scrolled into view.
 
 const chips = [
   { name: 'React', ok: true },
@@ -146,7 +143,7 @@ const bullets = [
     const play = () => {
       reset();
       demo.classList.add('typing');
-      // Type in chunks of a few characters: one per frame reads as a stall.
+      // Type a few characters per step; one at a time looks stalled.
       for (let i = 0; i <= JD.length; i += 3) at(200 + i * 7, () => (typed.textContent = JD.slice(0, i)));
       at(200 + JD.length * 7, () => {
         typed.textContent = JD;
@@ -321,7 +318,6 @@ const bullets = [
     }
   }
 
-  /* Everything that arrives starts a little low and transparent. */
   [data-step],
   [data-chip],
   [data-bullet] {

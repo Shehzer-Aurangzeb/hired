@@ -1,12 +1,5 @@
-"""
-Diff the CV's vertical spacing against the Google Docs original, by measuring
-every baseline on page one and the gap above it. Drift comes out as a number.
-
-    .venv/bin/python tools/spacing.py                     # ours vs the reference
-    .venv/bin/python tools/spacing.py some.pdf            # dump one file
-
-Needs pypdf, which is not a runtime dependency:  pip install pypdf
-"""
+"""Compare CV line spacing against the reference PDF. Usage: tools/spacing.py [some.pdf]
+Needs pypdf (pip install pypdf), which is not a runtime dependency."""
 
 import sys
 from collections import defaultdict
@@ -17,8 +10,7 @@ from pypdf import PdfReader
 ROOT = Path(__file__).resolve().parents[2]
 REFERENCE = ROOT / "docs/cv/ShehzarAurangzeb.pdf"
 
-# What the source document does, measured off it. Baseline to baseline, in
-# points, at the 10pt body size whose own line-to-line is 12.1pt.
+# Baseline-to-baseline gaps in points, measured off the reference PDF.
 EXPECTED = {
     "line to line inside a paragraph": 12.1,
     "body into a section heading": 19.2,
@@ -34,7 +26,7 @@ EXPECTED = {
 
 
 def lines(pdf: Path) -> list[tuple[float, float, str]]:
-    """(baseline y, font size, text) for page one, top of the page first."""
+    """(baseline y, font size, text) for each line of page one, top first."""
     rows: dict[float, list] = defaultdict(list)
 
     def visit(text, cm, tm, font, size):

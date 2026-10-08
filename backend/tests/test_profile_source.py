@@ -1,8 +1,3 @@
-"""
-The source routes, and mostly the one branch that protects the data: a save
-composed against a stale copy must be refused rather than silently win.
-"""
-
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
@@ -36,7 +31,7 @@ def client(monkeypatch):
     app.dependency_overrides[get_session] = session_override
     with TestClient(app) as client:
         client.post("/api/auth/login", json={"password": PASSWORD})
-        # The pruning test has to backdate rows, which no route will do.
+        # Lets the pruning test backdate rows directly.
         client.engine = engine
         yield client
     app.dependency_overrides.clear()
@@ -153,8 +148,7 @@ def test_editing_a_bullet_changes_one_line_and_nothing_else(client):
         WITH_BULLETS, "dedicate-cache", "Cut repeat API calls by an estimated 60%."
     )
     before, after = WITH_BULLETS.split("\n"), edited.split("\n")
-    # The wrapped scalar was two lines and is now one, so the file gets shorter
-    # by exactly that, and every other line is untouched.
+    # Comments outside the edited bullet survive.
     assert [line for line in before if "This comment" in line]
     assert [line for line in after if "This comment" in line]
 
@@ -278,11 +272,7 @@ def test_a_pruned_version_says_so(client):
 
 
 def test_pruning_keeps_the_floor_however_old_everything_is(client):
-    """
-    Age alone would delete every version after a break longer than the window,
-    including the one in use, which is the moment undo is wanted most. So the
-    newest few survive whatever their age, and anything recent survives anyway.
-    """
+    """The newest VERSIONS_KEPT survive whatever their age; recent ones survive too."""
     from datetime import timedelta
 
     from app.tables import VERSIONS_KEPT, ProfileSource, now
@@ -300,20 +290,15 @@ def test_pruning_keeps_the_floor_however_old_everything_is(client):
 
     kept = [v["version"] for v in client.get("/api/profile/versions").json()]
 
-    # The newest VERSIONS_KEPT, whatever their age.
     assert kept[:VERSIONS_KEPT] == [10, 9, 8, 7, 6]
-    # v1 is recent, so the window never applied to it.
+    # v1 is recent, so it survives outside the floor.
     assert 1 in kept
-    # The stale ones outside the floor are the only ones gone.
     assert [v for v in (2, 3, 4, 5) if v in kept] == []
     assert kept[0] == 10 and client.get("/api/profile/versions").json()[0]["current"]
 
 
 def test_the_diff_reads_as_what_restoring_would_do(client):
-    """
-    Current first, so a removed line is what you lose and an added line is what
-    comes back. The other direction answers a question nobody asked.
-    """
+    """Current first: "-" is what restoring loses, "+" what it brings back."""
     save(client, GOOD)
     one = client.get("/api/profile/source").json()
     save(client, GOOD.replace("Shipped it", "Shipped it twice"), one["updated_at"])
