@@ -13,7 +13,26 @@ URL="http://127.0.0.1:$PORT"
 PIDFILE="$BACKEND/.hired.pid"
 LOGFILE="$BACKEND/.hired.log"
 
+# Playwright defaults to ~/Library/Caches/ms-playwright, which macOS reclaims
+# under disk pressure and every "clean up my Mac" tool deletes outright. Losing
+# it breaks PDF export, and only at export time, after a model call has already
+# been spent. Exported here so the install and the server agree on one path.
+export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.playwright}"
+
 running() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
+
+# node_modules is not in the repo and cleanup tools treat it as junk. Without
+# it `ng` is simply absent, and npx answers with "could not determine executable
+# to run", which names neither the cause nor the fix.
+deps() { [ -x "$ROOT/frontend/node_modules/.bin/ng" ]; }
+
+# Fail here, loudly and fixably, rather than at export time with a 500.
+browser() {
+  "$BACKEND/.venv/bin/python" -c \
+    'from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    p.chromium.launch().close()' 2>/dev/null
+}
 
 stop() {
   if running; then
@@ -37,6 +56,7 @@ hired — tailor a CV to a job posting, on your own machine.
   hired log        follow the log, Ctrl-C to stop watching
   hired dev        start it, then ng serve on 4200 for front-end work
   hired backup     copy the database and profile into backend/backups
+  hired doctor     check the pieces that go missing without telling you
   hired help       this
 
 How it runs
@@ -50,8 +70,9 @@ How it runs
   Port $PORT, override with HIRED_PORT. Secrets come from
   backend/.env and are never passed on the command line.
 
-  Repo   $ROOT
-  Log    $LOGFILE
+  Repo    $ROOT
+  Log     $LOGFILE
+  Browser $PLAYWRIGHT_BROWSERS_PATH
 TXT
 }
 
@@ -69,6 +90,21 @@ case "${1:-start}" in
   log)  [ -f "$LOGFILE" ] || { echo "no log yet; start it first" >&2; exit 1; }
         exec tail -f "$LOGFILE" ;;
   backup) exec "$BACKEND/.venv/bin/python" "$BACKEND/tools/backup.py" ;;
+  doctor)
+    bad=0
+    if [ -x "$BACKEND/.venv/bin/python" ]; then echo "venv      ok"
+    else echo "venv      MISSING  python3 -m venv $BACKEND/.venv && $BACKEND/.venv/bin/pip install -r $BACKEND/requirements.txt"; bad=1; fi
+    if [ -f "$BACKEND/.env" ]; then echo ".env      ok"
+    else echo ".env      MISSING  copy $BACKEND/.env.example and fill it in"; bad=1; fi
+    if [ -f "$BACKEND/hired.db" ]; then echo "database  ok  $(du -h "$BACKEND/hired.db" | cut -f1)"
+    else echo "database  MISSING  it is created on first start"; fi
+    if browser; then echo "chromium  ok  $PLAYWRIGHT_BROWSERS_PATH"
+    else echo "chromium  MISSING  hired start installs it"; bad=1; fi
+    if deps; then echo "node deps ok"
+    else echo "node deps MISSING  cd $ROOT/frontend && pnpm install"; bad=1; fi
+    if [ -f "$BUNDLE/index.html" ]; then echo "bundle    ok"
+    else echo "bundle    missing, hired start builds it"; fi
+    exit $bad ;;
   help|-h|--help) usage; exit 0 ;;
   restart) stop; DEV= ;;
   dev)  DEV=1 ;;
@@ -88,11 +124,33 @@ rm -f "$PIDFILE"
 # start rather than inventing one.
 [ -f "$BACKEND/.env" ] || { echo "No .env at $BACKEND. Copy .env.example and fill it in." >&2; exit 1; }
 
+# Chromium prints the CV. Install it when it is missing, because the only other
+# option is an app that looks fine until the last step of the one thing it does.
+if ! browser; then
+  echo "chromium is missing. Downloading into $PLAYWRIGHT_BROWSERS_PATH (~100MB, once)..."
+  "$BACKEND/.venv/bin/playwright" install chromium || {
+    echo "could not install it. Run: $BACKEND/.venv/bin/playwright install chromium" >&2
+    exit 1
+  }
+  browser || { echo "chromium installed but will not launch." >&2; exit 1; }
+fi
+
 # Rebuild only when the sources are newer than the bundle. A no-op start
 # should not cost an Angular build.
 if [ ! -f "$BUNDLE/index.html" ] || [ -n "$(find "$ROOT/frontend/src" -newer "$BUNDLE/index.html" -print -quit)" ]; then
+  if ! deps; then
+    echo "installing front-end dependencies (once)..."
+    (cd "$ROOT/frontend" && pnpm install) || {
+      echo "pnpm install failed. Run it in $ROOT/frontend and try again." >&2
+      exit 1
+    }
+    deps || { echo "pnpm install ran but ng is still missing." >&2; exit 1; }
+  fi
   echo "building the front end..."
-  (cd "$ROOT/frontend" && npx ng build --configuration production >/dev/null)
+  (cd "$ROOT/frontend" && ./node_modules/.bin/ng build --configuration production >/dev/null) || {
+    echo "the front-end build failed. Run it in $ROOT/frontend to see why." >&2
+    exit 1
+  }
 fi
 
 cd "$BACKEND"
@@ -106,7 +164,7 @@ for _ in $(seq 100); do
   if curl -fsS --max-time 1 "$URL/api/health" >/dev/null 2>&1; then
     open "$URL" 2>/dev/null || true
     echo "hired is up on $URL   (hired stop | hired log)"
-    [ -n "$DEV" ] && (cd "$ROOT/frontend" && exec npx ng serve --open)
+    [ -n "$DEV" ] && (cd "$ROOT/frontend" && exec ./node_modules/.bin/ng serve --open)
     exit 0
   fi
   running || { echo "it died on startup:" >&2; tail -20 "$LOGFILE" >&2; exit 1; }
