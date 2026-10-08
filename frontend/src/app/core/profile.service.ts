@@ -5,6 +5,8 @@ import { Observable, catchError, map, of, shareReplay, tap } from 'rxjs';
 import { API } from './api';
 import { AuthService } from './auth.service';
 import {
+  AskReply,
+  AskTurn,
   Profile,
   ProfileDiff,
   ProfileSource,
@@ -84,6 +86,14 @@ export class ProfileService {
         expected_updated_at: expectedUpdatedAt,
       })
       .pipe(tap(() => this.landed()));
+  }
+
+  /**
+   * Describe a change and get back a proposal. Saves nothing: the reply carries
+   * the profile as it would be, and confirming is an ordinary save().
+   */
+  ask(message: string, history: AskTurn[]): Observable<AskReply> {
+    return this.http.post<AskReply>(`${API}/api/profile/ask`, { message, history });
   }
 
   /** Every save appends one. Newest first, the first is current. */

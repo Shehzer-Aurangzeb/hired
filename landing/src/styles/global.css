@@ -1,0 +1,148 @@
+/* The app's tokens, copied from frontend/src/styles.css. Beige paper, near-black
+   ink, one green. One theme, same as the app: it is a document tool. */
+:root {
+  --bg: #f0eadc;
+  --surface: #e6dfcd;
+  --raised: #faf7f0;
+  --line: #dad1bd;
+  --line-strong: #9c8c68;
+  --fg: #14110c;
+  --fg-muted: #57503f;
+  --fg-subtle: #665d4b;
+  --ink: #1a1712;
+  --ink-fg: #faf7f0;
+  --ink-muted: #b8ae98;
+  --accent: #2f6b4f;
+  --accent-soft: #dce7dd;
+  --warn: #7e5210;
+  --warn-soft: #f2e6ca;
+  --danger: #9b2c21;
+
+  --sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  --radius: 0.5rem;
+  --wrap: 1120px;
+  --gutter: 16px;
+
+  color-scheme: light;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --gutter: 32px;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+a {
+  color: inherit;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+.wrap {
+  width: 100%;
+  max-width: calc(var(--wrap) + 2 * var(--gutter));
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+/* Same treatment as .section-title in the app. */
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 150ms, border-color 150ms;
+}
+
+/* Ink, not green: same rule as the app's one primary action per screen. */
+.btn-primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--ink-fg);
+}
+.btn-primary:hover {
+  background: var(--fg-muted);
+  border-color: var(--fg-muted);
+}
+
+.btn-outline {
+  background: var(--raised);
+  border-color: var(--line-strong);
+  color: var(--fg);
+}
+.btn-outline:hover {
+  background: var(--surface);
+}

@@ -103,6 +103,134 @@
       </div>
     </div>
 
+    <!-- ============ ask ============ -->
+    <!--                                                                     -->
+    <!-- The model proposes and never writes. Every turn comes back as the   -->
+    <!-- profile as it would be, shown as a diff, and confirming runs the    -->
+    <!-- ordinary save, so nothing here escapes validation, the lock or      -->
+    <!-- history. Keep talking until the diff is right.                      -->
+    <!-- ===================================================================== -->
+    <section class="mb-4">
+      @if (!askOpen()) {
+        <button
+          type="button"
+          class="border-line hover:border-ink/30 text-fg-muted hover:text-fg w-full rounded-card border border-dashed px-3 py-2.5 text-left text-[13px] transition-colors"
+          (click)="toggleAsk()"
+        >
+          Describe a change in plain words, and check the diff before it saves.
+        </button>
+      } @else {
+        <div class="card p-3.5">
+          <header class="mb-2.5 flex items-center gap-2">
+            <h2 class="text-[13px] font-semibold tracking-tight">Ask</h2>
+            <span class="text-fg-subtle text-[11px]">Nothing saves until you confirm.</span>
+            <button type="button" class="btn btn-ghost ml-auto !px-2" (click)="toggleAsk()">
+              <app-icon name="x" [size]="15" />
+            </button>
+          </header>
+
+          @for (turn of turns(); track $index) {
+            <p
+              class="mb-1.5 text-[13px] leading-relaxed"
+              [class]="turn.role === 'you' ? 'text-fg' : 'text-fg-muted'"
+            >
+              <span class="text-fg-subtle mr-1.5 text-[11px] uppercase">{{ turn.role }}</span>
+              {{ turn.text }}
+            </p>
+          }
+
+          @if (pending(); as reply) {
+            @for (question of reply.questions; track question) {
+              <p class="border-warn/50 bg-warn-soft text-warn rounded-card mt-2 border px-3 py-2 text-[12px]">
+                {{ question }}
+              </p>
+            }
+
+            @for (why of reply.refused; track why) {
+              <p class="border-danger/40 bg-danger-soft text-danger rounded-card mt-2 flex items-start gap-2 border px-3 py-2 text-[12px]">
+                <app-icon name="ban" [size]="14" class="mt-0.5 shrink-0" />
+                {{ why }}
+              </p>
+            }
+
+            @if (reply.text) {
+              <div class="border-line rounded-card mt-2.5 border p-2">
+                <p class="text-fg-muted mb-2 text-[11px]">
+                  <span class="text-accent">{{ reply.added }} added</span>,
+                  <span class="text-danger">{{ reply.removed }} removed</span>.
+                </p>
+                <pre class="mono max-h-64 overflow-auto text-[11px] leading-relaxed"><!--
+             -->@for (line of reply.diff; track $index) {<!--
+               --><div
+                    [class]="
+                      line.op === '+'
+                        ? 'bg-accent-soft text-accent'
+                        : line.op === '-'
+                          ? 'bg-danger-soft text-danger'
+                          : line.op === '@'
+                            ? 'border-line text-fg-subtle my-1.5 border-t pt-1.5'
+                            : 'text-fg-muted'
+                    "
+                  >{{ line.text }}</div><!--
+             -->}</pre>
+              </div>
+            }
+          }
+
+          @if (askError()) {
+            <p class="border-danger/50 bg-danger-soft text-danger rounded-card mt-2 border px-3 py-2 text-[12px]" role="alert">
+              {{ askError() }}
+            </p>
+          }
+
+          <div class="mt-2.5 flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              class="border-line bg-bg focus:border-ink/40 min-w-0 flex-1 rounded-card border px-3 py-2 text-[13px] outline-none"
+              [placeholder]="
+                turns().length
+                  ? 'Correct it, or add more'
+                  : 'I used Redux on Union AI and Stanley Paden'
+              "
+              [value]="draft()"
+              (input)="draft.set($any($event.target).value)"
+              (keydown.enter)="send()"
+              [disabled]="asking()"
+            />
+            <button type="button" class="btn btn-outline" [disabled]="!canAsk()" (click)="send()">
+              @if (asking()) {
+                <app-icon name="refresh" [size]="15" class="animate-spin" />
+                Thinking
+              } @else {
+                Send
+              }
+            </button>
+
+            @if (pending()?.text) {
+              <button
+                type="button"
+                class="btn btn-primary"
+                [disabled]="!canConfirm()"
+                (click)="confirm()"
+              >
+                Confirm and save
+              </button>
+            }
+            @if (turns().length) {
+              <button type="button" class="btn btn-ghost" (click)="discard()">Discard</button>
+            }
+          </div>
+
+          @if (pending()?.text && dirty()) {
+            <p class="text-fg-subtle mt-2 text-[11px]">
+              You have unsaved edits in the source. Save or revert them before confirming, or
+              one would overwrite the other.
+            </p>
+          }
+        </div>
+      }
+    </section>
+
     <!-- ============ tabs ============ -->
     <div class="border-line mb-4 flex items-center gap-1 border-b" role="tablist">
       <button

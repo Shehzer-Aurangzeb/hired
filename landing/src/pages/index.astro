@@ -1,0 +1,854 @@
+---
+import { Image } from 'astro:assets';
+import '../styles/global.css';
+
+import paste from '../assets/shots/paste.png';
+import fit from '../assets/shots/fit.png';
+import generate from '../assets/shots/generate.png';
+import applications from '../assets/shots/applications.png';
+import profile from '../assets/shots/profile.png';
+import cv from '../assets/shots/cv.png';
+
+const REPO = 'https://github.com/Shehzer-Aurangzeb/hired';
+
+// Every screenshot is the real app, run on a fictional profile with the model
+// call stubbed. demo/capture.py regenerates them.
+const steps = [
+  {
+    title: 'Write your profile once',
+    body: 'One Markdown file: every project, the bullets you would defend, and what each project cannot claim. You write it. Nothing in it is generated.',
+    shot: profile,
+    url: 'profile',
+    alt: 'Profile screen listing projects, title variants, summaries and skills, with one blocked bullet flagged to verify.',
+  },
+  {
+    title: 'Paste a posting',
+    body: 'The whole job description, requirements and all. Nothing is saved yet.',
+    shot: paste,
+    url: 'generate',
+    alt: 'Generate screen with a pasted job description and a Check fit button.',
+  },
+  {
+    title: 'Get a verdict first',
+    body: 'A score out of ten, the reasons, and the gaps. Being told to skip a posting saves the evening.',
+    shot: fit,
+    url: 'generate',
+    alt: 'Fit result: 8 out of 10, marked Apply, with the reasoning and one gap.',
+  },
+  {
+    title: 'Review the page',
+    body: 'Bullets picked from your pool, coverage per requirement, and a live preview of the one-page PDF.',
+    shot: generate,
+    url: 'generate',
+    alt: 'Generated CV: requirement coverage chips, warnings, selected bullets and a Letter-size preview.',
+  },
+  {
+    title: 'Track what you sent',
+    body: 'Every posting you kept, applied to or not, with the CV that went out and what came back.',
+    shot: applications,
+    url: 'applications',
+    alt: 'Applications list with totals, reply rate, a pipeline bar and a table of companies and statuses.',
+  },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>hired · CVs you can defend</title>
+    <meta
+      name="description"
+      content="Paste a job description, get a fit verdict and a tailored one-page CV built only from bullets you wrote. The model picks ids. It never writes a sentence."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="top">
+      <div class="wrap top-row">
+        <a class="brand" href="/" aria-label="hired, home">
+          <img src="/favicon.svg" alt="" width="28" height="28" />
+          <span>hired</span>
+        </a>
+        <nav class="top-nav" aria-label="Sections">
+          <a href="#how">How it works</a>
+          <a href="#honest">Why it can't lie</a>
+          <a class="btn btn-outline btn-sm" href={REPO}>GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="wrap">
+          <p class="eyebrow">
+            <span class="dot" aria-hidden="true"></span>
+            Personal tool · runs on your laptop · Gemini free tier
+          </p>
+          <h1>A tailored CV you can defend in the interview.</h1>
+          <p class="lede">
+            Paste a job description. hired tells you whether it's worth applying, then builds a one-page CV
+            from bullets <em>you</em> wrote. The model picks. It never writes.
+          </p>
+          <div class="cta">
+            <a class="btn btn-primary" href="#how">See how it works</a>
+            <a class="btn btn-outline" href={REPO}>View source</a>
+          </div>
+
+          <figure class="window hero-shot">
+            <div class="window-bar" aria-hidden="true">
+              <span class="mono">127.0.0.1:8000/generate</span>
+            </div>
+            <Image
+              src={generate}
+              widths={[800, 1440, 2160]}
+              sizes="(min-width: 1184px) 1120px, 100vw"
+              alt="hired's generate screen: fit score 8 of 10, every required skill covered, selected bullets and a live CV preview."
+              loading="eager"
+              fetchpriority="high"
+            />
+          </figure>
+        </div>
+      </section>
+
+      <section class="problem">
+        <div class="wrap split">
+          <p class="label">The problem</p>
+          <div>
+            <p class="big">
+              AI CV tools write confident sentences about work you didn't quite do. Then an interviewer asks
+              about one, and you're defending a number you never measured.
+            </p>
+            <p class="small">
+              hired goes the other way. Every line on the page is one you wrote, with its limits written
+              next to it.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="how" class="how">
+        <div class="wrap">
+          <p class="label">How it works</p>
+          <h2>Five screens, one evening per posting.</h2>
+
+          <div class="tour" data-tour>
+            <ol class="steps" role="tablist" aria-label="Steps">
+              {
+                steps.map((step, i) => (
+                  <li role="presentation">
+                    <button
+                      type="button"
+                      role="tab"
+                      id={`tab-${i}`}
+                      aria-controls={`panel-${i}`}
+                      aria-selected={i === 0 ? 'true' : 'false'}
+                      tabindex={i === 0 ? 0 : -1}
+                    >
+                      <span class="num mono">{String(i + 1).padStart(2, '0')}</span>
+                      <span class="step-text">
+                        <span class="step-title">{step.title}</span>
+                        <span class="step-body">{step.body}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))
+              }
+            </ol>
+
+            <div class="panels">
+              {
+                steps.map((step, i) => (
+                  <figure
+                    class="window panel"
+                    role="tabpanel"
+                    id={`panel-${i}`}
+                    aria-labelledby={`tab-${i}`}
+                    data-active={i === 0 ? '' : undefined}
+                  >
+                    <div class="window-bar" aria-hidden="true">
+                      <span class="mono">127.0.0.1:8000/{step.url}</span>
+                    </div>
+                    <Image
+                      src={step.shot}
+                      widths={[800, 1440]}
+                      sizes="(min-width: 1024px) 760px, 100vw"
+                      alt={step.alt}
+                    />
+                  </figure>
+                ))
+              }
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="honest" class="honest">
+        <div class="wrap">
+          <p class="label">Why it can't make things up</p>
+          <h2>The model returns ids, not sentences.</h2>
+          <p class="sub">
+            Hover an id on the right to find the line it points at. The page is assembled from your file
+            after the model answers, so anything it invents has nowhere to go.
+          </p>
+
+          <div class="proof" data-proof>
+            <div class="code">
+              <p class="code-head mono">master.md <span>you write this</span></p>
+              <pre class="mono"><code><span class="c-key">### Ledgerline App</span>
+<span class="c-key">claim_boundary:</span>
+  <span class="c-key">cannot_claim:</span>
+    - Led the team. There was a manager.
+    - Any revenue number. Never measured.
+
+<span class="c-key">bullets:</span>
+  - <span class="c-key">id:</span> <span class="ref" data-id="ledgerline-virtual">ledgerline-virtual</span>
+    <span class="c-key">text:</span> Virtualised the transactions table…
+  - <span class="c-key">id:</span> <span class="ref" data-id="ledgerline-cache">ledgerline-cache</span>
+    <span class="c-key">text:</span> Moved data fetching to TanStack…
+  - <span class="c-key">id:</span> ledgerline-ai
+    <span class="c-key">status:</span> <span class="c-block">blocked</span>
+    <span class="c-key">text:</span> Built AI-assisted invoice…</code></pre>
+            </div>
+
+            <div class="code">
+              <p class="code-head mono">Gemini's answer <span>all it can say</span></p>
+              <pre class="mono"><code>{'{'}
+  <span class="c-key">"title_id"</span>: "frontend",
+  <span class="c-key">"sections"</span>: [{'{'}
+    <span class="c-key">"project_id"</span>: "ledgerline-app",
+    <span class="c-key">"bullet_ids"</span>: [
+      <span class="ref" data-id="ledgerline-virtual" tabindex="0">"ledgerline-virtual"</span>,
+      <span class="ref" data-id="ledgerline-cache" tabindex="0">"ledgerline-cache"</span>
+    ]
+  {'}'}]
+{'}'}</code></pre>
+            </div>
+          </div>
+
+          <ol class="rules">
+            <li>
+              <span class="num mono">01</span>
+              <h3>Ids, not prose</h3>
+              <p>A model that can only point at sentences can't write a new one. An id not in your file blocks the export.</p>
+            </li>
+            <li>
+              <span class="num mono">02</span>
+              <h3>Blocked never leaves</h3>
+              <p>Blocked bullets are cut from the pool before the call. The model never sees them.</p>
+            </li>
+            <li>
+              <span class="num mono">03</span>
+              <h3>Checked after</h3>
+              <p>Plain code checks the printed page for banned words, missing qualifiers and overflow.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="output">
+        <div class="wrap output-row">
+          <div class="sheet-stack">
+            <Image
+              src={cv}
+              widths={[480, 816, 1200]}
+              sizes="(min-width: 1024px) 480px, 90vw"
+              alt="The exported one-page CV for the fictional Maya Okafor, tailored to a senior front-end posting."
+              class="sheet"
+            />
+          </div>
+          <div class="output-text">
+            <p class="label">The output</p>
+            <h2>One page. Measured, not hoped.</h2>
+            <p>
+              The renderer prints the page and measures it. A thin page is topped up from your own priority
+              order, one bullet at a time, and stops before it spills onto a second. The PDF is saved next to
+              the posting that produced it, so you always know which CV went where.
+            </p>
+            <dl class="facts">
+              <div><dt>Format</dt><dd>Letter PDF, Inter</dd></div>
+              <div><dt>Bullets</dt><dd>Copied from your file</dd></div>
+              <div><dt>Coverage</dt><dd>Per requirement, gaps included</dd></div>
+            </dl>
+          </div>
+        </div>
+      </section>
+
+      <section class="run">
+        <div class="wrap run-row">
+          <div>
+            <p class="label">Run it</p>
+            <h2>One command. One port. Your machine.</h2>
+            <p class="sub">
+              FastAPI serves the built app, bound to 127.0.0.1. Bring a free Gemini key and your own
+              master.md.
+            </p>
+          </div>
+          <pre class="terminal mono"><code><span class="t-dim">$</span> git clone {REPO}
+<span class="t-dim">$</span> ln -s "$PWD/hired/bin/hired" ~/.local/bin/hired
+<span class="t-dim">$</span> hired
+<span class="t-ok">hired is up on http://127.0.0.1:8000</span></code></pre>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap foot-row">
+        <span class="brand small">
+          <img src="/favicon.svg" alt="" width="20" height="20" />
+          hired
+        </span>
+        <span>Built by Shehzar for his own job hunt. Screenshots use a fictional profile.</span>
+        <a href={REPO}>GitHub</a>
+      </div>
+    </footer>
+
+    <script>
+      // Step tabs. Arrow keys move between them, per the ARIA tabs pattern.
+      const tour = document.querySelector('[data-tour]');
+      if (tour) {
+        const tabs = [...tour.querySelectorAll<HTMLButtonElement>('[role=tab]')];
+        const panels = [...tour.querySelectorAll<HTMLElement>('[role=tabpanel]')];
+        const select = (index: number) => {
+          tabs.forEach((tab, i) => {
+            const on = i === index;
+            tab.setAttribute('aria-selected', String(on));
+            tab.tabIndex = on ? 0 : -1;
+            panels[i].toggleAttribute('data-active', on);
+          });
+        };
+        tabs.forEach((tab, i) => {
+          tab.addEventListener('click', () => select(i));
+          tab.addEventListener('keydown', (event) => {
+            const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[event.key];
+            if (!step) return;
+            event.preventDefault();
+            const next = (i + step + tabs.length) % tabs.length;
+            select(next);
+            tabs[next].focus();
+          });
+        });
+      }
+
+      // Hovering or focusing an id lights up every copy of it, in both panes.
+      const proof = document.querySelector('[data-proof]');
+      proof?.querySelectorAll<HTMLElement>('[data-id]').forEach((ref) => {
+        const twins = proof.querySelectorAll(`[data-id="${ref.dataset.id}"]`);
+        const light = (on: boolean) => twins.forEach((t) => t.classList.toggle('lit', on));
+        ref.addEventListener('mouseenter', () => light(true));
+        ref.addEventListener('mouseleave', () => light(false));
+        ref.addEventListener('focus', () => light(true));
+        ref.addEventListener('blur', () => light(false));
+      });
+    </script>
+
+    <style>
+      .skip {
+        position: absolute;
+        left: -9999px;
+      }
+      .skip:focus {
+        left: 16px;
+        top: 16px;
+        z-index: 10;
+        padding: 8px 12px;
+        background: var(--ink);
+        color: var(--ink-fg);
+        border-radius: 6px;
+      }
+
+      /* ---------- header ---------- */
+      .top {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        background: color-mix(in srgb, var(--raised) 92%, transparent);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--line);
+      }
+      .top-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 64px;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+        font-size: 18px;
+        letter-spacing: -0.01em;
+        text-decoration: none;
+      }
+      .brand img {
+        border-radius: 6px;
+      }
+      .top-nav {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        font-size: 14px;
+      }
+      .top-nav a:not(.btn) {
+        color: var(--fg-muted);
+        text-decoration: none;
+      }
+      .top-nav a:not(.btn):hover {
+        color: var(--fg);
+      }
+      .btn-sm {
+        min-height: 36px;
+        padding: 0 14px;
+        font-size: 14px;
+      }
+      @media (max-width: 639px) {
+        .top-nav a:not(.btn) {
+          display: none;
+        }
+      }
+
+      /* ---------- hero ---------- */
+      .hero {
+        padding: 72px 0 0;
+        overflow: hidden;
+      }
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 12px;
+        border: 1px solid var(--line-strong);
+        border-radius: 999px;
+        font-size: 13px;
+        color: var(--fg-muted);
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      h1 {
+        margin-top: 24px;
+        max-width: 15ch;
+        font-size: clamp(40px, 7vw, 76px);
+        line-height: 1.02;
+        font-weight: 700;
+        letter-spacing: -0.035em;
+      }
+      .lede {
+        margin-top: 24px;
+        max-width: 58ch;
+        font-size: clamp(17px, 2vw, 20px);
+        color: var(--fg-muted);
+      }
+      .lede em {
+        font-style: normal;
+        color: var(--fg);
+        font-weight: 600;
+      }
+      .cta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 32px;
+      }
+
+      /* A browser window drawn in the app's own surfaces. */
+      .window {
+        margin: 0;
+        overflow: hidden;
+        background: var(--raised);
+        border: 1px solid var(--line-strong);
+        border-radius: 10px;
+        box-shadow:
+          0 1px 0 var(--raised) inset,
+          0 24px 48px -24px rgb(60 45 20 / 0.35),
+          0 2px 6px rgb(60 45 20 / 0.08);
+      }
+      .window-bar {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 34px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--line);
+        font-size: 12px;
+        color: var(--fg-subtle);
+      }
+      .hero-shot {
+        margin-top: 56px;
+        margin-bottom: -2px;
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+        /* Only the top of the screen: the part with the verdict and the preview. */
+        max-height: 640px;
+      }
+      .hero-shot img {
+        width: 100%;
+      }
+
+      /* ---------- problem ---------- */
+      .problem {
+        background: var(--raised);
+        border-top: 1px solid var(--line-strong);
+        border-bottom: 1px solid var(--line);
+        padding: 80px 0;
+      }
+      .split {
+        display: grid;
+        gap: 16px;
+      }
+      @media (min-width: 900px) {
+        .split {
+          grid-template-columns: 220px 1fr;
+          gap: 48px;
+        }
+      }
+      .big {
+        max-width: 30ch;
+        font-size: clamp(24px, 3.4vw, 36px);
+        line-height: 1.25;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .small {
+        margin-top: 20px;
+        max-width: 56ch;
+        font-size: 18px;
+        color: var(--fg-muted);
+      }
+
+      /* ---------- shared section heads ---------- */
+      h2 {
+        margin-top: 12px;
+        max-width: 22ch;
+        font-size: clamp(28px, 4vw, 44px);
+        line-height: 1.1;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+      }
+      .sub {
+        margin-top: 16px;
+        max-width: 60ch;
+        font-size: 17px;
+        color: var(--fg-muted);
+      }
+      .num {
+        font-size: 13px;
+        color: var(--fg-subtle);
+      }
+
+      /* ---------- how it works ---------- */
+      .how {
+        padding: 96px 0;
+      }
+      .tour {
+        display: grid;
+        gap: 24px;
+        margin-top: 48px;
+      }
+      @media (min-width: 1024px) {
+        .tour {
+          grid-template-columns: 320px 1fr;
+          gap: 40px;
+          align-items: start;
+        }
+      }
+      .steps {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 4px;
+      }
+      .steps button {
+        display: flex;
+        gap: 16px;
+        width: 100%;
+        min-height: 44px;
+        padding: 16px;
+        text-align: left;
+        font: inherit;
+        color: inherit;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: var(--radius);
+        cursor: pointer;
+        transition: background-color 150ms, border-color 150ms;
+      }
+      .steps button:hover {
+        background: var(--surface);
+      }
+      .steps button[aria-selected='true'] {
+        background: var(--raised);
+        border-color: var(--line-strong);
+      }
+      .steps button[aria-selected='true'] .num {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .step-text {
+        display: grid;
+        gap: 4px;
+      }
+      .step-title {
+        font-weight: 600;
+      }
+      .step-body {
+        display: none;
+        font-size: 14px;
+        line-height: 1.5;
+        color: var(--fg-muted);
+      }
+      .steps button[aria-selected='true'] .step-body {
+        display: block;
+      }
+      .panels {
+        display: grid;
+      }
+      /* Stacked in one cell so switching never moves the layout. */
+      .panel {
+        grid-area: 1 / 1;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 200ms ease-out, visibility 0s 200ms;
+      }
+      .panel[data-active] {
+        opacity: 1;
+        visibility: visible;
+        transition: opacity 200ms ease-out;
+      }
+      @media (max-width: 1023px) {
+        /* Phone: the screenshot sits under its own step, so the panel follows the list. */
+        .steps {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* ---------- the ink band ---------- */
+      .honest {
+        background: var(--ink);
+        color: var(--ink-fg);
+        padding: 96px 0;
+      }
+      .honest .label,
+      .honest .sub,
+      .honest .num {
+        color: var(--ink-muted);
+      }
+      .proof {
+        display: grid;
+        gap: 16px;
+        margin-top: 48px;
+      }
+      @media (min-width: 900px) {
+        .proof {
+          grid-template-columns: 1.15fr 1fr;
+        }
+      }
+      .code {
+        min-width: 0;
+        border: 1px solid #3a342a;
+        border-radius: var(--radius);
+        background: #221e17;
+      }
+      .code-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 16px;
+        border-bottom: 1px solid #3a342a;
+        font-size: 12px;
+        color: var(--ink-fg);
+      }
+      .code-head span {
+        color: var(--ink-muted);
+      }
+      .code pre {
+        margin: 0;
+        padding: 16px;
+        overflow-x: auto;
+        font-size: 13px;
+        line-height: 1.7;
+        color: #ddd4c0;
+      }
+      .c-key {
+        color: var(--ink-muted);
+      }
+      .c-block {
+        color: #e8a598;
+      }
+      .ref {
+        padding: 1px 3px;
+        margin: 0 -3px;
+        border-radius: 3px;
+        color: #a9d4bb;
+        cursor: default;
+        transition: background-color 150ms, color 150ms;
+      }
+      .ref.lit {
+        background: var(--accent-soft);
+        color: var(--ink);
+      }
+      .rules {
+        list-style: none;
+        margin: 48px 0 0;
+        padding: 0;
+        display: grid;
+        gap: 32px;
+      }
+      @media (min-width: 768px) {
+        .rules {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+      .rules li {
+        padding-top: 20px;
+        border-top: 1px solid #3a342a;
+      }
+      .rules h3 {
+        margin-top: 8px;
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .rules p {
+        margin-top: 6px;
+        font-size: 15px;
+        color: var(--ink-muted);
+      }
+
+      /* ---------- output ---------- */
+      .output {
+        padding: 96px 0;
+      }
+      .output-row {
+        display: grid;
+        gap: 48px;
+        align-items: center;
+      }
+      @media (min-width: 1024px) {
+        .output-row {
+          grid-template-columns: 480px 1fr;
+          gap: 72px;
+        }
+      }
+      /* A second sheet behind the first, so it reads as paper, not a screenshot. */
+      .sheet-stack {
+        position: relative;
+        max-width: 480px;
+        margin: 0 auto;
+      }
+      .sheet-stack::before {
+        content: '';
+        position: absolute;
+        inset: 12px -12px -12px 12px;
+        background: var(--raised);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+      }
+      .sheet-stack :global(.sheet) {
+        position: relative;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        box-shadow: 0 24px 48px -24px rgb(60 45 20 / 0.35);
+      }
+      .output-text p:not(.label) {
+        margin-top: 16px;
+        max-width: 52ch;
+        font-size: 17px;
+        color: var(--fg-muted);
+      }
+      .facts {
+        margin: 32px 0 0;
+        display: grid;
+        border-top: 1px solid var(--line-strong);
+      }
+      .facts div {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--line);
+        font-size: 15px;
+      }
+      .facts dt {
+        color: var(--fg-muted);
+      }
+      .facts dd {
+        margin: 0;
+        font-weight: 500;
+        text-align: right;
+      }
+
+      /* ---------- run ---------- */
+      .run {
+        padding: 0 0 96px;
+      }
+      .run-row {
+        display: grid;
+        gap: 32px;
+        padding-top: 64px;
+        border-top: 1px solid var(--line-strong);
+      }
+      @media (min-width: 1024px) {
+        .run-row {
+          grid-template-columns: 1fr 1fr;
+          gap: 64px;
+          align-items: center;
+        }
+      }
+      .terminal {
+        margin: 0;
+        padding: 20px;
+        overflow-x: auto;
+        background: var(--ink);
+        color: var(--ink-fg);
+        border-radius: var(--radius);
+        font-size: 13px;
+        line-height: 1.8;
+      }
+      .t-dim {
+        color: var(--ink-muted);
+        user-select: none;
+      }
+      .t-ok {
+        color: #a9d4bb;
+      }
+
+      /* ---------- footer ---------- */
+      .foot {
+        border-top: 1px solid var(--line);
+        background: var(--raised);
+        font-size: 14px;
+        color: var(--fg-muted);
+      }
+      .foot-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px 24px;
+        padding-top: 24px;
+        padding-bottom: 24px;
+      }
+      .brand.small {
+        font-size: 15px;
+        color: var(--fg);
+      }
+      .brand.small img {
+        border-radius: 4px;
+      }
+    </style>
+  </body>
+</html>

@@ -14,6 +14,8 @@ import { MAX_BYTES } from '../../core/api';
 import { copyPrompt, openClaude } from '../../core/claude-draft';
 import { ago } from '../../core/dates';
 import {
+  AskReply,
+  AskTurn,
   Bullet,
   Experience,
   Project,
@@ -391,6 +393,94 @@ export class ProfilePage {
   revert(): void {
     this.text.set(this.saved());
     this.result.set(null);
+  }
+
+  // ---------- ask ----------
+  //
+  // The model proposes, it never writes. Each turn returns the profile as it
+  // would be, and confirming runs the ordinary save, so an Ask edit validates,
+  // takes the lock and lands in history like any other. Nothing here can do
+  // something the history drawer cannot undo.
+
+  readonly askOpen = signal(false);
+  readonly draft = signal('');
+  readonly turns = signal<AskTurn[]>([]);
+  readonly pending = signal<AskReply | null>(null);
+  readonly asking = signal(false);
+  readonly askError = signal<string | null>(null);
+
+  readonly canAsk = computed(() => !!this.draft().trim() && !this.asking());
+  /** Confirming replaces the buffer, so it waits for one nobody is mid-edit in. */
+  readonly canConfirm = computed(
+    () => !!this.pending()?.text && !this.dirty() && !this.saving() && !this.conflict(),
+  );
+
+  toggleAsk(): void {
+    this.askOpen.set(!this.askOpen());
+  }
+
+  send(): void {
+    if (!this.canAsk()) {
+      return;
+    }
+    const message = this.draft().trim();
+    this.asking.set(true);
+    this.askError.set(null);
+    this.service.ask(message, this.turns()).subscribe({
+      next: (reply) => {
+        this.asking.set(false);
+        this.draft.set('');
+        this.turns.update((turns) => [
+          ...turns,
+          { role: 'you' as const, text: message },
+          { role: 'model' as const, text: reply.reply },
+        ]);
+        this.pending.set(reply);
+      },
+      error: (error) => {
+        this.asking.set(false);
+        this.askError.set(
+          error?.error?.detail ?? 'Could not reach the model. Nothing was changed.',
+        );
+      },
+    });
+  }
+
+  /** The proposal is a scratchpad. Dropping it costs nothing, since it never saved. */
+  discard(): void {
+    this.turns.set([]);
+    this.pending.set(null);
+    this.draft.set('');
+    this.askError.set(null);
+  }
+
+  confirm(): void {
+    const proposed = this.pending()?.text;
+    if (!proposed || !this.canConfirm()) {
+      return;
+    }
+    this.saving.set(true);
+    this.service.save(proposed, this.updatedAt()).subscribe({
+      next: (source) => {
+        this.saving.set(false);
+        this.text.set(source.text);
+        this.saved.set(source.text);
+        this.updatedAt.set(source.updated_at);
+        this.version.set(source.version);
+        this.result.set(null);
+        this.discard();
+        this.toast.ok(`Saved as v${source.version}.`);
+      },
+      error: (error) => {
+        this.saving.set(false);
+        if (error.status === 409) {
+          this.conflict.set({ text: error.error?.text ?? '', updated_at: error.error?.updated_at });
+          this.askError.set('The profile moved on while you were talking. Reload and ask again.');
+        } else {
+          this.askError.set('Could not save that.');
+        }
+      },
+    });
   }
 
   // ---------- history ----------
