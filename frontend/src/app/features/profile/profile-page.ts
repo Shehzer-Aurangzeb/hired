@@ -14,6 +14,7 @@ import { MAX_BYTES } from '../../core/api';
 import { copyPrompt, openClaude } from '../../core/claude-draft';
 import { ago } from '../../core/dates';
 import {
+  AskChange,
   AskReply,
   AskTurn,
   Bullet,
@@ -28,7 +29,7 @@ import { ProfileService } from '../../core/profile.service';
 import { ToastService } from '../../core/toast.service';
 import { Icon } from '../../shared/icon';
 
-type Tab = 'browse' | 'edit';
+type Tab = 'browse' | 'ask' | 'edit' | 'history';
 
 /**
  * An employer, or the standalone Projects section wearing the same shape. The
@@ -244,12 +245,18 @@ export class ProfilePage {
     if (!identity) {
       return [];
     }
+    // An icon costs one tile; a spelled-out URL costs a third of the header.
+    // The label stays as the accessible name and the tooltip, so nothing is lost.
     return [
-      { text: identity.linkedin, url: identity.linkedin },
-      { text: identity.github, url: identity.github },
-      { text: identity.portfolio, url: identity.portfolio },
-      // The label is what the line is for; the URL behind it is rarely readable.
-      ...identity.links.map((link) => ({ text: link.label || link.url, url: link.url })),
+      { text: 'LinkedIn', icon: 'linkedin', brand: 'brand-linkedin', url: identity.linkedin },
+      { text: 'GitHub', icon: 'github', brand: 'brand-github', url: identity.github },
+      { text: 'Portfolio', icon: 'globe', brand: 'brand-web', url: identity.portfolio },
+      ...identity.links.map((link) => ({
+        text: link.label || link.url,
+        icon: 'globe',
+        brand: 'brand-web',
+        url: link.url,
+      })),
     ].filter((link) => !!link.url);
   });
 
@@ -288,7 +295,21 @@ export class ProfilePage {
 
   readonly updatedLabel = computed(() => ago(this.updatedAt()));
 
+  /** Shown in the tab bar, in the order they appear. */
+  readonly TABS: { id: Tab; label: string; icon: string }[] = [
+    { id: 'browse', label: 'Browse', icon: 'user' },
+    { id: 'ask', label: 'Ask', icon: 'claude' },
+    { id: 'edit', label: 'Source', icon: 'file-text' },
+    { id: 'history', label: 'History', icon: 'history' },
+  ];
+
+  readonly menuOpen = signal(false);
+
   setTab(tab: Tab): void {
+    this.menuOpen.set(false);
+    if (tab === 'history' && !this.versions().length) {
+      this.loadVersions();
+    }
     this.tab.set(tab);
     this.router.navigate([], {
       relativeTo: this.route,
@@ -355,7 +376,7 @@ export class ProfilePage {
         this.updatedAt.set(source.updated_at);
         this.version.set(source.version);
         this.toast.ok('Profile saved.');
-        if (this.historyOpen()) {
+        if (this.tab() === 'history') {
           this.loadVersions();
         }
       },
@@ -402,7 +423,12 @@ export class ProfilePage {
   // takes the lock and lands in history like any other. Nothing here can do
   // something the history drawer cannot undo.
 
-  readonly askOpen = signal(false);
+  /** Shown on an empty Ask panel. Two concrete sentences beat describing it. */
+  readonly ASK_EXAMPLES = [
+    'I used Redux on Union AI and Stanley Paden',
+    'Add i18next to the Frontend skills row',
+  ];
+
   readonly draft = signal('');
   readonly turns = signal<AskTurn[]>([]);
   readonly pending = signal<AskReply | null>(null);
@@ -415,10 +441,6 @@ export class ProfilePage {
     () => !!this.pending()?.text && !this.dirty() && !this.saving() && !this.conflict(),
   );
 
-  toggleAsk(): void {
-    this.askOpen.set(!this.askOpen());
-  }
-
   send(): void {
     if (!this.canAsk()) {
       return;
@@ -426,7 +448,7 @@ export class ProfilePage {
     const message = this.draft().trim();
     this.asking.set(true);
     this.askError.set(null);
-    this.service.ask(message, this.turns()).subscribe({
+    this.service.ask(message, this.turns(), this.pending()?.changes ?? []).subscribe({
       next: (reply) => {
         this.asking.set(false);
         this.draft.set('');
@@ -435,7 +457,9 @@ export class ProfilePage {
           { role: 'you' as const, text: message },
           { role: 'model' as const, text: reply.reply },
         ]);
-        this.pending.set(reply);
+        // A turn that only answers a question comes back with no proposal.
+        // Replacing the live one with it threw away what was already agreed.
+        this.pending.set(reply.text ? reply : { ...reply, ...this.keptProposal(reply) });
       },
       error: (error) => {
         this.asking.set(false);
@@ -444,6 +468,14 @@ export class ProfilePage {
         );
       },
     });
+  }
+
+  /** Keep the standing diff when this turn only asked something. */
+  private keptProposal(reply: AskReply): Partial<AskReply> {
+    const held = this.pending();
+    return held?.text
+      ? { text: held.text, diff: held.diff, added: held.added, removed: held.removed, changes: held.changes }
+      : {};
   }
 
   /** The proposal is a scratchpad. Dropping it costs nothing, since it never saved. */
@@ -491,7 +523,6 @@ export class ProfilePage {
   // door at the moment it is wanted. Restore is what writes, so restore is what
   // waits for clean.
 
-  readonly historyOpen = signal(false);
   readonly versions = signal<ProfileVersion[]>([]);
   readonly picked = signal<number | null>(null);
   readonly diff = signal<ProfileDiff | null>(null);
@@ -504,18 +535,6 @@ export class ProfilePage {
 
   /** What the next version will be called, for the confirmation copy. */
   readonly nextVersion = computed(() => (this.version() ?? 0) + 1);
-
-  toggleHistory(): void {
-    const open = !this.historyOpen();
-    this.historyOpen.set(open);
-    if (open) {
-      this.loadVersions();
-    } else {
-      this.picked.set(null);
-      this.diff.set(null);
-      this.confirming.set(null);
-    }
-  }
 
   loadVersions(): void {
     this.historyBusy.set(true);

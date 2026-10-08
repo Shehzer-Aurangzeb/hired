@@ -263,6 +263,34 @@ export interface ProfileVersion {
   current: boolean;
 }
 
+/** One side of the Ask conversation. The model is stateless, so this is what
+ *  gets replayed to it each turn. */
+export interface AskTurn {
+  role: 'you' | 'model';
+  text: string;
+}
+
+/** One edit the model proposed. Sent back each turn so it can see its own work. */
+export interface AskChange {
+  op: string;
+  target: string;
+  [field: string]: unknown;
+}
+
+/** A proposal, not a change. Nothing is saved until `text` goes through save(). */
+export interface AskReply {
+  reply: string;
+  questions: string[];
+  changes: AskChange[];
+  /** The profile as it would be, or null when nothing could be applied. */
+  text: string | null;
+  diff: DiffLine[];
+  added: number;
+  removed: number;
+  /** Changes the guard dropped, and why. Shown rather than swallowed. */
+  refused: string[];
+}
+
 export interface DiffLine {
   /** "+" added, "-" removed, " " context, "@" a jump between hunks. */
   op: string;

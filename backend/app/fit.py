@@ -114,6 +114,10 @@ Rules:
 - cannot_claim is binding. Never let a project count as evidence for something
   its cannot_claim excludes.
 - A gated skill counts only when a project evidencing it exists.
+- A skill_evidence entry with an empty evidence list is a tool they have used
+  but cannot tie to a listed project. Credit it as familiarity: enough that they
+  are not starting from nothing, never as depth, and never as the thing that
+  makes them a fit. Do not report it as a gap.
 - Compare years honestly. skill_evidence carries years and last_used; a posting
   asking for more than the profile shows is a gap even if the skill is listed.
 - Every gap must be one specific thing the posting requires and the profile does

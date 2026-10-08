@@ -18,6 +18,13 @@ export type IconName =
   | 'log-out'
   | 'eye'
   | 'eye-off'
+  | 'history'
+  | 'mail'
+  | 'linkedin'
+  | 'github'
+  | 'globe'
+  | 'upload'
+  | 'more'
   | 'claude';
 
 /**
@@ -111,6 +118,39 @@ export type IconName =
           <path d="M21 3v5h-5" />
           <path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-6.7-3L3 16" />
           <path d="M3 21v-5h5" />
+        }
+        @case ('mail') {
+          <rect x="2" y="4" width="20" height="16" rx="2" />
+          <path d="m2 7 10 6 10-6" />
+        }
+        @case ('linkedin') {
+          <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-10h4v1.5A4 4 0 0 1 16 8z" />
+          <rect x="2" y="9" width="4" height="12" />
+          <circle cx="4" cy="4" r="2" />
+        }
+        @case ('github') {
+          <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5a4.3 4.3 0 0 0-1.2-3 4 4 0 0 0-.1-3S17.5 2.5 15 4a13 13 0 0 0-6 0C6.5 2.5 5.3 3 5.3 3a4 4 0 0 0-.1 3A4.3 4.3 0 0 0 4 9c0 3.5 3 5.5 6 5.5a4.8 4.8 0 0 0-1 3.5v4" />
+          <path d="M9 18c-4 1.5-4-2-6-2" />
+        }
+        @case ('globe') {
+          <circle cx="12" cy="12" r="10" />
+          <path d="M2 12h20" />
+          <path d="M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20" />
+        }
+        @case ('upload') {
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <path d="m7 9 5-5 5 5" />
+          <path d="M12 4v12" />
+        }
+        @case ('history') {
+          <path d="M3 12a9 9 0 1 0 2.6-6.4L3 8" />
+          <path d="M3 3v5h5" />
+          <path d="M12 7v5l3 2" />
+        }
+        @case ('more') {
+          <circle cx="12" cy="5" r="1" fill="currentColor" />
+          <circle cx="12" cy="12" r="1" fill="currentColor" />
+          <circle cx="12" cy="19" r="1" fill="currentColor" />
         }
         @case ('search') {
           <circle cx="11" cy="11" r="8" />

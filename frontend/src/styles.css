@@ -123,6 +123,46 @@
            px-2 py-0.5 text-[11px] text-fg-muted whitespace-nowrap;
   }
 
+  /* A count that is worth a glance. Neutral ones stay quiet; a problem count
+     carries its own colour, so the eye lands on the two that need acting on
+     rather than sweeping four identical cards. */
+  .stat-chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1
+           text-[12px] font-medium whitespace-nowrap;
+  }
+
+  /* An icon that stands in for a link, with a hit area a finger can find.
+     Brand colour appears on hover rather than at rest: four saturated marks in
+     the header would outshout the name above them. */
+  .icon-link {
+    @apply text-fg-subtle inline-flex size-8 items-center justify-center
+           rounded-full transition-colors;
+  }
+
+  .icon-link:hover {
+    background: color-mix(in srgb, var(--brand, var(--color-fg)) 12%, transparent);
+    color: var(--brand, var(--color-fg));
+  }
+
+  /* A panel the eye has to find the edge of: the two-column split in Ask and
+     History reads as one surface when the divider is the same hairline used
+     inside cards. */
+  .panel {
+    @apply border-line-strong/45 rounded-card border;
+  }
+
+  /* Each service's own mark colour, applied through one variable so the hover
+     rule above does not need to know which link it is drawing. */
+  .brand-gmail { --brand: #c5221f; }
+  .brand-linkedin { --brand: #0a66c2; }
+  .brand-github { --brand: #1f2328; }
+  .brand-web { --brand: var(--color-accent); }
+
+  .menu-item {
+    @apply hover:bg-surface flex w-full cursor-pointer items-center gap-2.5
+           rounded px-2.5 py-2 text-left text-[13px] transition-colors;
+  }
+
   .badge {
     @apply inline-flex items-center gap-1 rounded px-1.5 py-px text-[10px]
            font-medium tracking-wide uppercase;

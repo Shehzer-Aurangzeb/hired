@@ -23,245 +23,173 @@
     </div>
   } @else if (resource.value(); as profile) {
     <!-- ============ who ============ -->
-    <header class="mb-3 flex flex-wrap items-start gap-x-4 gap-y-2">
-      <div class="min-w-0">
-        <h1 class="truncate text-lg font-semibold tracking-tight">{{ profile.identity.name }}</h1>
-        <!-- Separators come before each item and the first is hidden, so an
-             absent phone or portfolio cannot leave a dangling dot. -->
-        <p class="text-fg-muted flex flex-wrap items-center text-[13px]">
-          @if (profile.identity.location) {
-            <span class="contact-item">{{ profile.identity.location }}</span>
-          }
-          @if (profile.identity.email) {
-            <!-- prettier-ignore -->
-            <a class="contact-item link" [href]="'mailto:' + profile.identity.email">{{ profile.identity.email }}</a>
-          }
-          @if (profile.identity.phone) {
-            <!-- prettier-ignore -->
-            <a class="contact-item link" [href]="'tel:' + profile.identity.phone">{{ profile.identity.phone }}</a>
-          }
-        </p>
-        <p class="text-fg-subtle flex flex-wrap items-center text-[12px]">
-          @for (link of identityLinks(); track link.url) {
-            <!-- prettier-ignore -->
-            <a class="contact-item link" [href]="href(link.url)" target="_blank" rel="noopener noreferrer">{{ link.text }}</a>
-          }
-        </p>
-      </div>
+    <!--                                                                     -->
+    <!-- One band, not three. The four stat cards used to cost about 90px    -->
+    <!-- above every tab, for numbers nobody acts on from here; they are now -->
+    <!-- one line, and the two that are problems are the only ones that      -->
+    <!-- carry colour or a link.                                             -->
+    <!-- ===================================================================== -->
+    <header class="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <h1 class="truncate text-lg font-semibold tracking-tight">{{ profile.identity.name }}</h1>
 
-      <div class="ml-auto flex flex-wrap items-center gap-2">
-        @if (updatedLabel()) {
-          <span class="text-fg-subtle text-[12px]">Saved {{ updatedLabel() }}</span>
-        }
-        <button type="button" class="btn btn-outline" (click)="export()">
-          <app-icon name="download" [size]="15" />
-          Export
-        </button>
-        <label class="btn btn-outline">
-          <app-icon name="download" [size]="15" class="rotate-180" />
-          Import
-          <input
-            type="file"
-            accept=".md,.markdown,text/markdown,text/plain"
-            class="sr-only"
-            (change)="onFile($event)"
-          />
-        </label>
+      @if (version()) {
         <button
           type="button"
-          class="btn btn-ghost !px-2"
-          (click)="reload()"
-          aria-label="Re-read the parsed profile"
-          title="Re-read the parsed profile"
+          class="text-fg-muted hover:text-fg cursor-pointer text-[12px] underline decoration-dotted underline-offset-2"
+          (click)="setTab('history')"
         >
-          <app-icon name="refresh" [size]="15" />
+          v{{ version() }}@if (updatedLabel()) { · saved {{ updatedLabel() }} }
         </button>
+      }
+
+      <div class="ml-auto flex items-center gap-2">
+        <button type="button" class="btn btn-primary" (click)="setTab('ask')">
+          <app-icon name="claude" [size]="15" />
+          Ask
+        </button>
+
+        <!-- Export, import and reload are occasional. They were competing with
+             the one thing this screen is for. -->
+        <div class="relative">
+          <button
+            type="button"
+            class="btn btn-ghost !px-2"
+            aria-label="More actions"
+            [attr.aria-expanded]="menuOpen()"
+            (click)="menuOpen.set(!menuOpen())"
+          >
+            <app-icon name="more" [size]="16" />
+          </button>
+          @if (menuOpen()) {
+            <div
+              class="border-line bg-bg rounded-card absolute right-0 z-30 mt-1 w-48 border p-1 shadow-lg"
+              role="menu"
+            >
+              <button type="button" class="menu-item" (click)="menuOpen.set(false); export()">
+                <app-icon name="download" [size]="15" class="text-fg-subtle" />
+                Export markdown
+              </button>
+              <label class="menu-item">
+                <app-icon name="upload" [size]="15" class="text-fg-subtle" />
+                Import a file
+                <input
+                  type="file"
+                  accept=".md,.markdown,text/markdown,text/plain"
+                  class="sr-only"
+                  (change)="menuOpen.set(false); onFile($event)"
+                />
+              </label>
+              <div class="bg-line my-1 h-px"></div>
+              <button type="button" class="menu-item" (click)="menuOpen.set(false); reload()">
+                <app-icon name="refresh" [size]="15" class="text-fg-subtle" />
+                Re-read the profile
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="flex basis-full flex-wrap items-center gap-1.5">
+        @if (profile.identity.location) {
+          <span class="text-fg-muted mr-1 text-[12px]">{{ profile.identity.location }}</span>
+        }
+
+        @if (profile.identity.email) {
+          <a
+            class="icon-link brand-gmail"
+            [href]="'mailto:' + profile.identity.email"
+            [title]="profile.identity.email"
+            [attr.aria-label]="'Email ' + profile.identity.email"
+          >
+            <app-icon name="mail" [size]="15" />
+          </a>
+        }
+        @for (link of identityLinks(); track link.url) {
+          <a
+            class="icon-link"
+            [class]="link.brand"
+            [href]="href(link.url)"
+            target="_blank"
+            rel="noopener noreferrer"
+            [title]="link.text"
+            [attr.aria-label]="link.text"
+          >
+            <app-icon [name]="$any(link.icon)" [size]="15" />
+          </a>
+        }
+
+        <span class="bg-line mx-1 h-4 w-px"></span>
+
+        <span class="stat-chip bg-surface text-fg-muted">
+          <span class="tabular font-semibold">{{ health().projects }}</span> projects
+        </span>
+        <span class="stat-chip bg-surface text-fg-muted">
+          <span class="tabular font-semibold">{{ health().bullets }}</span> bullets
+        </span>
+        @if (unresolved().length) {
+          <button
+            type="button"
+            class="stat-chip bg-danger-soft text-danger hover:bg-danger/15 cursor-pointer"
+            (click)="setTab('browse')"
+          >
+            <app-icon name="alert" [size]="13" />
+            <span class="tabular font-semibold">{{ unresolved().length }}</span> to verify
+          </button>
+        }
+        @if (health().missing) {
+          <button
+            type="button"
+            class="stat-chip bg-warn-soft text-warn hover:bg-warn/15 cursor-pointer"
+            (click)="setTab('browse')"
+          >
+            <app-icon name="ban" [size]="13" />
+            <span class="tabular font-semibold">{{ health().missing }}</span> no boundary
+          </button>
+        }
+        @if (!unresolved().length && !health().missing) {
+          <span class="stat-chip bg-accent-soft text-accent">
+            <app-icon name="check" [size]="13" />
+            nothing outstanding
+          </span>
+        }
       </div>
     </header>
 
-    <!-- ============ health ============ -->
-    <div class="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-      <div class="stat-lg">
-        <p class="stat-value text-fg">{{ health().projects }}</p>
-        <p class="stat-label">Projects</p>
-      </div>
-      <div class="stat-lg">
-        <p class="stat-value text-fg">{{ health().bullets }}</p>
-        <p class="stat-label">Bullets</p>
-      </div>
-      <div class="stat-lg" [class]="unresolved().length ? 'border-danger/40 bg-danger-soft' : ''">
-        <p class="stat-value" [class]="unresolved().length ? 'text-danger' : 'text-fg-subtle'">
-          {{ unresolved().length }}
-        </p>
-        <p class="stat-label">To verify</p>
-      </div>
-      <div class="stat-lg" [class]="health().missing ? 'border-warn/50 bg-warn-soft' : ''">
-        <p class="stat-value" [class]="health().missing ? 'text-warn' : 'text-fg-subtle'">
-          {{ health().missing }}
-        </p>
-        <p class="stat-label">No boundary</p>
-      </div>
-    </div>
-
-    <!-- ============ ask ============ -->
+    <!-- ============ tabs ============ -->
     <!--                                                                     -->
-    <!-- The model proposes and never writes. Every turn comes back as the   -->
-    <!-- profile as it would be, shown as a diff, and confirming runs the    -->
-    <!-- ordinary save, so nothing here escapes validation, the lock or      -->
-    <!-- history. Keep talking until the diff is right.                      -->
+    <!-- Four ways in, not two with things bolted on. Ask is a third way to  -->
+    <!-- edit and History a second way to read, so both are destinations     -->
+    <!-- with names rather than a dashed bar and a drawer nobody found.      -->
+    <!-- Sticky, so the header scrolls away and the tab keeps its space.     -->
     <!-- ===================================================================== -->
-    <section class="mb-4">
-      @if (!askOpen()) {
+    <div
+      class="border-line bg-bg sticky top-0 z-20 mb-3 flex items-center gap-1 overflow-x-auto border-b"
+      role="tablist"
+    >
+      @for (item of TABS; track item.id) {
         <button
           type="button"
-          class="border-line hover:border-ink/30 text-fg-muted hover:text-fg w-full rounded-card border border-dashed px-3 py-2.5 text-left text-[13px] transition-colors"
-          (click)="toggleAsk()"
+          role="tab"
+          [attr.aria-selected]="tab() === item.id"
+          [attr.aria-controls]="'panel-' + item.id"
+          class="-mb-px flex min-h-11 cursor-pointer items-center gap-1.5 border-b-2 px-3 text-[13px] font-medium whitespace-nowrap transition-colors duration-150"
+          [class]="
+            tab() === item.id
+              ? 'border-ink text-fg'
+              : 'text-fg-muted hover:text-fg border-transparent'
+          "
+          (click)="setTab(item.id)"
         >
-          Describe a change in plain words, and check the diff before it saves.
+          <app-icon [name]="$any(item.icon)" [size]="15" />
+          {{ item.label }}
+          @if (item.id === 'edit' && dirty()) {
+            <span class="bg-warn size-1.5 rounded-full" aria-label="Unsaved changes"></span>
+          }
+          @if (item.id === 'ask' && pending()?.text) {
+            <span class="bg-accent size-1.5 rounded-full" aria-label="A proposal is waiting"></span>
+          }
         </button>
-      } @else {
-        <div class="card p-3.5">
-          <header class="mb-2.5 flex items-center gap-2">
-            <h2 class="text-[13px] font-semibold tracking-tight">Ask</h2>
-            <span class="text-fg-subtle text-[11px]">Nothing saves until you confirm.</span>
-            <button type="button" class="btn btn-ghost ml-auto !px-2" (click)="toggleAsk()">
-              <app-icon name="x" [size]="15" />
-            </button>
-          </header>
-
-          @for (turn of turns(); track $index) {
-            <p
-              class="mb-1.5 text-[13px] leading-relaxed"
-              [class]="turn.role === 'you' ? 'text-fg' : 'text-fg-muted'"
-            >
-              <span class="text-fg-subtle mr-1.5 text-[11px] uppercase">{{ turn.role }}</span>
-              {{ turn.text }}
-            </p>
-          }
-
-          @if (pending(); as reply) {
-            @for (question of reply.questions; track question) {
-              <p class="border-warn/50 bg-warn-soft text-warn rounded-card mt-2 border px-3 py-2 text-[12px]">
-                {{ question }}
-              </p>
-            }
-
-            @for (why of reply.refused; track why) {
-              <p class="border-danger/40 bg-danger-soft text-danger rounded-card mt-2 flex items-start gap-2 border px-3 py-2 text-[12px]">
-                <app-icon name="ban" [size]="14" class="mt-0.5 shrink-0" />
-                {{ why }}
-              </p>
-            }
-
-            @if (reply.text) {
-              <div class="border-line rounded-card mt-2.5 border p-2">
-                <p class="text-fg-muted mb-2 text-[11px]">
-                  <span class="text-accent">{{ reply.added }} added</span>,
-                  <span class="text-danger">{{ reply.removed }} removed</span>.
-                </p>
-                <pre class="mono max-h-64 overflow-auto text-[11px] leading-relaxed"><!--
-             -->@for (line of reply.diff; track $index) {<!--
-               --><div
-                    [class]="
-                      line.op === '+'
-                        ? 'bg-accent-soft text-accent'
-                        : line.op === '-'
-                          ? 'bg-danger-soft text-danger'
-                          : line.op === '@'
-                            ? 'border-line text-fg-subtle my-1.5 border-t pt-1.5'
-                            : 'text-fg-muted'
-                    "
-                  >{{ line.text }}</div><!--
-             -->}</pre>
-              </div>
-            }
-          }
-
-          @if (askError()) {
-            <p class="border-danger/50 bg-danger-soft text-danger rounded-card mt-2 border px-3 py-2 text-[12px]" role="alert">
-              {{ askError() }}
-            </p>
-          }
-
-          <div class="mt-2.5 flex flex-wrap items-center gap-2">
-            <input
-              type="text"
-              class="border-line bg-bg focus:border-ink/40 min-w-0 flex-1 rounded-card border px-3 py-2 text-[13px] outline-none"
-              [placeholder]="
-                turns().length
-                  ? 'Correct it, or add more'
-                  : 'I used Redux on Union AI and Stanley Paden'
-              "
-              [value]="draft()"
-              (input)="draft.set($any($event.target).value)"
-              (keydown.enter)="send()"
-              [disabled]="asking()"
-            />
-            <button type="button" class="btn btn-outline" [disabled]="!canAsk()" (click)="send()">
-              @if (asking()) {
-                <app-icon name="refresh" [size]="15" class="animate-spin" />
-                Thinking
-              } @else {
-                Send
-              }
-            </button>
-
-            @if (pending()?.text) {
-              <button
-                type="button"
-                class="btn btn-primary"
-                [disabled]="!canConfirm()"
-                (click)="confirm()"
-              >
-                Confirm and save
-              </button>
-            }
-            @if (turns().length) {
-              <button type="button" class="btn btn-ghost" (click)="discard()">Discard</button>
-            }
-          </div>
-
-          @if (pending()?.text && dirty()) {
-            <p class="text-fg-subtle mt-2 text-[11px]">
-              You have unsaved edits in the source. Save or revert them before confirming, or
-              one would overwrite the other.
-            </p>
-          }
-        </div>
       }
-    </section>
-
-    <!-- ============ tabs ============ -->
-    <div class="border-line mb-4 flex items-center gap-1 border-b" role="tablist">
-      <button
-        type="button"
-        role="tab"
-        [attr.aria-selected]="tab() === 'browse'"
-        class="-mb-px cursor-pointer border-b-2 px-3 py-2 text-[13px] font-medium transition-colors duration-150"
-        [class]="
-          tab() === 'browse'
-            ? 'border-ink text-fg'
-            : 'text-fg-muted hover:text-fg border-transparent'
-        "
-        (click)="setTab('browse')"
-      >
-        Browse
-      </button>
-      <button
-        type="button"
-        role="tab"
-        [attr.aria-selected]="tab() === 'edit'"
-        class="-mb-px flex cursor-pointer items-center gap-1.5 border-b-2 px-3 py-2 text-[13px] font-medium transition-colors duration-150"
-        [class]="
-          tab() === 'edit' ? 'border-ink text-fg' : 'text-fg-muted hover:text-fg border-transparent'
-        "
-        (click)="setTab('edit')"
-      >
-        Edit source
-        @if (dirty()) {
-          <span class="bg-warn size-1.5 rounded-full" aria-label="Unsaved changes"></span>
-        }
-      </button>
     </div>
 
     @switch (tab()) {
@@ -363,22 +291,50 @@
             }
 
             <!-- titles and summaries -->
+            <!-- titles, skills and summaries
+                 Skills sits under Title variants rather than starting a new row,
+                 because the summaries column runs long and left the space beside
+                 it empty. Two columns that fill, instead of one that waits. -->
             <div class="mb-3 grid gap-3 md:grid-cols-2 md:items-start">
+              <div class="flex flex-col gap-3">
+                <section class="card p-3.5">
+                  <h3 class="section-title mb-2">Title variants</h3>
+                  @for (title of profile.titles; track title.id) {
+                    <div class="mb-1.5">
+                      <p class="text-[13px]">
+                        <span class="mono text-fg-subtle mr-1">{{ title.id }}</span>
+                        {{ title.text }}
+                      </p>
+                      @if (title.use_when) {
+                        <p class="text-fg-subtle text-[11px]">Use when: {{ title.use_when }}</p>
+                      }
+                    </div>
+                  }
+                </section>
+
               <section class="card p-3.5">
-                <h3 class="section-title mb-2">Title variants</h3>
-                @for (title of profile.titles; track title.id) {
-                  <div class="mb-1.5">
-                    <p class="text-[13px]">
-                      <span class="mono text-fg-subtle mr-1">{{ title.id }}</span>
-                      {{ title.text }}
-                    </p>
-                    @if (title.use_when) {
-                      <p class="text-fg-subtle text-[11px]">Use when: {{ title.use_when }}</p>
+                <h3 class="section-title mb-2">Skills</h3>
+                @for (line of profile.skills; track line.line) {
+                  <div class="mb-2 flex flex-wrap items-baseline gap-1.5">
+                    <span class="w-20 shrink-0 text-[12px] font-medium">{{ line.line }}</span>
+                    @for (item of line.items; track item) {
+                      <span
+                        class="chip"
+                        [class]="line.gated.includes(item) ? 'border-warn/50 text-warn' : ''"
+                      >
+                        {{ item }}
+                        @if (line.gated.includes(item)) {
+                          <app-icon name="alert" [size]="11" />
+                        }
+                      </span>
                     }
                   </div>
                 }
+                <p class="text-fg-subtle mt-2 text-[11px]">
+                  Amber chips are gated: they go on the page only when their evidence project does.
+                </p>
               </section>
-
+              </div>
               <section class="card p-3.5">
                 <h3 class="section-title mb-2">Summaries</h3>
                 @for (summary of profile.summaries; track summary.id) {
@@ -399,30 +355,6 @@
                 }
               </section>
             </div>
-
-            <!-- skills -->
-            <section class="card mb-3 p-3.5">
-              <h3 class="section-title mb-2">Skills</h3>
-              @for (line of profile.skills; track line.line) {
-                <div class="mb-2 flex flex-wrap items-baseline gap-1.5">
-                  <span class="w-20 shrink-0 text-[12px] font-medium">{{ line.line }}</span>
-                  @for (item of line.items; track item) {
-                    <span
-                      class="chip"
-                      [class]="line.gated.includes(item) ? 'border-warn/50 text-warn' : ''"
-                    >
-                      {{ item }}
-                      @if (line.gated.includes(item)) {
-                        <app-icon name="alert" [size]="11" />
-                      }
-                    </span>
-                  }
-                </div>
-              }
-              <p class="text-fg-subtle mt-2 text-[11px]">
-                Amber chips are gated: they go on the page only when their evidence project does.
-              </p>
-            </section>
 
             <!-- projects -->
             @for (group of groups(); track group.name) {
@@ -989,7 +921,335 @@
       <!-- ================================================================ -->
       <!-- Edit source                                                       -->
       <!-- ================================================================ -->
+      <!-- ================================================================ -->
+      <!-- Ask                                                              -->
+      <!--                                                                  -->
+      <!-- The model proposes and never writes. Each turn returns the       -->
+      <!-- profile as it would be, shown as a diff, and confirming runs the -->
+      <!-- ordinary save, so nothing here escapes validation, the lock or   -->
+      <!-- history. Conversation left, diff right: the diff is the thing    -->
+      <!-- being decided on, so it gets the width.                          -->
+      <!-- ================================================================ -->
+      @case ('ask') {
+        <div id="panel-ask" role="tabpanel" class="grid gap-3 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+          <section class="flex min-h-[26rem] flex-col lg:min-h-[32rem]">
+            @if (!turns().length) {
+              <div class="text-fg-muted mb-3 text-[13px] leading-relaxed">
+                <p class="text-fg mb-1.5 flex items-center gap-1.5 font-medium">
+                  <app-icon name="claude" [size]="15" class="text-claude" />
+                  Describe a change and check the diff.
+                </p>
+                <p>Nothing is saved until you confirm, and every save can be undone from History.</p>
+                <p class="text-fg-subtle mt-2.5 mb-1 text-[11px] tracking-wide uppercase">Try</p>
+                @for (example of ASK_EXAMPLES; track example) {
+                  <button
+                    type="button"
+                    class="border-line hover:border-ink/30 mb-1.5 block w-full cursor-pointer rounded-card border px-2.5 py-2 text-left text-[12px] transition-colors"
+                    (click)="draft.set(example); send()"
+                  >
+                    {{ example }}
+                  </button>
+                }
+              </div>
+            }
+
+            <div class="min-h-0 flex-1 overflow-y-auto">
+              @for (turn of turns(); track $index) {
+                <div
+                  class="rounded-card mb-2 px-3 py-2 text-[13px] leading-relaxed"
+                  [class]="
+                    turn.role === 'you'
+                      ? 'bg-surface text-fg'
+                      : 'bg-claude/8 border-claude/25 text-fg border'
+                  "
+                >
+                  <span
+                    class="mb-0.5 block text-[10px] font-semibold tracking-wide uppercase"
+                    [class]="turn.role === 'you' ? 'text-fg-subtle' : 'text-claude'"
+                  >
+                    {{ turn.role === 'you' ? 'You' : 'hired' }}
+                  </span>
+                  {{ turn.text }}
+                </div>
+              }
+
+              @if (pending(); as reply) {
+                @for (question of reply.questions; track question) {
+                  <p class="border-warn/50 bg-warn-soft text-warn rounded-card mb-2 border px-3 py-2 text-[12px]">
+                    {{ question }}
+                  </p>
+                }
+                @for (why of reply.refused; track why) {
+                  <p class="border-danger/40 bg-danger-soft text-danger rounded-card mb-2 flex items-start gap-2 border px-3 py-2 text-[12px]">
+                    <app-icon name="ban" [size]="14" class="mt-0.5 shrink-0" />
+                    {{ why }}
+                  </p>
+                }
+              }
+
+              @if (askError()) {
+                <p class="border-danger/50 bg-danger-soft text-danger rounded-card mb-2 border px-3 py-2 text-[12px]" role="alert">
+                  {{ askError() }}
+                </p>
+              }
+            </div>
+
+            <!-- The composer: one bordered field that owns the send button, so it
+                 reads as somewhere to type rather than an input with a button
+                 parked beside it. -->
+            <div class="mt-2.5">
+              <label class="sr-only" for="ask-input">
+                {{ turns().length ? 'Correct it, or add more' : 'Describe what changed' }}
+              </label>
+              <div
+                class="border-line-strong/50 bg-raised focus-within:border-claude/60 focus-within:ring-claude/15 rounded-card flex items-end gap-1 border p-1.5 transition-colors focus-within:ring-2"
+              >
+                <textarea
+                  id="ask-input"
+                  rows="2"
+                  class="text-fg placeholder:text-fg-subtle max-h-32 min-h-11 w-full resize-none bg-transparent px-2 py-1.5 text-[13px] leading-relaxed outline-none"
+                  [placeholder]="
+                    turns().length
+                      ? 'Correct it, or add more'
+                      : 'I used Redux on Union AI and Stanley Paden'
+                  "
+                  [value]="draft()"
+                  (input)="draft.set($any($event.target).value)"
+                  (keydown.enter)="$event.preventDefault(); send()"
+                  [disabled]="asking()"
+                ></textarea>
+                <button
+                  type="button"
+                  class="bg-claude hover:bg-claude-hover text-ink-fg flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                  [disabled]="!canAsk()"
+                  (click)="send()"
+                  [attr.aria-label]="asking() ? 'Thinking' : 'Send'"
+                >
+                  @if (asking()) {
+                    <app-icon name="refresh" [size]="16" class="animate-spin" />
+                  } @else {
+                    <app-icon name="arrow-left" [size]="16" class="rotate-180" />
+                  }
+                </button>
+              </div>
+              <div class="mt-1.5 flex items-center gap-2">
+                <p class="text-fg-subtle text-[11px]">Enter to send</p>
+                @if (turns().length) {
+                  <button type="button" class="btn btn-ghost ml-auto !px-2 !py-1" (click)="discard()">
+                    Start over
+                  </button>
+                }
+              </div>
+            </div>
+          </section>
+
+          <section class="min-w-0">
+            @if (pending()?.text; as proposed) {
+              <div class="panel">
+                <header class="border-line bg-surface/60 flex flex-wrap items-center gap-2 border-b px-3 py-2">
+                  <p class="text-[12px] font-medium">What would change</p>
+                  <span class="stat-chip bg-accent-soft text-accent !py-0.5">
+                    +{{ pending()!.added }}
+                  </span>
+                  <span class="stat-chip bg-danger-soft text-danger !py-0.5">
+                    -{{ pending()!.removed }}
+                  </span>
+                  <button
+                    type="button"
+                    class="btn btn-primary ml-auto"
+                    [disabled]="!canConfirm()"
+                    (click)="confirm()"
+                  >
+                    @if (saving()) {
+                      <app-icon name="refresh" [size]="15" class="animate-spin" />
+                      Saving
+                    } @else {
+                      Confirm and save
+                    }
+                  </button>
+                </header>
+                @if (dirty()) {
+                  <p class="border-warn/50 bg-warn-soft text-warn border-b px-3 py-2 text-[12px]">
+                    Unsaved edits in Source. Save or revert them first, or one would overwrite
+                    the other.
+                  </p>
+                }
+                <pre
+                  class="mono max-h-[28rem] overflow-auto px-3 py-2 text-[11px] leading-relaxed"
+                  role="region"
+                  aria-label="Proposed changes, line by line"
+                ><!--
+             -->@for (line of pending()!.diff; track $index) {<!--
+               --><div
+                    [class]="
+                      line.op === '+'
+                        ? 'bg-accent-soft text-accent'
+                        : line.op === '-'
+                          ? 'bg-danger-soft text-danger'
+                          : line.op === '@'
+                            ? 'border-line text-fg-subtle my-1.5 border-t pt-1.5'
+                            : 'text-fg-muted'
+                    "
+                  >{{ line.text }}</div><!--
+             -->}</pre>
+              </div>
+            } @else {
+              <div class="border-line-strong/40 text-fg-subtle rounded-card flex min-h-[20rem] items-center justify-center border border-dashed px-6 text-center text-[12px]">
+                The diff appears here once there is something to decide on.
+              </div>
+            }
+          </section>
+        </div>
+      }
+
+      <!-- ================================================================ -->
+      <!-- History                                                          -->
+      <!--                                                                  -->
+      <!-- Every save appends a version. Restoring appends too, so the      -->
+      <!-- mistake it undoes stays on record. Viewing works mid-edit on     -->
+      <!-- purpose: a broken profile cannot be saved, and "what did this    -->
+      <!-- look like before" is why anyone opens this.                      -->
+      <!-- ================================================================ -->
+      @case ('history') {
+        <div id="panel-history" role="tabpanel" class="grid gap-3 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+          <section>
+            <header class="mb-2 flex items-center gap-2">
+              <h2 class="text-[13px] font-semibold tracking-tight">Versions</h2>
+              @if (historyBusy()) {
+                <app-icon name="refresh" [size]="14" class="text-fg-subtle animate-spin" />
+              }
+              <button type="button" class="btn btn-ghost ml-auto !px-2" (click)="loadVersions()">
+                <app-icon name="refresh" [size]="15" />
+              </button>
+            </header>
+
+            @if (historyError()) {
+              <p class="border-danger/50 bg-danger-soft text-danger rounded-card mb-2 border px-3 py-2 text-[12px]" role="alert">
+                {{ historyError() }}
+              </p>
+            }
+
+            @for (entry of versions(); track entry.version) {
+              <button
+                type="button"
+                class="border-line hover:border-ink/30 rounded-card mb-1.5 flex min-h-11 w-full cursor-pointer flex-col justify-center border px-3 py-2 text-left transition-colors"
+                [class]="
+                  picked() === entry.version
+                    ? 'border-ink/40 bg-surface'
+                    : entry.current
+                      ? 'border-accent/40 bg-accent-soft/40'
+                      : ''
+                "
+                (click)="pick(entry.version)"
+              >
+                <span class="flex items-baseline gap-2">
+                  <span class="text-[13px] font-medium">v{{ entry.version }}</span>
+                  @if (entry.current) {
+                    <span class="badge bg-accent-soft text-accent">current</span>
+                  }
+                  <span class="text-fg-subtle ml-auto text-[11px]">{{ since(entry.updated_at) }}</span>
+                </span>
+                <span class="text-fg-subtle tabular text-[11px]">{{ entry.chars }} chars</span>
+              </button>
+            } @empty {
+              @if (!historyBusy()) {
+                <p class="text-fg-subtle text-[12px]">Nothing saved yet.</p>
+              }
+            }
+
+            <p class="text-fg-subtle mt-2 text-[11px] leading-relaxed">
+              Kept for 60 days. The last 5 stay however old they are, so there is always
+              something to go back to.
+            </p>
+          </section>
+
+          <section class="min-w-0">
+            @if (picked() && diff(); as d) {
+              <div class="panel">
+                <header class="border-line bg-surface/60 flex flex-wrap items-center gap-2 border-b px-3 py-2">
+                  <p class="text-[12px] font-medium">Restoring v{{ d.to_version }} would change</p>
+                  <span class="stat-chip bg-accent-soft text-accent !py-0.5">+{{ d.added }}</span>
+                  <span class="stat-chip bg-danger-soft text-danger !py-0.5">-{{ d.removed }}</span>
+                  @if (confirming() === d.to_version) {
+                    <span class="ml-auto flex items-center gap-2">
+                      <span class="text-fg-muted text-[11px]">
+                        Appends as v{{ nextVersion() }}. Nothing is deleted.
+                      </span>
+                      <button
+                        type="button"
+                        class="btn btn-primary"
+                        [disabled]="historyBusy()"
+                        (click)="restore(d.to_version)"
+                      >
+                        Restore as v{{ nextVersion() }}
+                      </button>
+                      <button type="button" class="btn btn-ghost" (click)="confirming.set(null)">
+                        Cancel
+                      </button>
+                    </span>
+                  } @else {
+                    <button
+                      type="button"
+                      class="btn btn-outline ml-auto"
+                      [disabled]="!canRestore() || !d.lines.length"
+                      (click)="confirming.set(d.to_version)"
+                    >
+                      <app-icon name="arrow-left" [size]="14" />
+                      Restore this version
+                    </button>
+                    @if (!canRestore()) {
+                      <span class="text-fg-subtle text-[11px]">Save or revert Source first.</span>
+                    }
+                  }
+                </header>
+
+                @if (dirty()) {
+                  <p class="border-warn/50 bg-warn-soft text-warn border-b px-3 py-2 text-[12px]">
+                    Comparing against saved v{{ version() }}. You have unsaved edits in Source.
+                  </p>
+                }
+
+                @if (!d.lines.length) {
+                  <p class="text-fg-subtle px-3 py-4 text-[12px]">
+                    Identical to the current profile.
+                  </p>
+                } @else {
+                  <pre
+                    class="mono max-h-[32rem] overflow-auto px-3 py-2 text-[11px] leading-relaxed"
+                    role="region"
+                    aria-label="Difference from the current profile, line by line"
+                  ><!--
+               -->@for (line of d.lines; track $index) {<!--
+                 --><div
+                      [class]="
+                        line.op === '+'
+                          ? 'bg-accent-soft text-accent'
+                          : line.op === '-'
+                            ? 'bg-danger-soft text-danger'
+                            : line.op === '@'
+                              ? 'border-line text-fg-subtle my-1.5 border-t pt-1.5'
+                              : 'text-fg-muted'
+                      "
+                    >{{ line.text }}</div><!--
+               -->}</pre>
+                }
+              </div>
+            } @else {
+              <div class="border-line-strong/40 text-fg-subtle rounded-card flex min-h-[20rem] items-center justify-center border border-dashed px-6 text-center text-[12px]">
+                Pick a version to see what restoring it would change.
+              </div>
+            }
+          </section>
+        </div>
+      }
+
       @case ('edit') {
+        <div
+          id="panel-edit"
+          role="tabpanel"
+          class="flex min-h-0 flex-col"
+          style="height: calc(100dvh - 11rem)"
+        >
         @if (conflict()) {
           <div class="border-warn/50 bg-warn-soft rounded-card mb-3 border px-3 py-2.5" role="alert">
             <p class="text-warn flex items-center gap-2 text-[13px] font-medium">
@@ -1063,8 +1323,8 @@
           }
         }
 
-        <section class="card overflow-hidden">
-          <header class="card-head">
+        <section class="card flex min-h-0 flex-1 flex-col overflow-hidden">
+          <header class="card-head shrink-0">
             <h2 class="section-title">master.md</h2>
             @if (dirty()) {
               <span class="badge bg-warn-soft text-warn">Unsaved</span>
@@ -1083,7 +1343,7 @@
           } @else {
             <!-- Gutter and textarea scroll as one. Both are 19px lines so the
                  numbers stay next to their line without measuring anything. -->
-            <div class="flex max-h-[60vh] min-h-[320px] overflow-hidden">
+            <div class="flex min-h-0 flex-1 overflow-hidden">
               <div
                 #gutter
                 class="mono border-line bg-surface text-fg-subtle shrink-0 overflow-hidden border-r py-3 text-right leading-[19px] select-none"
@@ -1109,46 +1369,54 @@
           }
         </section>
 
-        <div class="mt-3 flex flex-wrap items-center gap-2">
-          <p class="text-fg-subtle text-[12px]">
+        <div class="mt-2.5 flex shrink-0 flex-wrap items-center gap-2">
+          <p
+            class="stat-chip"
+            [class]="
+              !dirty()
+                ? 'bg-surface text-fg-muted'
+                : !result()
+                  ? 'bg-warn-soft text-warn'
+                  : !result()?.ok
+                    ? 'bg-danger-soft text-danger'
+                    : 'bg-accent-soft text-accent'
+            "
+          >
             @if (!dirty()) {
-              No changes.
+              No changes
             } @else if (!result()) {
-              Check it before saving.
+              <app-icon name="alert" [size]="13" />
+              Check it before saving
             } @else if (!result()?.ok) {
-              Fix the errors above, then check again.
+              <app-icon name="ban" [size]="13" />
+              Fix the errors above
             } @else {
-              Ready to save.
+              <app-icon name="check" [size]="13" />
+              Ready to save
             }
           </p>
 
-          <button type="button" class="btn btn-ghost" (click)="draftWithClaude(false)">
+          <button
+            type="button"
+            class="btn btn-ghost"
+            title="The prompt is too long for a link, so it goes to your clipboard. Paste it as your first message."
+            (click)="draftWithClaude(false)"
+          >
             <app-icon [name]="copied() ? 'check' : 'claude'" [size]="15" />
-            {{ copied() ? 'Prompt copied' : 'Copy prompt only' }}
+            {{ copied() ? 'Copied' : 'Copy prompt' }}
           </button>
-          <button type="button" class="btn btn-claude" (click)="draftWithClaude(true)">
+          <button
+            type="button"
+            class="btn btn-claude"
+            title="Copies the prompt and opens Claude. Paste what it returns back over the source here."
+            (click)="draftWithClaude(true)"
+          >
             <app-icon name="claude" [size]="15" />
-            Copy and open Claude
+            Open Claude
           </button>
-          <p class="text-fg-subtle basis-full text-[12px]">
-            The prompt is too long for a link, so it goes to your clipboard. Paste it as your
-            first message, then paste what Claude returns back over the source here.
-          </p>
-
-          @if (version()) {
-            <button
-              type="button"
-              class="btn btn-ghost"
-              [class]="historyOpen() ? 'text-fg' : 'text-fg-muted'"
-              (click)="toggleHistory()"
-            >
-              <app-icon name="refresh" [size]="15" />
-              v{{ version() }} · history
-            </button>
-          }
 
           @if (dirty()) {
-            <button type="button" class="btn btn-ghost" (click)="revert()">
+            <button type="button" class="btn btn-ghost ml-auto" (click)="revert()">
               <app-icon name="arrow-left" [size]="15" />
               Revert
             </button>
@@ -1156,7 +1424,8 @@
 
           <button
             type="button"
-            class="btn btn-outline ml-auto"
+            class="btn btn-outline"
+            [class]="dirty() ? '' : 'ml-auto'"
             [disabled]="checking() || !text().trim()"
             (click)="check()"
           >
@@ -1178,154 +1447,8 @@
             }
           </button>
         </div>
+        </div>
       }
     }
   }
 </div>
-
-<!-- ================================================================== -->
-<!-- History                                                            -->
-<!--                                                                    -->
-<!-- Viewing works mid-edit. Restore does not: it replaces the buffer,  -->
-<!-- so it waits for a clean one. A broken profile cannot be saved, and -->
-<!-- "what did this look like before" is the reason people open this,   -->
-<!-- so gating the whole drawer would lock the door at the worst moment.-->
-<!-- ================================================================== -->
-@if (historyOpen()) {
-  <div
-    class="bg-ink/20 fixed inset-0 z-40"
-    (click)="toggleHistory()"
-    aria-hidden="true"
-  ></div>
-
-  <aside
-    class="border-line bg-bg fixed top-0 right-0 z-50 flex h-full w-full max-w-md flex-col border-l shadow-xl"
-    role="dialog"
-    aria-label="Profile history"
-  >
-    <header class="border-line flex items-center gap-2 border-b px-4 py-3">
-      <h2 class="text-[13px] font-semibold tracking-tight">History</h2>
-      @if (historyBusy()) {
-        <app-icon name="refresh" [size]="14" class="text-fg-subtle animate-spin" />
-      }
-      <button type="button" class="btn btn-ghost ml-auto !px-2" (click)="toggleHistory()">
-        <app-icon name="x" [size]="16" />
-      </button>
-    </header>
-
-    @if (historyError()) {
-      <p
-        class="border-danger/50 bg-danger-soft text-danger m-3 rounded-card border px-3 py-2 text-[12px]"
-        role="alert"
-      >
-        {{ historyError() }}
-      </p>
-    }
-
-    @if (dirty()) {
-      <p class="border-warn/50 bg-warn-soft text-warn m-3 rounded-card border px-3 py-2 text-[12px]">
-        You have unsaved edits. Comparisons are against saved v{{ version() }}, and restoring
-        waits until you save or revert.
-      </p>
-    }
-
-    <div class="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-      @for (entry of versions(); track entry.version) {
-        <div class="mb-1.5">
-          <button
-            type="button"
-            class="border-line hover:border-ink/30 w-full rounded-card border px-3 py-2 text-left transition-colors"
-            [class]="picked() === entry.version ? 'border-ink/40 bg-surface' : ''"
-            (click)="pick(entry.version)"
-          >
-            <span class="flex items-baseline gap-2">
-              <span class="text-[13px] font-medium">v{{ entry.version }}</span>
-              @if (entry.current) {
-                <span class="badge bg-accent-soft text-accent">current</span>
-              }
-              <span class="text-fg-subtle ml-auto text-[11px]">{{ since(entry.updated_at) }}</span>
-            </span>
-            <span class="text-fg-subtle tabular text-[11px]">{{ entry.chars }} chars</span>
-          </button>
-
-          @if (picked() === entry.version && !entry.current) {
-            @if (diff(); as d) {
-              <div class="border-line mt-1.5 rounded-card border p-2">
-                <p class="text-fg-muted mb-2 text-[11px]">
-                  Restoring this would make
-                  <span class="text-accent">{{ d.added }} addition{{ d.added === 1 ? '' : 's' }}</span>
-                  and
-                  <span class="text-danger">{{ d.removed }} removal{{ d.removed === 1 ? '' : 's' }}</span>.
-                </p>
-
-                @if (!d.lines.length) {
-                  <p class="text-fg-subtle text-[12px]">Identical to the current profile.</p>
-                } @else {
-                  <pre class="mono max-h-72 overflow-auto text-[11px] leading-relaxed"><!--
-               -->@for (line of d.lines; track $index) {<!--
-                 --><div
-                      [class]="
-                        line.op === '+'
-                          ? 'bg-accent-soft text-accent'
-                          : line.op === '-'
-                            ? 'bg-danger-soft text-danger'
-                            : line.op === '@'
-                              ? 'border-line text-fg-subtle my-1.5 border-t pt-1.5'
-                              : 'text-fg-muted'
-                      "
-                    >{{ line.text }}</div><!--
-               -->}</pre>
-                }
-
-                @if (confirming() === entry.version) {
-                  <div class="border-warn/50 bg-warn-soft rounded-card mt-2 border px-3 py-2">
-                    <p class="text-warn text-[12px] font-medium">Restore v{{ entry.version }}?</p>
-                    <p class="text-fg-muted mt-1 text-[11px] leading-relaxed">
-                      This appends it as v{{ nextVersion() }}. Nothing is deleted, and v{{ version() }}
-                      stays in this list if you change your mind.
-                    </p>
-                    <div class="mt-2 flex gap-2">
-                      <button
-                        type="button"
-                        class="btn btn-primary !py-1"
-                        [disabled]="historyBusy()"
-                        (click)="restore(entry.version)"
-                      >
-                        Restore as v{{ nextVersion() }}
-                      </button>
-                      <button type="button" class="btn btn-ghost !py-1" (click)="confirming.set(null)">
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                } @else {
-                  <button
-                    type="button"
-                    class="btn btn-outline mt-2 !py-1"
-                    [disabled]="!canRestore() || !d.lines.length"
-                    (click)="confirming.set(entry.version)"
-                  >
-                    <app-icon name="arrow-left" [size]="14" />
-                    Restore this version
-                  </button>
-                  @if (!canRestore()) {
-                    <span class="text-fg-subtle ml-2 text-[11px]">Save or revert first.</span>
-                  }
-                }
-              </div>
-            }
-          }
-        </div>
-      } @empty {
-        @if (!historyBusy()) {
-          <p class="text-fg-subtle px-1 py-4 text-[12px]">Nothing saved yet.</p>
-        }
-      }
-    </div>
-
-    <footer class="border-line text-fg-subtle border-t px-4 py-2.5 text-[11px] leading-relaxed">
-      Versions are kept for 60 days. The last 5 stay however old they are, so there is always
-      something to go back to.
-    </footer>
-  </aside>
-}

@@ -336,3 +336,16 @@ def test_the_fit_check_still_writes_nothing(client, monkeypatch):
     client.post("/api/fit", json={"jd_text": JD})
     with Session(client.engine) as session:
         assert session.exec(select(Application)).all() == []
+
+
+def test_the_prompt_says_what_an_unpinned_skill_means(client, monkeypatch):
+    """
+    Ask can record a tool used on no listed project. Without this rule the fit
+    check had no idea what to do with one, so the two files disagreed.
+    """
+    save_profile(client)
+    sent = answers(monkeypatch, ANSWER)
+    client.post("/api/fit", json={"jd_text": JD})
+
+    assert "empty evidence list" in sent["prompt"]
+    assert "never as depth" in sent["prompt"]

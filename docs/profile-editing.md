@@ -1,6 +1,7 @@
 # Editing the profile inside hired
 
-Status: agreed, not built. Written 2026-10-07.
+Written 2026-10-07. Version history and Ask are built; the two screens
+after them are not.
 
 ## The problem
 
@@ -97,10 +98,24 @@ separate maintenance session ever again.
 
 ## Build order
 
-1. **Version history.** Nothing else is safe without it.
-2. **Ask, with diff approval.** Kills the Claude round trip.
-3. **Needs attention.** Pays off the 36 empty skill entries.
-4. **Harvest during the fit check.** The part that makes it a product.
+1. **Version history.** Done. Append-only log, diff, restore.
+2. **Ask, with diff approval.** Done. Guards in `_allowed`, proposal carried
+   across turns.
+3. **Needs attention.** Not started. Pays off the 36 empty skill entries.
+4. **Harvest during the fit check.** Not started.
+
+Still open after Ask landed: the 36 skills with no evidence entry are still 36.
+Ask makes them cheap to write; nobody has written them.
+
+Two things the first real calls taught, both now enforced in code rather than
+asked for in the prompt:
+
+- The model returned `years: 3` for a skill nobody gave a duration for. A
+  duration can only come from the person, so with no digit anywhere in the
+  conversation the field is dropped.
+- Replaying only the model's prose lost the fields behind it. After answering a
+  question mid-thread it would describe a complete entry and emit one carrying
+  nothing but a name. The proposal now travels with the conversation.
 
 ## Deliberately out of scope
 
