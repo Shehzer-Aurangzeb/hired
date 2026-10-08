@@ -1,0 +1,495 @@
+---
+// The product in six seconds, drawn in HTML so it stays sharp at any size:
+// a posting goes in, a verdict comes back, and bullets you already wrote land
+// on the page with the id they came from. Plays when scrolled into view.
+
+const chips = [
+  { name: 'React', ok: true },
+  { name: 'TypeScript', ok: true },
+  { name: 'Large tables', ok: true },
+  { name: 'Design systems', ok: true },
+  { name: 'Accessibility', ok: true },
+  { name: 'React Native', ok: false },
+];
+
+const bullets = [
+  {
+    id: 'ledgerline-virtual',
+    text: 'Virtualised the transactions table so 50,000-row ledgers scroll smoothly, cutting p75 load time by 40%.',
+  },
+  {
+    id: 'ledgerline-rebuild',
+    text: 'Rebuilt the invoicing front-end in React and TypeScript, retiring a seven-year-old jQuery codebase.',
+  },
+  {
+    id: 'ledgerline-a11y',
+    text: 'Brought the invoice editor to WCAG 2.2 AA, fixing 63 audit findings.',
+  },
+  {
+    id: 'northwind-ds',
+    text: 'Built a 40-component React library in Storybook, adopted by six client projects.',
+  },
+];
+---
+
+<div class="demo" data-demo role="group" aria-label="Animated demo of hired">
+  <div class="bar">
+    <span class="brand">hired</span>
+    <span class="tab current">Generate</span>
+    <span class="tab">Applications</span>
+    <span class="tab">Profile</span>
+    <button type="button" class="replay" data-replay aria-label="Replay the demo" tabindex="-1">
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+        <path d="M2.5 8a5.5 5.5 0 1 0 1.7-4M2.5 2.5V5H5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+      Replay
+    </button>
+  </div>
+
+  <div class="body">
+    <div class="left">
+      <div class="card">
+        <p class="cap">Posting text</p>
+        <p class="jd" data-jd>
+          <span data-typed></span><span class="caret" aria-hidden="true"></span>
+        </p>
+      </div>
+
+      <div class="card fit" data-step="fit">
+        <div class="score">
+          <span class="n" data-count>0</span><span class="of">/10</span>
+          <span class="badge" data-step="badge">Apply</span>
+        </div>
+        <p class="why">
+          Five years of React and TypeScript, and the virtualisation work is close to exactly what this
+          team describes.
+        </p>
+        <div class="chips">
+          {
+            chips.map((chip) => (
+              <span class:list={['chip', chip.ok ? 'ok' : 'gap']} data-chip>
+                <svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true">
+                  {chip.ok ? (
+                    <path d="M2.5 6.5l2.2 2.2 4.8-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                  ) : (
+                    <path d="M3 3l6 6M9 3l-6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                  )}
+                </svg>
+                {chip.name}
+              </span>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="sheet" data-step="sheet">
+        <p class="name">Maya Okafor</p>
+        <p class="title">Front-End Engineer · React · TypeScript · Design Systems</p>
+        <p class="h">Experience</p>
+        <ul>
+          {
+            bullets.map((b) => (
+              <li data-bullet>
+                <span class="text">{b.text}</span>
+                <span class="id">{b.id}</span>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+      <p class="status" data-step="status">
+        <span class="dot" aria-hidden="true"></span>
+        4 ids returned · 0 sentences written
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+  const JD =
+    'Senior Front-End Engineer, Payments. Own the merchant dashboard: data-dense React and TypeScript, large tables that stay fast, a design system, accessibility by default. Nice to have: React Native.';
+
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  document.querySelectorAll<HTMLElement>('[data-demo]').forEach((demo) => {
+    const typed = demo.querySelector<HTMLElement>('[data-typed]')!;
+    const count = demo.querySelector<HTMLElement>('[data-count]')!;
+    const replay = demo.querySelector<HTMLButtonElement>('[data-replay]')!;
+    const step = (name: string) => demo.querySelector(`[data-step="${name}"]`)!;
+    const chips = [...demo.querySelectorAll('[data-chip]')];
+    const bullets = [...demo.querySelectorAll('[data-bullet]')];
+    let timers: number[] = [];
+    let frame = 0;
+
+    const at = (ms: number, fn: () => void) => timers.push(window.setTimeout(fn, ms));
+
+    const finish = () => {
+      typed.textContent = JD;
+      count.textContent = '8';
+      demo.querySelectorAll('[data-step], [data-chip], [data-bullet]').forEach((el) => el.classList.add('on'));
+      demo.classList.add('done');
+      replay.tabIndex = 0;
+    };
+
+    const reset = () => {
+      timers.forEach(clearTimeout);
+      cancelAnimationFrame(frame);
+      timers = [];
+      typed.textContent = '';
+      count.textContent = '0';
+      demo.querySelectorAll('.on').forEach((el) => el.classList.remove('on'));
+      demo.classList.remove('done');
+    };
+
+    const play = () => {
+      reset();
+      demo.classList.add('typing');
+      // Type in chunks of a few characters: one per frame reads as a stall.
+      for (let i = 0; i <= JD.length; i += 3) at(200 + i * 7, () => (typed.textContent = JD.slice(0, i)));
+      at(200 + JD.length * 7, () => {
+        typed.textContent = JD;
+        demo.classList.remove('typing');
+      });
+
+      const t = 200 + JD.length * 7 + 250;
+      at(t, () => {
+        step('fit').classList.add('on');
+        const start = performance.now();
+        const tick = (now: number) => {
+          const p = Math.min(1, (now - start) / 700);
+          count.textContent = String(Math.round(8 * (1 - (1 - p) ** 3)));
+          if (p < 1) frame = requestAnimationFrame(tick);
+        };
+        frame = requestAnimationFrame(tick);
+      });
+      at(t + 750, () => step('badge').classList.add('on'));
+      chips.forEach((chip, i) => at(t + 900 + i * 110, () => chip.classList.add('on')));
+      at(t + 1700, () => step('sheet').classList.add('on'));
+      bullets.forEach((b, i) => at(t + 2000 + i * 280, () => b.classList.add('on')));
+      at(t + 2000 + bullets.length * 280 + 200, () => {
+        step('status').classList.add('on');
+        demo.classList.add('done');
+        replay.tabIndex = 0;
+      });
+    };
+
+    replay.addEventListener('click', () => (reduced ? finish() : play()));
+
+    if (reduced) return finish();
+    new IntersectionObserver((entries, observer) => {
+      if (entries[0].isIntersecting) {
+        observer.disconnect();
+        play();
+      }
+    }, { threshold: 0.35 }).observe(demo);
+  });
+</script>
+
+<style>
+  .demo {
+    overflow: hidden;
+    background: var(--raised);
+    border: 1px solid var(--line-strong);
+    border-radius: 14px;
+    box-shadow:
+      0 1px 0 #fff inset,
+      0 50px 100px -50px rgb(60 45 20 / 0.5),
+      0 2px 8px rgb(60 45 20 / 0.08);
+    text-align: left;
+  }
+
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 48px;
+    padding: 0 12px 0 18px;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .brand {
+    margin-right: 12px;
+    font-weight: 600;
+  }
+  .tab {
+    padding: 5px 10px;
+    border-radius: 6px;
+    color: var(--fg-muted);
+  }
+  .tab.current {
+    background: var(--surface);
+    color: var(--fg);
+  }
+  @media (max-width: 639px) {
+    .tab:not(.current) {
+      display: none;
+    }
+  }
+  .replay {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    margin-left: auto;
+    padding: 0 10px;
+    font: inherit;
+    font-size: 12px;
+    color: var(--fg-muted);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 300ms, background-color 150ms, border-color 150ms;
+  }
+  .done .replay {
+    opacity: 1;
+    pointer-events: auto;
+    border-color: var(--line-strong);
+  }
+  .replay:hover {
+    background: var(--surface);
+    color: var(--fg);
+  }
+  .replay:hover svg {
+    transform: rotate(-90deg);
+  }
+  .replay svg {
+    transition: transform 300ms ease-out;
+  }
+
+  .body {
+    display: grid;
+    gap: 16px;
+    padding: 16px;
+    background: var(--bg);
+  }
+  @media (min-width: 900px) {
+    .body {
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 20px;
+      padding: 24px;
+      min-height: 430px;
+    }
+  }
+
+  .left {
+    display: grid;
+    gap: 16px;
+    align-content: start;
+  }
+  .card {
+    padding: 16px 18px;
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+  .cap {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+  }
+  .jd {
+    min-height: 6.4em;
+    margin-top: 8px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .caret {
+    display: inline-block;
+    width: 2px;
+    height: 1.1em;
+    margin-left: 1px;
+    vertical-align: -0.2em;
+    background: var(--ink);
+    animation: blink 1s steps(1) infinite;
+  }
+  .typing .caret {
+    animation: none;
+  }
+  .done .caret {
+    opacity: 0;
+  }
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  /* Everything that arrives starts a little low and transparent. */
+  [data-step],
+  [data-chip],
+  [data-bullet] {
+    opacity: 0;
+    transform: translateY(8px);
+    transition:
+      opacity 400ms ease-out,
+      transform 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .on {
+    opacity: 1;
+    transform: none;
+  }
+
+  .score {
+    display: flex;
+    align-items: baseline;
+    gap: 2px;
+  }
+  .n {
+    font-family: var(--display);
+    font-size: 44px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .of {
+    font-size: 16px;
+    color: var(--fg-muted);
+  }
+  .badge {
+    margin-left: 12px;
+    align-self: center;
+    padding: 3px 10px;
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    transform: scale(0.6);
+  }
+  .badge.on {
+    transform: scale(1);
+    transition:
+      opacity 200ms ease-out,
+      transform 450ms cubic-bezier(0.3, 1.6, 0.5, 1);
+  }
+  .why {
+    margin-top: 10px;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--fg-muted);
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 14px;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    transform: scale(0.85);
+  }
+  .chip.on {
+    transform: none;
+  }
+  .chip.ok {
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    color: var(--accent);
+  }
+  .chip.gap {
+    background: var(--warn-soft);
+    border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+    color: var(--warn);
+  }
+
+  .right {
+    display: grid;
+    gap: 12px;
+    align-content: start;
+  }
+  .sheet {
+    padding: 24px 26px 20px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    box-shadow: 0 16px 32px -20px rgb(60 45 20 / 0.4);
+    color: #111;
+  }
+  .name {
+    text-align: center;
+    font-size: 20px;
+    font-weight: 600;
+  }
+  .title {
+    margin-top: 2px;
+    text-align: center;
+    font-size: 11.5px;
+    color: #444;
+  }
+  .h {
+    margin-top: 16px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #999;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  ul {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+  }
+  li {
+    display: grid;
+    gap: 4px;
+    padding-left: 12px;
+    position: relative;
+    font-size: 12.5px;
+    line-height: 1.45;
+    transform: translateX(-14px);
+  }
+  li::before {
+    content: '·';
+    position: absolute;
+    left: 2px;
+    font-weight: 700;
+  }
+  li.on {
+    transform: none;
+  }
+  .id {
+    justify-self: start;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 10.5px;
+  }
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    justify-self: start;
+    padding: 6px 12px;
+    background: var(--ink);
+    color: var(--ink-fg);
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .status .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #6fcf97;
+    box-shadow: 0 0 0 3px rgb(111 207 151 / 0.25);
+  }
+</style>

@@ -18,6 +18,7 @@
   --warn-soft: #f2e6ca;
   --danger: #9b2c21;
 
+  --display: 'Bricolage Grotesque', 'Inter', ui-sans-serif, system-ui, sans-serif;
   --sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
   --radius: 0.5rem;
@@ -39,15 +40,17 @@
   box-sizing: border-box;
 }
 
+/* The ground colour sits on html so the grain on body::before can go between it and the page. */
 html {
+  background: var(--bg);
   font-family: var(--sans);
   -webkit-font-smoothing: antialiased;
   scroll-behavior: smooth;
 }
 
 body {
+  position: relative;
   margin: 0;
-  background: var(--bg);
   color: var(--fg);
   font-size: 16px;
   line-height: 1.6;
@@ -145,4 +148,49 @@ p {
 }
 .btn-outline:hover {
   background: var(--surface);
+}
+
+/* Paper grain. Fixed and behind everything, so it costs one layer, not a repaint per scroll. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.28 0 0 0 0 0.15 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+h1,
+h2 {
+  font-family: var(--display);
+  font-optical-sizing: auto;
+}
+
+/* Fades up once when it first scrolls into view. Gated on .js so the page
+   still reads with scripts off; the script adds .in. */
+.js [data-reveal] {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 600ms ease-out,
+    transform 600ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition-delay: calc(var(--i, 0) * 70ms);
+}
+.js [data-reveal].in {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .js [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.btn .arrow {
+  transition: transform 200ms ease-out;
+}
+.btn:hover .arrow {
+  transform: translateX(3px);
 }

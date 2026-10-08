@@ -1,0 +1,78 @@
+---
+// A laptop drawn in CSS, so any 16:10 screenshot (1440x900 is what the app
+// captures at) drops into the screen slot with no image editing.
+interface Props {
+  class?: string;
+}
+const { class: extra } = Astro.props;
+---
+
+<figure class:list={['laptop', extra]}>
+  <div class="lid">
+    <span class="camera" aria-hidden="true"></span>
+    <div class="screen">
+      <slot />
+    </div>
+  </div>
+  <div class="base" aria-hidden="true"><span class="notch"></span></div>
+</figure>
+
+<style>
+  .laptop {
+    margin: 0;
+    width: 100%;
+  }
+  .lid {
+    position: relative;
+    margin: 0 6%;
+    padding: 2.4% 2.4% 3%;
+    background: #1a1712;
+    border-radius: 18px 18px 6px 6px;
+    box-shadow:
+      0 0 0 1px #3a342a inset,
+      0 40px 80px -40px rgb(60 45 20 / 0.55);
+  }
+  .camera {
+    position: absolute;
+    top: 0.9%;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    margin-left: -3px;
+    border-radius: 50%;
+    background: #3a342a;
+  }
+  .screen {
+    position: relative;
+    display: grid;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    border-radius: 4px;
+    background: #f0eadc;
+  }
+  /* Everything in the screen shares one cell, so a stack of shots can crossfade. */
+  .screen > :global(*) {
+    grid-area: 1 / 1;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top;
+  }
+  .base {
+    position: relative;
+    height: clamp(10px, 1.6vw, 18px);
+    background: linear-gradient(#e2dac8, #b9ae95);
+    border-radius: 0 0 14px 14px / 0 0 100% 100%;
+    box-shadow: 0 18px 30px -12px rgb(60 45 20 / 0.45);
+  }
+  .notch {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 14%;
+    height: 40%;
+    transform: translateX(-50%);
+    background: #a99e85;
+    border-radius: 0 0 8px 8px;
+  }
+</style>
