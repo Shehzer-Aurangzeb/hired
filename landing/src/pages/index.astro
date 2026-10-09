@@ -380,16 +380,25 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
               <p class="label">Run it</p>
               <h2>One command. One port. Your machine.</h2>
               <p class="sub">
-                FastAPI serves the built app on 127.0.0.1, so nothing else on your network can reach it.
-                Bring a free Gemini key and your own master.md.
+                Docker or a local Python setup, and the same <code class="mono">hired</code> command either
+                way. <code class="mono">hired setup</code> asks for a password and a free Gemini key, then the
+                app listens on 127.0.0.1 only, so nothing else on your network can reach it.
               </p>
+              <ul class="needs">
+                <li>Docker</li>
+                <li class="or">or</li>
+                <li>Python 3 · Node 20+ · pnpm</li>
+              </ul>
               <a class="btn btn-primary btn-lg" href={REPO}>Get it on GitHub <span class="arrow" aria-hidden="true">→</span></a>
             </div>
             <div class="terminal" data-terminal>
               <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span class="mono">zsh</span></div>
               <pre class="mono"><code><span data-line="$ git clone https://github.com/Shehzer-Aurangzeb/hired"></span>
-<span data-line="$ ln -s &quot;$PWD/hired/bin/hired&quot; ~/.local/bin/hired"></span>
+<span data-line="$ cd hired"></span>
+<span data-line="$ ln -s &quot;$PWD/bin/hired&quot; ~/.local/bin/hired"></span>
+<span data-line="$ hired setup"></span>
 <span data-line="$ hired"></span>
+<span class="t-dim" data-line="starting in docker (the first build takes a few minutes)..." data-instant></span>
 <span class="t-ok" data-line="✓ hired is up on http://127.0.0.1:8000" data-instant></span></code></pre>
             </div>
           </div>
@@ -515,7 +524,8 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
             lines.forEach((line) => {
               const text = line.dataset.line!;
               if (line.hasAttribute('data-instant')) {
-                setTimeout(() => (line.textContent = text), t + 500);
+                t += 600;
+                setTimeout(() => (line.textContent = text), t);
                 return;
               }
               for (let i = 0; i <= text.length; i += 2) {
@@ -1359,6 +1369,32 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
           align-items: center;
         }
       }
+      .run-copy code {
+        font-size: 0.9em;
+        padding: 1px 5px;
+        border-radius: 4px;
+        background: var(--surface);
+        color: var(--fg);
+      }
+      .needs {
+        list-style: none;
+        margin: 20px 0 0;
+        padding: 0;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+      }
+      .needs li:not(.or) {
+        padding: 4px 12px;
+        border: 1px solid var(--line-strong);
+        border-radius: 999px;
+        color: var(--fg);
+      }
+      .needs .or {
+        color: var(--fg-subtle);
+      }
       .run-copy .btn {
         margin-top: 28px;
       }
@@ -1391,11 +1427,21 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
       }
       .terminal pre {
         margin: 0;
-        min-height: 150px;
+        /* Every line's height reserved up front, so typing never pushes the card. */
+        min-height: 240px;
         padding: 20px;
         overflow-x: auto;
         font-size: 13px;
         line-height: 1.9;
+      }
+      @media (max-width: 639px) {
+        .terminal pre {
+          font-size: 11.5px;
+          padding: 16px;
+        }
+      }
+      .t-dim {
+        color: var(--ink-muted);
       }
       .t-ok {
         color: #6fcf97;
