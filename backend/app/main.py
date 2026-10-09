@@ -28,6 +28,15 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
+    if settings.demo:
+        import asyncio
+
+        from . import demo
+        from .db import engine
+
+        # In a thread: seeding prints real PDFs, and Playwright's sync API
+        # refuses to run inside the event loop this lifespan is running on.
+        await asyncio.to_thread(demo.seed, engine)
     yield
 
 
@@ -50,6 +59,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/api/demo")
+def demo_mode() -> dict[str, bool]:
+    """Unprotected, because the banner has to render before anyone signs in."""
+    return {"demo": settings.demo}
 
 
 @app.get("/api/health")

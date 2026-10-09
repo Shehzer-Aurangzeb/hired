@@ -5,11 +5,14 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
 
-  --color-bg: #f0eadc;
-  --color-surface: #e6dfcd;
-  --color-raised: #faf7f0;
+  /* Warm paper, pulled back from yellow so colour has somewhere to land. The
+     old surfaces sat at 40% saturation, which meant every accent had to fight
+     the page instead of standing on it. */
+  --color-bg: #f2ece0;
+  --color-surface: #e9e2d2;
+  --color-raised: #fcfaf5;
 
-  --color-line: #dad1bd;
+  --color-line: #dcd3bf;
   --color-line-strong: #9c8c68;
 
   --color-fg: #14110c;
@@ -19,16 +22,29 @@
   --color-ink: #1a1712;
   --color-ink-fg: #faf7f0;
 
-  --color-accent: #2f6b4f;
-  --color-accent-soft: #dce7dd;
-  --color-warn: #7e5210;
-  --color-warn-soft: #f2e6ca;
-  --color-danger: #9b2c21;
-  --color-danger-soft: #f6ded9;
+  /* Every pair below clears 4.5:1 on its own soft tint and on the page, checked
+     rather than eyeballed. The tints carry real saturation: the old ones sat
+     within 1.03 luminance of the background, so a chip read as beige. */
+  --color-accent: #076b3c;
+  --color-accent-soft: #b9e8cd;
 
-  /* Darker than brand coral (#d97757) so white text passes AA. */
-  --color-claude: #b85a38;
-  --color-claude-hover: #a34d2e;
+  /* Applied and sent, which is most of the list. It was grey, so the status
+     people see most often was the one carrying no signal at all. */
+  --color-info: #1b58ad;
+  --color-info-soft: #c4dcfa;
+
+  --color-warn: #8f5102;
+  --color-warn-soft: #fbe2b0;
+
+  --color-danger: #b52314;
+  --color-danger-soft: #fbd2cc;
+
+  /* Offer. Rare enough to deserve a hue nothing else uses. */
+  --color-royal: #5b35ab;
+  --color-royal-soft: #ddd0fb;
+
+  --color-claude: #9c4526;
+  --color-claude-hover: #87381d;
 
   --radius-card: 0.5rem;
 }

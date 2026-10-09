@@ -66,7 +66,7 @@ This is an interview.
 
 A box on the profile page. Plain language in:
 
-> I used Redux on Union AI and Stanley Paden
+> I used Redux on Ledgerline and Tidepool
 
 It works out the section, drafts the YAML, shows the diff, waits for approval.
 No section picker, no schema knowledge. This is the surface that removes the
@@ -90,8 +90,8 @@ profile" into a finite list that visibly shrinks.
 When a posting asks for something the profile records thinly, ask in the moment,
 while the context is already in the reader's head:
 
-> Pelmorex wants Redux. You list it with no evidence. Which projects used it?
-> [Union AI] [Stanley Paden] [neither] [skip]
+> This posting wants Redux. You list it with no evidence. Which projects used it?
+> [Ledgerline] [Tidepool] [neither] [skip]
 
 One tap. The profile improves as a side effect of applying, which means no
 separate maintenance session ever again.

@@ -44,6 +44,10 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Fabricated profile, fabricated history, canned model answers. The database
+    # has to be in memory, checked below, so a demo cannot write over real data.
+    demo: bool = False
+
     # Empty uses the defaults in profile_template.py.
     profile_template: str = ""
     claude_briefing: str = ""
@@ -52,4 +56,12 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()  # pyright: ignore[reportCallIssue]
+    settings = Settings()  # pyright: ignore[reportCallIssue]
+    # Here rather than only in the launcher, because the launcher can be
+    # bypassed and seeding demo applications over real ones cannot be undone.
+    if settings.demo and settings.database_url not in ("sqlite://", "sqlite:///:memory:"):
+        raise SystemExit(
+            f"HIRED_DEMO is set but the database is {settings.database_url}. "
+            "Demo mode only runs in memory, so it cannot touch real data."
+        )
+    return settings

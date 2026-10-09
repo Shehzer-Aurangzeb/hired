@@ -31,6 +31,12 @@ import { Icon } from '../../shared/icon';
 
 type Tab = 'browse' | 'ask' | 'edit' | 'history';
 
+const TAB_IDS: Tab[] = ['browse', 'ask', 'edit', 'history'];
+
+function asTab(value: string | null): Tab {
+  return TAB_IDS.includes(value as Tab) ? (value as Tab) : 'browse';
+}
+
 /** An employer, or the standalone projects shaped like one so both render the same. */
 type Group = Experience & { standalone: boolean };
 
@@ -64,13 +70,17 @@ export class ProfilePage {
 
   readonly resource = this.service.profile;
 
-  readonly tab = signal<Tab>(
-    this.route.snapshot.queryParamMap.get('tab') === 'edit' ? 'edit' : 'browse',
-  );
+  // Every tab writes itself to the URL, so every tab has to be readable back.
+  // Only 'edit' was, which made ?tab=ask and ?tab=history land on Browse.
+  readonly tab = signal<Tab>(asTab(this.route.snapshot.queryParamMap.get('tab')));
 
   constructor() {
     // Load up front so the editor is never empty (saving that would wipe the profile).
     this.load();
+    // Landing straight on History from a link has to fetch, not wait for a click.
+    if (this.tab() === 'history') {
+      this.loadVersions();
+    }
   }
 
   // ---------- browse ----------
@@ -392,11 +402,30 @@ export class ProfilePage {
   // ---------- ask ----------
   // The model only proposes. Confirming goes through the normal save.
 
-  /** Shown on an empty Ask panel. */
-  readonly ASK_EXAMPLES = [
-    'I used Redux on Union AI and Stanley Paden',
-    'Add i18next to the Frontend skills row',
-  ];
+  /**
+   * Built from whatever profile is loaded, never written here: hard-coded
+   * project names put real clients in a public repo, and the demo would be
+   * advertising somebody else's.
+   */
+  readonly askExamples = computed(() => {
+    const profile = this.resource.value();
+    const names = [
+      ...(profile?.experience ?? []).flatMap((e) => e.projects),
+      ...(profile?.projects ?? []),
+    ].map((project) => project.name);
+    const row = profile?.skills?.[0]?.line ?? 'Frontend';
+    return [
+      names.length >= 2
+        ? `I used Redux on ${names[0]} and ${names[1]}`
+        : names.length === 1
+          ? `I used Redux on ${names[0]}`
+          : 'I used Redux, working level',
+      `Add i18next to the ${row} skills row`,
+    ];
+  });
+
+  /** The first example doubles as the input's placeholder. */
+  readonly askPlaceholder = computed(() => this.askExamples()[0]);
 
   readonly draft = signal('');
   readonly turns = signal<AskTurn[]>([]);

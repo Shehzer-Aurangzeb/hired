@@ -57,7 +57,7 @@ backend/
 **Parser approach.** `master.md` is markdown headings wrapping YAML bodies, so
 the parser splits on `# / ## / ###` and hands each body to `yaml.safe_load`.
 No hand-rolled tokenizer. Project `id` is slugged from its heading
-(`### Dedicate` -> `dedicate`) unless the body sets `id:` explicitly.
+(`### Ledgerline` -> `ledgerline`) unless the body sets `id:` explicitly.
 
 **Decisions taken**
 
@@ -617,7 +617,7 @@ days sorts to the top, gets a warm row tint and a "N days, no reply" line, and
 a banner above the table says how many there are.
 
 **The detail page shows the bullet text, not ids.** It used to list
-`dedicate-caching` and nothing else, which is useless three weeks later when
+`ledgerline-caching` and nothing else, which is useless three weeks later when
 the whole promise of the view is interview prep.
 
 That needed a contract change rather than a frontend join. Joining
@@ -628,8 +628,8 @@ that is the wrong bug to ship. The record carries the text instead:
 
 ```python
 selected_bullets: list[dict] = Field(sa_column=Column(JSON))
-# [{"id": "dedicate-caching", "text": "Built the data layer with...",
-#   "project_name": "Dedicate"}]
+# [{"id": "ledgerline-caching", "text": "Built the data layer with...",
+#   "project_name": "Ledgerline"}]
 ```
 
 `selected_bullet_ids` stays, because the v2 "which bullets get replies" question
@@ -838,7 +838,7 @@ you typed, which is what makes a real `/api/profile/validate` possible:
   the section it sat in and silently orphan everything below.
 - A near-miss section name is an error with a suggestion, not silence.
   `# Experiance` used to make the entire work history disappear.
-- YAML errors carry a translated absolute line: `line 62: ### Dedicate is not
+- YAML errors carry a translated absolute line: `line 62: ### Ledgerline is not
   valid YAML: expected <block end>...` rather than an offset into a fragment.
 - A list section given a mapping says so instead of coming back empty.
 - Duplicate `# Section`, duplicate project id, BOM, and CRLF all handled.

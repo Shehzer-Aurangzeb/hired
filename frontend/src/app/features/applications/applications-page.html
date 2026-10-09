@@ -41,174 +41,172 @@
     </label>
   </header>
 
-  <section class="card mb-2 p-3.5" aria-labelledby="today-heading">
-    <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-      <h2 class="section-title" id="today-heading">Today</h2>
-      <p class="ml-auto text-[13px]">
-        <span
-          class="text-lg font-semibold tabular"
-          [class]="hitTarget() ? 'text-accent' : 'text-fg'"
-          >{{ today() }}</span
-        >
-        <span class="text-fg-subtle"> of </span>
-        <label class="text-fg-subtle">
-          <span class="sr-only">Daily target</span>
-          <input
-            type="number"
-            min="1"
-            max="50"
-            class="tabular border-line-strong bg-surface focus:border-ink w-11 rounded border px-1 py-0.5 text-center text-[13px] outline-none"
-            [value]="target()"
-            (change)="setTarget($any($event.target).valueAsNumber)"
-          />
-        </label>
-        <span class="text-fg-subtle"> sent</span>
-      </p>
-    </div>
+  <!-- ================================================================== -->
+  <!-- Today, and the four counts                                         -->
+  <!--                                                                    -->
+  <!-- Slots rather than a bar: at 0 of 3 a bar is a 1px line with nothing -->
+  <!-- to look at, while three empty boxes show what there is to do. The   -->
+  <!-- streak is the stronger pull of the two, because a run you can break -->
+  <!-- is worth more than a number you can ignore.                         -->
+  <!-- ================================================================== -->
+  <div class="mb-4 grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+    <section class="card p-3.5" aria-labelledby="today-heading">
+      <div class="flex flex-wrap items-baseline gap-x-2">
+        <h2 class="section-title" id="today-heading">Today</h2>
+        <p class="ml-auto text-[13px]">
+          <span
+            class="text-lg font-semibold tabular"
+            [class]="hitTarget() ? 'text-accent' : 'text-fg'"
+            >{{ today() }}</span
+          >
+          <span class="text-fg-subtle"> of </span>
+          <label class="text-fg-subtle">
+            <span class="sr-only">Daily target</span>
+            <input
+              type="number"
+              min="1"
+              max="50"
+              class="tabular border-line-strong bg-surface focus:border-ink w-11 rounded border px-1 py-0.5 text-center text-[13px] outline-none"
+              [value]="target()"
+              (change)="setTarget($any($event.target).valueAsNumber)"
+            />
+          </label>
+          <span class="text-fg-subtle"> sent</span>
+        </p>
+      </div>
 
-    <div
-      class="bg-surface border-line mt-2.5 h-1.5 overflow-hidden rounded-full border"
-      role="progressbar"
-      [attr.aria-valuenow]="today()"
-      aria-valuemin="0"
-      [attr.aria-valuemax]="target()"
-      [attr.aria-label]="'Applications sent today, against a target of ' + target()"
-    >
       <div
-        class="h-full transition-[width] duration-300"
-        [class]="hitTarget() ? 'bg-accent' : 'bg-ink'"
-        [style.width.%]="targetPercent()"
-      ></div>
-    </div>
-
-    <p class="text-fg-subtle mt-2 text-[11px]">
-      @if (hitTarget()) {
-        Target met. Anything past this is a bonus, not a debt.
-      } @else if (today()) {
-        {{ target() - today() }} to go. Counted when a row reaches a sent status, not when
-        you save the posting.
-      } @else {
-        Nothing sent yet today. Counted when a row reaches a sent status, not when you save
-        the posting.
-      }
-    </p>
-  </section>
-
-  <div class="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-    <div class="stat-lg">
-      <p class="stat-value text-fg">{{ total() }}</p>
-      <p class="stat-label">Total</p>
-    </div>
-    <div class="stat-lg" title="Everything that left Generated.">
-      <p class="stat-value text-fg">{{ sent() }}</p>
-      <p class="stat-label">Sent</p>
-    </div>
-    <div class="stat-lg" title="Replied, interviewing or offered, as a share of everything sent.">
-      <p class="stat-value" [class]="(replyRate() ?? 0) >= 20 ? 'text-accent' : 'text-fg'">
-        {{ replyRate() === null ? '—' : replyRate() }}<span class="text-fg-subtle text-sm font-normal">%</span>
-      </p>
-      <p class="stat-label">Reply rate</p>
-    </div>
-    <button
-      type="button"
-      class="stat-lg cursor-pointer transition-colors duration-150"
-      [class]="stale().length ? 'border-warn/50 bg-warn-soft hover:border-warn' : 'hover:border-line-strong'"
-      [attr.aria-pressed]="filter() === 'ghosted'"
-      (click)="toggleFilter('ghosted')"
-      title="Applied more than 10 days ago with no reply. Click to filter."
-    >
-      <p class="stat-value" [class]="stale().length ? 'text-warn' : 'text-fg-subtle'">
-        {{ stale().length }}
-      </p>
-      <p class="stat-label flex items-center gap-1">
-        @if (stale().length) {
-          <app-icon name="alert" [size]="11" class="text-warn" />
+        class="mt-3 flex flex-wrap gap-2"
+        role="progressbar"
+        [attr.aria-valuenow]="today()"
+        aria-valuemin="0"
+        [attr.aria-valuemax]="target()"
+        [attr.aria-label]="'Applications sent today, against a target of ' + target()"
+      >
+        @for (done of slots(); track $index) {
+          <!-- Dashed when empty: a filled grey rectangle reads as a disabled
+               field, a dashed outline reads as a space waiting for something. -->
+          <span
+            class="flex size-8 items-center justify-center rounded-full border-2 transition-colors duration-300"
+            [class]="
+              done
+                ? 'border-accent bg-accent text-ink-fg'
+                : 'border-line-strong/40 border-dashed'
+            "
+          >
+            @if (done) {
+              <app-icon name="check" [size]="15" />
+            }
+          </span>
         }
-        Need follow-up
+      </div>
+
+      <p class="mt-2 flex flex-wrap items-center gap-x-2 text-[11px]">
+        @if (streak()) {
+          <span class="stat-chip bg-accent-soft text-accent !py-0.5">
+            {{ streak() }}-day streak
+          </span>
+        }
+        <span class="text-fg-subtle">
+          @if (hitTarget()) {
+            Target met. Anything past this is a bonus, not a debt.
+          } @else if (today()) {
+            {{ target() - today() }} to go.
+          } @else {
+            Counted when a row is marked sent, not when you save the posting.
+          }
+        </span>
       </p>
-    </button>
+    </section>
+
+    <div class="grid gap-2">
+      <div class="grid grid-cols-3 gap-2">
+        <div class="stat-lg">
+          <p class="stat-value text-fg">{{ total() }}</p>
+          <p class="stat-label">Total</p>
+        </div>
+        <div class="stat-lg" title="Everything that left Generated.">
+          <p class="stat-value text-fg">{{ sent() }}</p>
+          <p class="stat-label">Sent</p>
+        </div>
+        <div class="stat-lg" title="Anyone who came back to you, as a share of everything sent.">
+          <p class="stat-value" [class]="(replyRate() ?? 0) >= 20 ? 'text-accent' : 'text-fg'">
+            {{ replyRate() === null ? '—' : replyRate() }}<span class="text-fg-subtle text-sm font-normal">%</span>
+          </p>
+          <p class="stat-label">Reply rate</p>
+        </div>
+      </div>
+
+      <!-- Full width and on its own row, because it is the only count here you
+           can act on. The other three are things that happened to you. -->
+      <button
+        type="button"
+        class="stat-lg flex w-full cursor-pointer items-center gap-3 text-left transition-colors duration-150"
+        [class]="stale().length ? 'border-warn/50 bg-warn-soft hover:border-warn' : 'hover:border-line-strong'"
+        [attr.aria-pressed]="filter() === 'ghosted'"
+        (click)="toggleFilter('ghosted')"
+      >
+        @if (stale().length) {
+          <app-icon name="alert" [size]="16" class="text-warn shrink-0" />
+        }
+        <span class="stat-value !mb-0" [class]="stale().length ? 'text-warn' : 'text-fg-subtle'">
+          {{ stale().length }}
+        </span>
+        <span class="min-w-0">
+          <span class="block text-[13px] font-medium">
+            @if (stale().length) { waiting on a reply } @else { nothing waiting }
+          </span>
+          <span class="text-fg-subtle block text-[11px]">
+            Sent over 10 days ago with no response.
+            @if (stale().length) { Click to filter. }
+          </span>
+        </span>
+      </button>
+    </div>
   </div>
 
+  <!-- ================================================================== -->
+  <!-- The funnel, on one line                                            -->
+  <!--                                                                    -->
+  <!-- Cumulative, not current state: status is one value, so counting     -->
+  <!-- rows sitting at "replied" misses everyone who moved past it, and a  -->
+  <!-- rate off that number means nothing. Length encodes nothing here,    -->
+  <!-- because five labelled magnitudes do not fit on a line; the counts   -->
+  <!-- carry that and the rates carry the part you can act on. Dead ends   -->
+  <!-- sit at the end, since they are exits rather than stages.            -->
+  <!-- ================================================================== -->
   @if (total()) {
-    <section class="card mb-4 overflow-hidden" aria-labelledby="pipeline-heading">
-      <header class="card-head">
-        <h2 class="section-title" id="pipeline-heading">Pipeline</h2>
-        <span class="text-fg-subtle ml-auto text-[11px]">
-          Live stages first, dead ends last. Click a stage to filter.
-        </span>
-      </header>
+    <section class="card mb-4 px-3.5 py-2.5" aria-labelledby="pipeline-heading">
+      <div class="flex flex-wrap items-center gap-x-1 gap-y-2">
+        <h2 class="section-title mr-2" id="pipeline-heading">Pipeline</h2>
 
-      <div class="p-3.5">
-        <div class="flex h-9 gap-0.5 overflow-hidden rounded-lg" role="img"
-             (mouseleave)="hovered.set(null)"
-             [attr.aria-label]="'Pipeline: ' + total() + ' applications across ' + pipeline().length + ' stages. Counts are listed below.'">
-          @for (segment of pipeline(); track segment.key) {
-            @if (segment.count) {
-              <button
-                type="button"
-                class="min-w-6 cursor-pointer transition-opacity duration-200 first:rounded-l-lg last:rounded-r-lg"
-                (mouseenter)="hovered.set(segment.key)"
-                [style.opacity]="segmentOpacity(segment.key)"
-                [style.flex-basis.%]="segment.pct"
-                [style.flex-grow]="segment.count"
-                [style.background]="
-                  segment.hatch
-                    ? 'repeating-linear-gradient(' + segment.hatch + 'deg, ' + segment.color + ' 0 4px, transparent 4px 8px)'
-                    : segment.color
-                "
-                [style.box-shadow]="filter() === segment.key ? 'inset 0 0 0 2px var(--color-fg)' : ''"
-                [title]="segment.label + ': ' + segment.count + ' of ' + total()"
-                [attr.aria-pressed]="filter() === segment.key"
-                [attr.aria-label]="'Filter to ' + segment.label + ', ' + segment.count + ' applications'"
-                (click)="toggleFilter(segment.key)"
-              ></button>
+        @for (stage of funnel(); track stage.label) {
+          @if (stage.rate !== null) {
+            <span class="flex items-center gap-1.5" aria-hidden="true">
+              <span class="bg-line-strong/40 h-px w-4"></span>
+              <span class="tabular text-fg-muted text-[10px] font-medium">{{ stage.rate }}%</span>
+              <span class="bg-line-strong/40 h-px w-4"></span>
+            </span>
+          }
+          <span
+            class="stat-chip !py-1"
+            [class]="stage.tone"
+            [title]="stage.rate !== null ? stage.rate + '% of the stage before' : ''"
+          >
+            <span class="tabular font-semibold">{{ stage.count }}</span>
+            {{ stage.label }}
+          </span>
+        }
+
+        @if (ended().rejected || ended().skipped) {
+          <span class="text-fg-subtle ml-auto text-[11px]">
+            @if (ended().rejected) {
+              <span class="text-danger">{{ ended().rejected }} rejected</span>
             }
-          }
-        </div>
-
-        <!-- The legend doubles as the status filter. -->
-        <ul class="mt-3 flex flex-wrap gap-1.5">
-          @for (segment of pipeline(); track segment.key) {
-            <li>
-              <button
-                type="button"
-                class="border-line hover:border-line-strong hover:bg-surface flex cursor-pointer items-center gap-1.5 rounded-full border py-1 pr-2.5 pl-2 text-[12px] transition-colors duration-150"
-                [class]="filter() === segment.key ? 'border-ink bg-surface text-fg' : 'text-fg-muted'"
-                [attr.aria-pressed]="filter() === segment.key"
-                (mouseenter)="hovered.set(segment.key)"
-                (mouseleave)="hovered.set(null)"
-                (click)="toggleFilter(segment.key)"
-              >
-                <span
-                  class="size-2.5 shrink-0 rounded-full"
-                  [style.background]="
-                    segment.hatch
-                      ? 'repeating-linear-gradient(' + segment.hatch + 'deg, ' + segment.color + ' 0 3px, transparent 3px 6px)'
-                      : segment.color
-                  "
-                  [style.outline]="segment.hatch ? '1px solid ' + segment.color : ''"
-                ></span>
-                {{ segment.label }}
-                <span class="tabular font-semibold">{{ segment.count }}</span>
-                @if (segment.count) {
-                  <span class="tabular text-fg-subtle">{{ segment.pct | number: '1.0-0' }}%</span>
-                }
-              </button>
-            </li>
-          }
-          @if (filter() !== 'all') {
-            <li>
-              <button
-                type="button"
-                class="text-fg-subtle hover:text-fg flex cursor-pointer items-center gap-1 rounded-full px-2 py-1 text-[12px]"
-                (click)="filter.set('all')"
-              >
-                <app-icon name="x" [size]="12" />
-                Clear
-              </button>
-            </li>
-          }
-        </ul>
+            @if (ended().rejected && ended().skipped) { · }
+            @if (ended().skipped) { {{ ended().skipped }} passed on }
+          </span>
+        }
       </div>
     </section>
   }
@@ -272,27 +270,60 @@
                 }
               </td>
               <td class="text-fg-muted px-3 py-2.5">{{ application.role }}</td>
-              <td class="tabular px-3 py-2.5 font-semibold" [class]="scoreTone(application.fit_score)">
-                {{ application.fit_score }}
+              <td class="px-3 py-2.5">
+                <span class="flex items-center gap-2" [title]="application.fit_score + ' out of 10'">
+                  <span class="tabular w-3 text-[13px] font-semibold" [class]="scoreTone(application.fit_score)">
+                    {{ application.fit_score }}
+                  </span>
+                  <!-- Ten segments, so the number has a scale behind it. -->
+                  <span class="flex gap-px" aria-hidden="true">
+                    @for (n of TEN; track n) {
+                      <span
+                        class="h-2.5 w-[3px] rounded-full"
+                        [class]="
+                          n <= application.fit_score
+                            ? application.fit_score >= 9
+                              ? 'bg-accent'
+                              : application.fit_score >= 7
+                                ? 'bg-ink/55'
+                                : 'bg-line-strong'
+                            : 'bg-line'
+                        "
+                      ></span>
+                    }
+                  </span>
+                </span>
               </td>
               <td class="px-3 py-2.5">
-                <select
-                  class="field !w-auto cursor-pointer !py-1 !text-[12px] capitalize"
-                  [class]="statusClass(application.status)"
-                  [disabled]="saving() === application.id"
-                  (change)="setStatus(application, $any($event.target).value)"
-                  [attr.aria-label]="'Status for ' + application.company"
-                >
-                  @for (status of statuses; track status) {
-                    <option
-                      [value]="status"
-                      [selected]="status === application.status"
-                      class="capitalize"
-                    >
-                      {{ status }}
-                    </option>
-                  }
-                </select>
+                <!-- A chip until you click it. Nine open dropdowns made a table
+                     you mostly read look like a form you have to fill in. -->
+                @if (editing() === application.id) {
+                  <select
+                    class="field !w-auto cursor-pointer !py-1 !text-[12px] capitalize"
+                    [class]="statusClass(application.status)"
+                    [disabled]="saving() === application.id"
+                    (change)="setStatus(application, $any($event.target).value); editing.set(null)"
+                    (blur)="editing.set(null)"
+                    [attr.aria-label]="'Status for ' + application.company"
+                    autofocus
+                  >
+                    @for (status of statuses; track status) {
+                      <option [value]="status" [selected]="status === application.status" class="capitalize">
+                        {{ status }}
+                      </option>
+                    }
+                  </select>
+                } @else {
+                  <button
+                    type="button"
+                    class="stat-chip cursor-pointer capitalize !py-0.5"
+                    [class]="statusClass(application.status)"
+                    (click)="editing.set(application.id)"
+                    [attr.aria-label]="'Change status for ' + application.company + ', currently ' + application.status"
+                  >
+                    {{ application.status }}
+                  </button>
+                }
               </td>
               <td
                 class="text-fg-subtle px-3 py-2.5 whitespace-nowrap"

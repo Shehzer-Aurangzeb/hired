@@ -10,6 +10,8 @@ import generate from '../assets/shots/generate.png';
 import applications from '../assets/shots/applications.png';
 import profile from '../assets/shots/profile.png';
 import cv from '../assets/shots/cv.png';
+import ask from '../assets/shots/ask.png';
+import history from '../assets/shots/history.png';
 
 const REPO = 'https://github.com/Shehzer-Aurangzeb/hired';
 
@@ -19,7 +21,7 @@ const steps = [
     title: 'Write your profile once',
     body: 'One Markdown file: every project, the bullets you would defend, and what each project cannot claim. You write it. Nothing in it is generated.',
     shot: profile,
-    alt: 'Profile screen listing projects, title variants, summaries and skills, with one blocked bullet flagged to verify.',
+    alt: 'Profile screen: version, project and bullet counts, one blocked bullet to verify, title variants, summaries and skills.',
   },
   {
     title: 'Paste a posting',
@@ -35,26 +37,42 @@ const steps = [
   },
   {
     title: 'Review the page',
-    body: 'Bullets picked from your pool, coverage per requirement, and a live preview of the exact PDF.',
+    body: 'Bullets picked from your pool, coverage per requirement, and a live preview of the exact PDF. Point at a bullet that isn\'t in your file and the claim guard blocks the export.',
     shot: generate,
-    alt: 'Generated CV: requirement coverage, selected bullets and a Letter-size preview.',
+    alt: 'Generated CV with requirement coverage and a Letter-size preview. The claim guard has blocked the export because the selector named a bullet that is not in the profile.',
   },
   {
     title: 'Track what you sent',
-    body: 'Every posting you kept, applied to or not, with the CV that went out and what came back.',
+    body: 'Every posting you kept, applied to or not, with the CV that went out, what came back, and a daily target to keep you sending.',
     shot: applications,
-    alt: 'Applications list with totals, reply rate, a pipeline bar and a table of companies and statuses.',
+    alt: 'Applications: a daily target of three, reply rate, two postings waiting on a reply, a pipeline from saved to offer, and a table of companies with fit and status.',
   },
 ];
 
+// The same funnel the applications screen draws.
 const pipeline = [
-  { label: 'Waiting', n: 3, color: '#3b6ea8' },
-  { label: 'Replied', n: 1, color: '#a8690c' },
-  { label: 'Interview', n: 1, color: '#0f7a62' },
-  { label: 'Rejected', n: 1, color: '#b13a2e' },
-  { label: 'Passed on', n: 2, color: '#b5aa90' },
+  { label: 'Saved', n: 11, bg: '#e2dac8', fg: '#57503f' },
+  { label: 'Sent', n: 7, bg: '#cfe0f5', fg: '#2c5a8f' },
+  { label: 'Heard back', n: 3, bg: '#f6dfb0', fg: '#7e5210' },
+  { label: 'Interview', n: 1, bg: '#c6ead5', fg: '#1f6a45' },
 ];
-const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
+
+const profileViews = [
+  {
+    key: 'ask',
+    title: 'Describe the change',
+    body: '"I used Redux on Ledgerline and Tidepool, working level." You get a diff of your file, not a rewrite, and nothing saves until you confirm it.',
+    shot: ask,
+    alt: 'Profile Ask tab: a one-line request, the reply, and a five-line diff adding Redux at working level, with a Confirm and save button.',
+  },
+  {
+    key: 'history',
+    title: 'Go back to any version',
+    body: 'Every save is a version. See exactly what a restore would change before you press it. Kept for 60 days, and the newest five whatever their age.',
+    shot: history,
+    alt: 'Profile History tab: three versions, and the diff restoring v1 would apply.',
+  },
+];
 ---
 
 <!doctype html>
@@ -88,6 +106,7 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
         <nav class="top-nav" aria-label="Sections">
           <a href="#how">How it works</a>
           <a href="#honest">Why it can't lie</a>
+          <a href="#profile">Profile</a>
           <a href="#run">Run it</a>
           <a class="btn btn-primary btn-sm" href={REPO}>
             <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
@@ -283,6 +302,67 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
         </div>
       </section>
 
+      <!-- ---------- keeping the profile current ---------- -->
+      <section id="profile" class="keep">
+        <div class="wrap keep-row">
+          <div class="keep-copy">
+            <div class="head" data-reveal>
+              <p class="label">Your profile</p>
+              <h2>Grows by the sentence. Never loosens.</h2>
+              <p class="sub">
+                Keeping the file current is the part that slips. So you can say what changed, and it turns that
+                into an edit you can read before it lands.
+              </p>
+            </div>
+
+            <div class="views" role="tablist" aria-label="Profile features" data-views data-reveal style="--i:1">
+              {
+                profileViews.map((view, i) => (
+                  <button
+                    type="button"
+                    role="tab"
+                    id={`view-tab-${view.key}`}
+                    aria-controls="view-panel"
+                    aria-selected={i === 0 ? 'true' : 'false'}
+                    tabindex={i === 0 ? 0 : -1}
+                    data-view={i}
+                  >
+                    <span class="view-title">{view.title}</span>
+                    <span class="view-body">{view.body}</span>
+                  </button>
+                ))
+              }
+            </div>
+
+            <p class="guard" data-reveal style="--i:2">
+              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5l5.5 2v4c0 3.4-2.3 6-5.5 7-3.2-1-5.5-3.6-5.5-7v-4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path></svg>
+              <span>
+                It can add and correct, never loosen. Removing a <code class="mono">cannot_claim</code>, clearing a
+                gap or unblocking a bullet stays a hand edit.
+              </span>
+            </p>
+          </div>
+
+          <div class="keep-device" id="view-panel" role="tabpanel" data-reveal style="--i:1">
+            <Laptop>
+              {
+                profileViews.map((view, i) => (
+                  <Image
+                    src={view.shot}
+                    widths={[900, 1440]}
+                    sizes="(min-width: 1024px) 620px, 100vw"
+                    alt={view.alt}
+                    class="shot"
+                    data-view-shot={i}
+                    data-active={i === 0 ? '' : undefined}
+                  />
+                ))
+              }
+            </Laptop>
+          </div>
+        </div>
+      </section>
+
       <!-- ---------- details ---------- -->
       <section class="details">
         <div class="wrap">
@@ -324,19 +404,16 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
 
             <article class="tile" data-reveal style="--i:3">
               <div class="viz viz-pipe" aria-hidden="true">
-                <div class="pipe">
-                  {pipeline.map((s, i) => (
-                    <span style={`--w:${(s.n / pipelineTotal) * 100}%;--c:${s.color};--d:${i}`} />
-                  ))}
-                </div>
-                <div class="legend">
-                  {pipeline.slice(0, 3).map((s) => (
-                    <span><i style={`background:${s.color}`} />{s.label} {s.n}</span>
-                  ))}
-                </div>
+                {pipeline.map((s, i) => (
+                  <div class="funnel-row" style={`--d:${i}`}>
+                    <span class="bar" style={`--w:${(s.n / pipeline[0].n) * 100}%;--bg:${s.bg};--fg:${s.fg}`}>
+                      <b>{s.n}</b> {s.label}
+                    </span>
+                  </div>
+                ))}
               </div>
               <h3>A pipeline, not a spreadsheet</h3>
-              <p>Every posting kept, applied to or not, with follow-up nudges after a week of silence.</p>
+              <p>Saved to sent to heard back, a daily target, and a nudge when something has waited ten days.</p>
             </article>
           </div>
         </div>
@@ -456,6 +533,31 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
         );
         steps.forEach((s) => watch.observe(s));
         show(0);
+      }
+
+      // Profile features: two tabs, one laptop.
+      const views = document.querySelector('[data-views]');
+      if (views) {
+        const tabs = [...views.querySelectorAll<HTMLButtonElement>('[role=tab]')];
+        const shots = [...document.querySelectorAll<HTMLElement>('[data-view-shot]')];
+        const select = (index: number) => {
+          tabs.forEach((tab, i) => {
+            tab.setAttribute('aria-selected', String(i === index));
+            tab.tabIndex = i === index ? 0 : -1;
+          });
+          shots.forEach((s, i) => s.toggleAttribute('data-active', i === index));
+        };
+        tabs.forEach((tab, i) => {
+          tab.addEventListener('click', () => select(i));
+          tab.addEventListener('keydown', (event) => {
+            const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[event.key];
+            if (!step) return;
+            event.preventDefault();
+            const next = (i + step + tabs.length) % tabs.length;
+            select(next);
+            tabs[next].focus();
+          });
+        });
       }
 
       // Highlight matching ids in both panes; draw connecting lines on wide screens.
@@ -1091,6 +1193,89 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
         font-size: 15px;
       }
 
+      /* ---------- profile ---------- */
+      .keep {
+        padding: 120px 0 0;
+      }
+      .keep-row {
+        display: grid;
+        gap: 48px;
+      }
+      @media (min-width: 1024px) {
+        .keep-row {
+          grid-template-columns: 400px 1fr;
+          gap: 64px;
+          align-items: center;
+        }
+      }
+      .views {
+        display: grid;
+        gap: 8px;
+        margin-top: 36px;
+      }
+      .views button {
+        display: grid;
+        gap: 4px;
+        width: 100%;
+        min-height: 44px;
+        padding: 16px 18px;
+        text-align: left;
+        font: inherit;
+        color: inherit;
+        background: transparent;
+        border: 1px solid transparent;
+        border-left: 3px solid var(--line);
+        border-radius: 0 var(--radius) var(--radius) 0;
+        cursor: pointer;
+        transition: background-color 200ms, border-color 200ms;
+      }
+      .views button:hover {
+        background: var(--raised);
+      }
+      .views button[aria-selected='true'] {
+        background: var(--raised);
+        border-color: var(--line);
+        border-left-color: var(--accent);
+      }
+      .view-title {
+        font-weight: 600;
+      }
+      .view-body {
+        font-size: 14.5px;
+        line-height: 1.55;
+        color: var(--fg-muted);
+      }
+      .guard {
+        display: flex;
+        gap: 10px;
+        margin-top: 24px;
+        font-size: 14px;
+        line-height: 1.55;
+        color: var(--fg-muted);
+      }
+      .guard svg {
+        flex: none;
+        margin-top: 2px;
+        color: var(--accent);
+      }
+      .guard code {
+        font-size: 0.92em;
+        padding: 1px 4px;
+        border-radius: 4px;
+        background: var(--surface);
+        color: var(--fg);
+      }
+      /* These screens keep their content in the middle 78%, so zoom past the empty margins. */
+      .keep-device :global(.shot) {
+        opacity: 0;
+        transform: scale(1.25);
+        transform-origin: 50% 8%;
+        transition: opacity 400ms ease-out;
+      }
+      .keep-device :global(.shot[data-active]) {
+        opacity: 1;
+      }
+
       /* ---------- details ---------- */
       .details {
         padding: 120px 0 40px;
@@ -1241,37 +1426,24 @@ const pipelineTotal = pipeline.reduce((sum, s) => sum + s.n, 0);
       :global(.js) .tile:not(.in) .track span {
         transform: scaleX(0);
       }
-      .pipe {
-        display: flex;
-        gap: 3px;
-        height: 22px;
+      .viz-pipe {
+        gap: 4px;
       }
-      .pipe span {
-        width: var(--w);
-        border-radius: 3px;
-        background: var(--c);
+      .funnel-row .bar {
+        display: block;
+        /* A floor, so the 1-interview row still has room for its label. */
+        width: max(var(--w), 46%);
+        padding: 1px 8px;
+        border-radius: 4px;
+        background: var(--bg);
+        color: var(--fg);
+        font-size: 11px;
+        white-space: nowrap;
         transform-origin: left;
         transition: transform 500ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(400ms + var(--d) * 120ms);
       }
-      :global(.js) .tile:not(.in) .pipe span {
+      :global(.js) .tile:not(.in) .funnel-row .bar {
         transform: scaleX(0);
-      }
-      .pipe span:last-child {
-        background: repeating-linear-gradient(-45deg, var(--c) 0 4px, transparent 4px 8px);
-      }
-      .legend {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px 12px;
-        font-size: 11px;
-        color: var(--fg-muted);
-      }
-      .legend i {
-        display: inline-block;
-        width: 7px;
-        height: 7px;
-        margin-right: 5px;
-        border-radius: 50%;
       }
 
       /* ---------- output ---------- */

@@ -118,10 +118,13 @@ hired — tailor a CV to a job posting, on your own machine.
   hired restart    stop, then start
   hired status     is it up, and on what
   hired log        follow the log, Ctrl-C to stop watching
-  hired dev        start it, then ng serve on 4200 for front-end work
   hired backup     copy the database and profile into backend/backups
   hired doctor     check the pieces that go missing without telling you
   hired help       this
+
+Working on hired (needs backend/.venv, not Docker)
+  hired dev        start it, then ng serve on 4200 for front-end work
+  hired demo       an invented profile on port 8001, for screenshots
 
 How it runs
   With backend/.venv present it runs locally: one process on one port,
@@ -176,7 +179,7 @@ docker_main() {
       else echo ".env      MISSING  hired setup"; bad=1; fi
       if running; then echo "container running"; else echo "container stopped, hired starts it"; fi
       exit $bad ;;
-    dev) echo "hired dev needs the local setup (backend/.venv), not Docker." >&2; exit 1 ;;
+    dev|demo) echo "hired $1 needs the local setup (backend/.venv), not Docker." >&2; exit 1 ;;
     restart|start) ;;
   esac
 
@@ -203,7 +206,7 @@ docker_main() {
 case "${1:-start}" in
   setup) setup; exit 0 ;;
   help|-h|--help) usage; exit 0 ;;
-  start|stop|restart|status|log|dev|backup|doctor) ;;
+  start|stop|restart|status|log|dev|demo|backup|doctor) ;;
   *) echo "hired: no such command '$1'" >&2; echo >&2; usage >&2; exit 2 ;;
 esac
 
@@ -232,6 +235,23 @@ case "${1:-start}" in
     exit $bad ;;
   restart) stop; DEV= ;;
   dev)  DEV=1 ;;
+  demo)
+    # In memory, so it resets every launch and cannot reach the real database.
+    # A second port so it runs beside the real instance rather than replacing it.
+    export HIRED_DEMO=1 HIRED_DATABASE_URL="sqlite://" HIRED_PORT="${HIRED_DEMO_PORT:-8001}"
+    export HIRED_SECRET_KEY="demo-only-not-a-secret"
+    export HIRED_GEMINI_API_KEY="" HIRED_OPENROUTER_API_KEY="" OPEN_ROUTER_API_KEY="" GEMINI_API_KEY=""
+    export HIRED_PASSWORD_HASH="$("$BACKEND/.venv/bin/python" -c 'import sys; sys.path.insert(0,"'"$BACKEND"'"); from app.auth import hash_password; from app.demo import PASSWORD; print(hash_password(PASSWORD))')"
+    PORT="$HIRED_PORT"
+    URL="http://127.0.0.1:$PORT"
+    PIDFILE="$BACKEND/.hired-demo.pid"
+    LOGFILE="$BACKEND/.hired-demo.log"
+    DEV=
+    # Always restart. The database is in memory, so a running demo is holding
+    # old code and old data, and "already running" would quietly serve both.
+    stop
+    echo "demo mode on $URL   password: demo"
+    ;;
   start) DEV= ;;
 esac
 

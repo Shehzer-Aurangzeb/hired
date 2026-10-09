@@ -51,7 +51,7 @@ def client(monkeypatch):
 def attach_pdf(client, application_id, data=b"%PDF-1.4 pretend"):
     with Session(client.engine) as session:
         row = session.get(Application, application_id)
-        row.pdf, row.filename = data, "Shehzar_AirCanada.pdf"
+        row.pdf, row.filename = data, "Maya_AirCanada.pdf"
         session.add(row)
         session.commit()
 
@@ -97,7 +97,7 @@ def test_the_pdf_comes_back_as_a_pdf(client):
     assert response.content == b"%PDF-1.4 pretend"
     # Inline, so the in-app viewer renders it.
     assert response.headers["content-disposition"].startswith("inline;")
-    assert "Shehzar_AirCanada.pdf" in response.headers["content-disposition"]
+    assert "Maya_AirCanada.pdf" in response.headers["content-disposition"]
 
 
 def test_a_hostile_filename_cannot_write_headers(client):

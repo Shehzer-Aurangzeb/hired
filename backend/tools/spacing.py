@@ -1,6 +1,7 @@
 """Compare CV line spacing against the reference PDF. Usage: tools/spacing.py [some.pdf]
 Needs pypdf (pip install pypdf), which is not a runtime dependency."""
 
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -8,7 +9,7 @@ from pathlib import Path
 from pypdf import PdfReader
 
 ROOT = Path(__file__).resolve().parents[2]
-REFERENCE = ROOT / "docs/cv/ShehzarAurangzeb.pdf"
+REFERENCE = ROOT / os.environ.get("HIRED_CV_REFERENCE", "docs/cv/reference.pdf")
 
 # Baseline-to-baseline gaps in points, measured off the reference PDF.
 EXPECTED = {

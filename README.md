@@ -91,6 +91,19 @@ bin/hired dev      # backend on 8000, ng serve on 4200 with a proxy
 cd landing && pnpm install && pnpm dev
 ```
 
+Its screenshots come from an invented profile, never a real one. To refresh
+them after a UI change:
+
+```bash
+cd backend && .venv/bin/python ../landing/demo/capture.py
+```
+
+That builds a throwaway in-memory database, fills it from `backend/app/demo.py`,
+and writes `landing/src/assets/shots/`. `bin/hired demo` serves the same data on
+port 8001 if you want to click around it. Both need the local setup rather than
+Docker, and neither can reach a real database: demo mode refuses to start
+against anything but an in-memory one.
+
 ## Tests
 
 ```bash

@@ -301,17 +301,17 @@ COLON = """# Identity
 name: N
 
 # Experience
-## Devnito
+## Harbourline
 role: Engineer
 
-### Dedicate
+### Ledgerline
 my_role: Lead
 claim_boundary:
   can_claim:
     - Built the front-end from scratch
     - Wired the full Auth0 flow: HttpOnly cookies, OTP, passkeys
 bullets:
-  - id: dedicate-one
+  - id: ledgerline-one
     text: Built a thing.
 """
 

@@ -1,5 +1,8 @@
-import { Component, inject } from '@angular/core';
+import { HttpClient, httpResource } from '@angular/common/http';
+import { Component, computed, inject } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+
+import { API } from './core/api';
 
 import { AuthService } from './core/auth.service';
 import { ProfileService } from './core/profile.service';
@@ -13,6 +16,12 @@ import { ToastHost } from './shared/toast-host';
 })
 export class App {
   readonly auth = inject(AuthService);
+
+  // Unprotected and fetched once: the banner has to be up before sign-in, since
+  // the sign-in page is where you first wonder which instance you are looking at.
+  private readonly mode = httpResource<{ demo: boolean }>(() => `${API}/api/demo`);
+  readonly demo = computed(() => this.mode.value()?.demo === true);
+
   readonly profile = inject(ProfileService);
   private readonly router = inject(Router);
 

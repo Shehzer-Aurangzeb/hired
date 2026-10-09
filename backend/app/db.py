@@ -5,6 +5,7 @@ from typing import Annotated, Any
 
 from fastapi import Depends
 from sqlalchemy import event
+from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
 from .settings import get_settings
@@ -13,11 +14,16 @@ from . import tables  # noqa: F401  -- imported so create_all sees the tables
 settings = get_settings()
 sqlite = settings.database_url.startswith("sqlite")
 
+# An in-memory database belongs to its connection, so a pool would hand each
+# request a different, empty one. StaticPool keeps everyone on the same one.
+memory = settings.database_url in ("sqlite://", "sqlite:///:memory:")
+
 engine = create_engine(
     settings.database_url,
     # SQLite ties a connection to its thread; FastAPI runs sync routes on a
     # threadpool. Postgres needs neither argument.
     connect_args={"check_same_thread": False} if sqlite else {},
+    **({"poolclass": StaticPool} if memory else {}),
 )
 
 

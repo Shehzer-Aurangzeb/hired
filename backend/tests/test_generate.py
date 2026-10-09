@@ -490,8 +490,8 @@ def test_the_filename_says_who_where_and_when():
     from datetime import date
 
     assert (
-        filename("Shehzar Aurangzeb Abbasi", "Air Canada", "Front-End Developer", date(2026, 8, 23))
-        == "ShehzarAurangzebAbbasi_AirCanada_FrontEndDeveloper_2026-08-23.pdf"
+        filename("Maya Adaeze Okafor", "Air Canada", "Front-End Developer", date(2026, 8, 23))
+        == "MayaAdaezeOkafor_AirCanada_FrontEndDeveloper_2026-08-23.pdf"
     )
 
 

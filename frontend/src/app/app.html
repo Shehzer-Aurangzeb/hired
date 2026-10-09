@@ -5,6 +5,18 @@
   Skip to content
 </a>
 
+<!-- Two instances of this app side by side, one holding real applications, is
+     exactly how someone edits the wrong one. -->
+@if (demo()) {
+  <p
+    class="bg-warn text-ink-fg sticky top-0 z-40 flex items-center justify-center gap-2 px-3 py-1 text-center text-[12px] font-medium"
+    role="status"
+  >
+    <app-icon name="alert" [size]="14" />
+    Demo mode. The profile and applications below are invented, and nothing is saved.
+  </p>
+}
+
 @if (auth.authenticated()) {
   <header
     class="border-line bg-raised sticky top-0 z-30 flex h-12 items-center gap-1 border-b px-3"

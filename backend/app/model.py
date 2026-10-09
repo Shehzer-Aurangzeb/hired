@@ -28,6 +28,12 @@ def generate_json(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
     """Return one JSON object matching `schema`, or raise HTTPException with a readable reason."""
     settings = get_settings()
 
+    if settings.demo:
+        # A demo must not spend a rationed call, and must work with no network.
+        from . import demo
+
+        return demo.answer(schema)
+
     if settings.gemini_api_key:
         try:
             return _gemini(prompt, schema, settings)

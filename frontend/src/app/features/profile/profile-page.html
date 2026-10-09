@@ -905,7 +905,7 @@
                 </p>
                 <p>Nothing is saved until you confirm, and every save can be undone from History.</p>
                 <p class="text-fg-subtle mt-2.5 mb-1 text-[11px] tracking-wide uppercase">Try</p>
-                @for (example of ASK_EXAMPLES; track example) {
+                @for (example of askExamples(); track example) {
                   <button
                     type="button"
                     class="border-line hover:border-ink/30 mb-1.5 block w-full cursor-pointer rounded-card border px-2.5 py-2 text-left text-[12px] transition-colors"
@@ -969,11 +969,7 @@
                   id="ask-input"
                   rows="2"
                   class="text-fg placeholder:text-fg-subtle max-h-32 min-h-11 w-full resize-none bg-transparent px-2 py-1.5 text-[13px] leading-relaxed outline-none"
-                  [placeholder]="
-                    turns().length
-                      ? 'Correct it, or add more'
-                      : 'I used Redux on Union AI and Stanley Paden'
-                  "
+                  [placeholder]="turns().length ? 'Correct it, or add more' : askPlaceholder()"
                   [value]="draft()"
                   (input)="draft.set($any($event.target).value)"
                   (keydown.enter)="$event.preventDefault(); send()"

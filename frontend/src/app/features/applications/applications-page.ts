@@ -18,11 +18,13 @@ import { ago } from '../../core/dates';
 import { Application, ApplicationStatus } from '../../core/models';
 import {
   SEGMENTS,
+  funnel,
   isSent,
   Segment,
   inSegment,
   scoreTone,
   statusClass,
+  streak,
   waitingDays,
 } from '../../core/pipeline';
 import { ToastService } from '../../core/toast.service';
@@ -52,6 +54,9 @@ export class ApplicationsPage {
   readonly query = signal('');
   readonly filter = signal<'all' | Segment>('all');
   readonly saving = signal<number | null>(null);
+  /** Which row has its status dropdown open. One at a time. */
+  readonly editing = signal<number | null>(null);
+  readonly TEN = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   readonly hovered = signal<Segment | null>(null);
 
   private readonly searchBox = viewChild<ElementRef<HTMLInputElement>>('searchBox');
@@ -122,6 +127,37 @@ export class ApplicationsPage {
   });
 
   readonly hitTarget = computed(() => this.today() >= this.target());
+
+  /** One slot per application the target asks for; filled ones are done. */
+  readonly slots = computed(() =>
+    Array.from({ length: this.target() }, (_, i) => i < this.today()),
+  );
+
+  readonly streak = computed(() => streak(this.rows() ?? [], this.target()));
+
+  /**
+   * How many reached each stage, widest first. The widths are relative to the
+   * top of the funnel, so the shape of the drop is the thing you read.
+   */
+  readonly funnel = computed(() => {
+    const stages = funnel(this.rows() ?? []);
+    const top = stages[0]?.count || 1;
+    return stages.map((stage) => ({
+      ...stage,
+      // A floor, or a stage nobody reached becomes an invisible hairline and
+      // the row reads as missing rather than as zero.
+      width: stage.count ? Math.max(2, Math.round((stage.count / top) * 100)) : 0,
+    }));
+  });
+
+  /** Left the funnel rather than stalled in it. Shown under it, not inside. */
+  readonly ended = computed(() => {
+    const rows = this.rows() ?? [];
+    return {
+      rejected: rows.filter((a) => a.status === 'rejected').length,
+      skipped: rows.filter((a) => a.status === 'skipped').length,
+    };
+  });
 
   readonly targetPercent = computed(() =>
     Math.min(100, Math.round((this.today() / this.target()) * 100)),

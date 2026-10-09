@@ -35,21 +35,21 @@ authorization: Authorized to work in Canada, no sponsorship required
   gated: [AWS]                 # only when the evidence project is on the page
 
 # Experience
-## Devnito
+## Harbourline
 role: Frontend & Mobile Engineer
 location: Remote
 start: 2024-11
 end: present
 priority: 1
 
-### Dedicate
+### Ledgerline
 label: VC-backed asset management platform
 stack: [Next.js, React, TypeScript]
 priority: 1
 tags: [frontend, react, nextjs]
 links:
-  - Live: dedicate.example.com
-  - Case study: example.com/case/dedicate
+  - Live: ledgerline.example.com
+  - Case study: example.com/case/ledgerline
 
 claim_boundary:
   can_claim:
@@ -62,18 +62,18 @@ claim_boundary:
     - '"~50% reduction in repeat API calls" must always carry the word "estimated"'
 
 bullets:
-  - id: dedicate-frontend-scratch
+  - id: ledgerline-frontend-scratch
     priority: 1
     tags: [frontend, react, ownership]
     text: Built the front-end from scratch in Next.js and TypeScript on a BFF pattern.
-  - id: dedicate-caching
+  - id: ledgerline-caching
     priority: 2
     tags: [performance, caching]
     text: >
       Built the data layer with TanStack Query and tiered caching across 18 query
       patterns, cutting repeat API calls by an estimated 50%.
 
-### Stanley Paden
+### Thornbury
 label: Home services marketplace
 stack: [React Native, Expo]
 priority: 3
@@ -94,14 +94,14 @@ bullets:
     tags: [mobile, payments]
     text: Integrated in-app purchases.
 
-## Swift Reflex
+## Kestrel Labs
 role: Full-Stack Developer
 location: Remote
 start: 2022-01
 end: 2023-06
 priority: 2
 
-### Swift Reflex Platform
+### Kestrel Platform
 label: Logistics platform
 stack: [PHP, Laravel]
 priority: 3
@@ -109,7 +109,7 @@ tags: [backend, php]
 disclosure: Unpaid family work, surface as an interview reminder.
 
 bullets:
-  - id: swiftreflex-php
+  - id: kestrel-php
     priority: 3
     tags: [backend, php]
     text: Built CRUD modules and reporting views in PHP and Laravel.

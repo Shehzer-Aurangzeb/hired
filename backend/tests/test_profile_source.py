@@ -115,18 +115,18 @@ WITH_BULLETS = """# Identity
 name: N
 
 # Experience
-## Devnito
+## Harbourline
 role: Engineer
 
-### Dedicate
-id: dedicate
+### Ledgerline
+id: ledgerline
 label: A platform
   # This comment is why the edit is surgery and not a round trip.
 claim_boundary:
   cannot_claim:
     - The backend
 bullets:
-  - id: dedicate-cache
+  - id: ledgerline-cache
     priority: 1
     tags: [frontend, performance]
     text: Cut repeat API calls by an estimated 50% with a tiered cache
@@ -135,7 +135,7 @@ bullets:
     metric:
       value: 'estimated 50% fewer repeat API calls'
       source: estimated
-  - id: dedicate-auth
+  - id: ledgerline-auth
     priority: 2
     text: Built the Auth0 flow.
 """
@@ -145,7 +145,7 @@ def test_editing_a_bullet_changes_one_line_and_nothing_else(client):
     from app.profile_parser import parse_text, replace_bullet_text
 
     edited = replace_bullet_text(
-        WITH_BULLETS, "dedicate-cache", "Cut repeat API calls by an estimated 60%."
+        WITH_BULLETS, "ledgerline-cache", "Cut repeat API calls by an estimated 60%."
     )
     before, after = WITH_BULLETS.split("\n"), edited.split("\n")
     # Comments outside the edited bullet survive.
@@ -153,14 +153,14 @@ def test_editing_a_bullet_changes_one_line_and_nothing_else(client):
     assert [line for line in after if "This comment" in line]
 
     bullet = next(
-        b for p in parse_text(edited).all_projects() for b in p.bullets if b.id == "dedicate-cache"
+        b for p in parse_text(edited).all_projects() for b in p.bullets if b.id == "ledgerline-cache"
     )
     assert bullet.text == "Cut repeat API calls by an estimated 60%."
     assert bullet.priority == 1 and bullet.tags == ["frontend", "performance"]
     assert bullet.short == "Cut repeat API calls by an estimated 50%."
     assert bullet.metric and bullet.metric.source == "estimated"
     other = next(
-        b for p in parse_text(edited).all_projects() for b in p.bullets if b.id == "dedicate-auth"
+        b for p in parse_text(edited).all_projects() for b in p.bullets if b.id == "ledgerline-auth"
     )
     assert other.text == "Built the Auth0 flow."
 
@@ -169,9 +169,9 @@ def test_an_apostrophe_in_a_bullet_does_not_break_the_file(client):
     from app.profile_parser import parse_text, replace_bullet_text
 
     said = "Built the client's dashboard, and it's live."
-    edited = replace_bullet_text(WITH_BULLETS, "dedicate-auth", said)
+    edited = replace_bullet_text(WITH_BULLETS, "ledgerline-auth", said)
     bullet = next(
-        b for p in parse_text(edited).all_projects() for b in p.bullets if b.id == "dedicate-auth"
+        b for p in parse_text(edited).all_projects() for b in p.bullets if b.id == "ledgerline-auth"
     )
     assert bullet.text == said
 
@@ -182,7 +182,7 @@ def test_editing_a_bullet_through_the_api(client):
     ).json()["updated_at"]
 
     response = client.patch(
-        "/api/profile/bullets/dedicate-auth",
+        "/api/profile/bullets/ledgerline-auth",
         json={"text": "Built the full Auth0 flow behind a BFF pattern.", "expected_updated_at": stamp},
     )
     assert response.status_code == 200
@@ -196,7 +196,7 @@ def test_editing_a_bullet_through_the_api(client):
 def test_a_bullet_edit_cannot_skip_the_conflict_check(client):
     client.put("/api/profile/source", json={"text": WITH_BULLETS, "expected_updated_at": None})
     response = client.patch(
-        "/api/profile/bullets/dedicate-auth",
+        "/api/profile/bullets/ledgerline-auth",
         json={"text": "Written against a copy that moved.", "expected_updated_at": "2020-01-01T00:00:00+00:00"},
     )
     assert response.status_code == 409
@@ -210,7 +210,7 @@ def test_editing_a_bullet_that_is_not_there(client):
     )
     assert gone.status_code == 404
     empty = client.patch(
-        "/api/profile/bullets/dedicate-auth", json={"text": "   ", "expected_updated_at": stamp}
+        "/api/profile/bullets/ledgerline-auth", json={"text": "   ", "expected_updated_at": stamp}
     )
     assert empty.status_code == 422
 

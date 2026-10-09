@@ -28,12 +28,12 @@ def test_titles_summaries_skills(profile):
 
 
 def test_experience_and_projects(profile):
-    assert [e.name for e in profile.experience] == ["Devnito", "Swift Reflex"]
-    devnito = profile.experience[0]
-    assert devnito.role == "Frontend & Mobile Engineer"
-    assert devnito.start == "2024-11" and devnito.end == "present"
-    assert [p.id for p in devnito.projects] == ["dedicate", "stanley-paden"]
-    assert devnito.projects[0].label == "VC-backed asset management platform"
+    assert [e.name for e in profile.experience] == ["Harbourline", "Kestrel Labs"]
+    harbourline = profile.experience[0]
+    assert harbourline.role == "Frontend & Mobile Engineer"
+    assert harbourline.start == "2024-11" and harbourline.end == "present"
+    assert [p.id for p in harbourline.projects] == ["ledgerline", "thornbury"]
+    assert harbourline.projects[0].label == "VC-backed asset management platform"
     assert profile.experience[1].projects[0].disclosure.startswith("Unpaid family work")
 
 
@@ -45,14 +45,14 @@ def test_claim_boundary(profile):
 
 
 def test_bullets(profile):
-    dedicate = profile.experience[0].projects[0]
-    assert [b.id for b in dedicate.bullets] == [
-        "dedicate-frontend-scratch",
-        "dedicate-caching",
+    ledgerline = profile.experience[0].projects[0]
+    assert [b.id for b in ledgerline.bullets] == [
+        "ledgerline-frontend-scratch",
+        "ledgerline-caching",
     ]
-    assert dedicate.bullets[0].priority == 1
-    assert dedicate.bullets[0].status == "active"
-    assert "estimated 50%" in dedicate.bullets[1].text
+    assert ledgerline.bullets[0].priority == 1
+    assert ledgerline.bullets[0].status == "active"
+    assert "estimated 50%" in ledgerline.bullets[1].text
     blocked = profile.experience[0].projects[1].bullets[1]
     assert blocked.id == "stanley-iap" and blocked.status == "blocked"
 
@@ -64,8 +64,8 @@ def test_links_parse_in_all_three_shapes(profile):
         # A bare URL takes its label from the host, with www dropped.
         ("medium.com", "https://www.medium.com/@test"),
     ]
-    dedicate = profile.experience[0].projects[0]
-    assert [link.label for link in dedicate.links] == ["Live", "Case study"]
+    ledgerline = profile.experience[0].projects[0]
+    assert [link.label for link in ledgerline.links] == ["Live", "Case study"]
     assert profile.experience[0].projects[1].links == []
 
 
@@ -77,14 +77,14 @@ def test_education_certifications_languages(profile):
 
 
 def test_duplicate_bullet_id_rejected():
-    dupe = FIXTURE.read_text().replace("id: stanley-mobile", "id: dedicate-caching")
-    with pytest.raises(ProfileError, match="duplicate bullet id: dedicate-caching"):
+    dupe = FIXTURE.read_text().replace("id: stanley-mobile", "id: ledgerline-caching")
+    with pytest.raises(ProfileError, match="duplicate bullet id: ledgerline-caching"):
         parse_text(dupe)
 
 
 def test_duplicate_project_id_rejected():
-    dupe = FIXTURE.read_text().replace("### Stanley Paden", "### Dedicate")
-    with pytest.raises(ProfileError, match="duplicate project id: dedicate"):
+    dupe = FIXTURE.read_text().replace("### Thornbury", "### Ledgerline")
+    with pytest.raises(ProfileError, match="duplicate project id: ledgerline"):
         parse_text(dupe)
 
 
