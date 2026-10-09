@@ -30,6 +30,7 @@ qualifiers survive any rewording.
 | `frontend/` | Angular 20, standalone components, signals, Tailwind 4 |
 | `landing/` | Astro, deployed separately on Vercel |
 | Models | Gemini, with OpenRouter's free tier as the fallback |
+| Run | `bin/hired` launcher, locally or in Docker |
 
 The profile is Markdown headings around YAML, parsed with `yaml.safe_load`, no
 model involved. The grammar is in [docs/parser_contract.md](docs/parser_contract.md)
@@ -37,41 +38,46 @@ and a full example in [docs/master_template.md](docs/master_template.md).
 
 ## Run it
 
-Needs Python 3 (built on 3.14), Node 20+ and pnpm.
+You need either Docker, or Python 3, Node 20+ and pnpm. The `hired` command
+works the same with both: with `backend/.venv` present it runs locally,
+otherwise it runs in Docker.
 
 ```bash
-# backend
-cd backend
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp .env.example .env
-.venv/bin/python -m app.hash_password      # paste the output into .env
+git clone https://github.com/Shehzer-Aurangzeb/hired && cd hired
+ln -s "$PWD/bin/hired" ~/.local/bin/hired   # any folder on your PATH works
+
+hired setup    # creates backend/.env: secret key, password, Gemini key
+hired          # builds, starts, opens http://127.0.0.1:8000
 ```
 
-In `backend/.env`, set `HIRED_SECRET_KEY` (the app won't start without it),
-`HIRED_PASSWORD_HASH` from the command above, and `HIRED_GEMINI_API_KEY`
-from Google AI Studio. `HIRED_OPENROUTER_API_KEY` is optional.
+The first Docker start builds the image (about 1.4GB, a few minutes). Your
+data lives in the `hired-data` Docker volume, so it survives rebuilds.
 
-Then start everything with the launcher:
+Get a Gemini key from [Google AI Studio](https://aistudio.google.com).
+`HIRED_OPENROUTER_API_KEY` in `backend/.env` is an optional fallback.
 
 ```bash
-bin/hired          # builds the frontend if needed, starts, opens the browser
-bin/hired help     # stop, restart, status, log, dev, backup, doctor
+hired stop | restart | status | log | backup | doctor | help
 ```
 
-It runs as one process on one port (8000): FastAPI serves the built Angular
-app, and it listens on `127.0.0.1` only. It installs Chromium and the frontend
-packages on first run. `bin/hired doctor` tells you what's missing and how to
-fix it.
-
-To put it on your PATH:
-
-```bash
-ln -s "$PWD/bin/hired" ~/.local/bin/hired
-```
+It listens on `127.0.0.1` only. `hired doctor` lists anything missing and how
+to fix it. `hired backup` copies the database and your profile into
+`backend/backups`.
 
 On first run you land on `/setup`: paste an existing profile, upload a file,
 or start from the template. The profile is stored in the database, not on disk.
+
+### Without Docker
+
+```bash
+cd backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cd .. && hired setup && hired
+```
+
+`hired` installs Chromium and the frontend packages on first run. To force
+Docker even with a local setup, use `HIRED_DOCKER=1 hired`.
 
 ### Frontend development
 

@@ -11,11 +11,29 @@ PORT="${HIRED_PORT:-8000}"
 URL="http://127.0.0.1:$PORT"
 PIDFILE="$BACKEND/.hired.pid"
 LOGFILE="$BACKEND/.hired.log"
+ENVFILE="$BACKEND/.env"
 
 # Keep Playwright's browser out of ~/Library/Caches, which macOS cleanup deletes.
 export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.playwright}"
 
-running() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
+# Docker mode when there is no local Python setup, or when HIRED_DOCKER=1.
+DOCKER=
+if [ -n "${HIRED_DOCKER:-}" ] || { [ ! -x "$BACKEND/.venv/bin/python" ] && command -v docker >/dev/null; }; then
+  DOCKER=1
+fi
+compose() { docker compose --project-directory "$ROOT" -f "$ROOT/compose.yaml" "$@"; }
+
+open_url() {
+  if command -v open >/dev/null; then open "$1"
+  elif command -v xdg-open >/dev/null; then xdg-open "$1" >/dev/null 2>&1
+  fi || true
+}
+
+running() {
+  if [ -n "$DOCKER" ]; then [ -n "$(compose ps -q --status running 2>/dev/null)" ]
+  else [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null
+  fi
+}
 
 # True when frontend node_modules is installed.
 deps() { [ -x "$ROOT/frontend/node_modules/.bin/ng" ]; }
@@ -29,6 +47,7 @@ with sync_playwright() as p:
 }
 
 stop() {
+  if [ -n "$DOCKER" ]; then compose stop >/dev/null 2>&1 || true; return; fi
   if running; then
     kill "$(cat "$PIDFILE")" 2>/dev/null || true
     # Wait up to 2s for a clean exit, then force it.
@@ -38,10 +57,61 @@ stop() {
   rm -f "$PIDFILE"
 }
 
+# Read or replace KEY=value in backend/.env.
+env_get() { sed -n "s/^$1=//p" "$ENVFILE" | tail -1 | tr -d "'\""; }
+env_set() {
+  local tmp; tmp="$(mktemp)"
+  grep -v "^$1=" "$ENVFILE" > "$tmp" || true
+  printf '%s=%s\n' "$1" "$2" >> "$tmp"
+  mv "$tmp" "$ENVFILE"
+}
+
+setup() {
+  if [ ! -f "$ENVFILE" ]; then
+    cp "$BACKEND/.env.example" "$ENVFILE"
+    echo "created backend/.env"
+  fi
+
+  if [ -z "$(env_get HIRED_SECRET_KEY)" ]; then
+    env_set HIRED_SECRET_KEY "$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 64)"
+    echo "secret key   generated"
+  else
+    echo "secret key   already set"
+  fi
+
+  if [ -z "$(env_get HIRED_PASSWORD_HASH)" ]; then
+    local pw again hash
+    read -r -s -p "Choose the password that unlocks hired (12+ characters): " pw; echo
+    [ "${#pw}" -ge 12 ] || { echo "Use at least 12 characters." >&2; exit 1; }
+    read -r -s -p "Again: " again; echo
+    [ "$pw" = "$again" ] || { echo "Those do not match." >&2; exit 1; }
+    # The password goes in on stdin, so it never appears in a process list.
+    local code='import sys; from app.auth import hash_password; print(hash_password(sys.stdin.read()))'
+    if [ -n "$DOCKER" ]; then
+      hash="$(printf '%s' "$pw" | compose run --rm --no-deps -T hired python -c "$code")"
+    else
+      hash="$(cd "$BACKEND" && printf '%s' "$pw" | .venv/bin/python -c "$code")"
+    fi
+    # Single quotes stop Docker Compose expanding the $ signs in the hash.
+    env_set HIRED_PASSWORD_HASH "'$hash'"
+    echo "password     set"
+  else
+    echo "password     already set"
+  fi
+
+  if [ -z "$(env_get HIRED_GEMINI_API_KEY)" ]; then
+    local key
+    read -r -p "Gemini API key from aistudio.google.com (Enter to skip): " key
+    if [ -n "$key" ]; then env_set HIRED_GEMINI_API_KEY "$key"; echo "gemini key   set"; fi
+  fi
+  echo "done. Run: hired"
+}
+
 usage() {
   cat <<TXT
 hired — tailor a CV to a job posting, on your own machine.
 
+  hired setup      create backend/.env: secret key, password, API key
   hired            start it and open the browser
                    (already running? just opens the tab)
   hired stop       stop it
@@ -54,9 +124,10 @@ hired — tailor a CV to a job posting, on your own machine.
   hired help       this
 
 How it runs
-  One process on one port: FastAPI serves the built Angular bundle, so
-  there is no separate front-end server and no CORS. The front end is
-  rebuilt only when frontend/src is newer than the last build.
+  With backend/.venv present it runs locally: one process on one port,
+  FastAPI serving the built Angular bundle. Without it, and with Docker
+  installed, the same commands run it in Docker instead. HIRED_DOCKER=1
+  forces Docker mode.
 
   It listens on 127.0.0.1 only, so nothing else on your network can
   reach it. The database holds your profile and every CV you have sent.
@@ -64,19 +135,79 @@ How it runs
   Port $PORT, override with HIRED_PORT. Secrets come from
   backend/.env and are never passed on the command line.
 
+  Mode    $([ -n "$DOCKER" ] && echo docker || echo local)
   Repo    $ROOT
-  Log     $LOGFILE
-  Browser $PLAYWRIGHT_BROWSERS_PATH
 TXT
 }
 
 status() {
-  if running; then
-    echo "running on $URL   (pid $(cat "$PIDFILE"))"
-  else
-    echo "not running"
+  if ! running; then echo "not running"
+  elif [ -n "$DOCKER" ]; then echo "running in docker on $URL"
+  else echo "running on $URL   (pid $(cat "$PIDFILE"))"
   fi
 }
+
+# Poll /api/health (no session needed) until it answers or $1 tenths of a second pass.
+wait_up() {
+  for _ in $(seq "$1"); do
+    curl -fsS --max-time 1 "$URL/api/health" >/dev/null 2>&1 && return 0
+    running || return 1
+    sleep 0.1
+  done
+  return 1
+}
+
+docker_main() {
+  case "${1:-start}" in
+    stop) stop; echo "stopped"; exit 0 ;;
+    status) status; exit 0 ;;
+    log) compose logs -f hired; exit 0 ;;
+    backup)
+      compose exec hired python tools/backup.py /data/backups
+      mkdir -p "$BACKEND/backups"
+      compose cp hired:/data/backups/. "$BACKEND/backups/"
+      echo "copied into $BACKEND/backups"
+      exit 0 ;;
+    doctor)
+      bad=0
+      if docker info >/dev/null 2>&1; then echo "docker    ok"
+      else echo "docker    NOT RUNNING  start Docker Desktop or the docker service"; bad=1; fi
+      if [ -f "$ENVFILE" ]; then echo ".env      ok"
+      else echo ".env      MISSING  hired setup"; bad=1; fi
+      if running; then echo "container running"; else echo "container stopped, hired starts it"; fi
+      exit $bad ;;
+    dev) echo "hired dev needs the local setup (backend/.venv), not Docker." >&2; exit 1 ;;
+    restart|start) ;;
+  esac
+
+  [ -f "$ENVFILE" ] || { echo "No backend/.env yet. Run: hired setup" >&2; exit 1; }
+  docker info >/dev/null 2>&1 || { echo "Docker is not running. Start it and try again." >&2; exit 1; }
+
+  [ "${1:-start}" = restart ] && stop
+  if running; then
+    echo "already running on $URL"
+    open_url "$URL"
+    exit 0
+  fi
+
+  echo "starting in docker (the first build takes a few minutes)..."
+  compose up -d --build
+  if wait_up 600; then
+    open_url "$URL"
+    echo "hired is up on $URL   (hired stop | hired log)"
+    exit 0
+  fi
+  echo "did not come up:" >&2; compose logs --tail 20 hired >&2; exit 1
+}
+
+case "${1:-start}" in
+  setup) setup; exit 0 ;;
+  help|-h|--help) usage; exit 0 ;;
+  start|stop|restart|status|log|dev|backup|doctor) ;;
+  *) echo "hired: no such command '$1'" >&2; echo >&2; usage >&2; exit 2 ;;
+esac
+
+[ -n "$DOCKER" ] && docker_main "${1:-start}"
 
 case "${1:-start}" in
   stop) stop; echo "stopped"; exit 0 ;;
@@ -88,8 +219,8 @@ case "${1:-start}" in
     bad=0
     if [ -x "$BACKEND/.venv/bin/python" ]; then echo "venv      ok"
     else echo "venv      MISSING  python3 -m venv $BACKEND/.venv && $BACKEND/.venv/bin/pip install -r $BACKEND/requirements.txt"; bad=1; fi
-    if [ -f "$BACKEND/.env" ]; then echo ".env      ok"
-    else echo ".env      MISSING  copy $BACKEND/.env.example and fill it in"; bad=1; fi
+    if [ -f "$ENVFILE" ]; then echo ".env      ok"
+    else echo ".env      MISSING  hired setup"; bad=1; fi
     if [ -f "$BACKEND/hired.db" ]; then echo "database  ok  $(du -h "$BACKEND/hired.db" | cut -f1)"
     else echo "database  MISSING  it is created on first start"; fi
     if browser; then echo "chromium  ok  $PLAYWRIGHT_BROWSERS_PATH"
@@ -99,21 +230,19 @@ case "${1:-start}" in
     if [ -f "$BUNDLE/index.html" ]; then echo "bundle    ok"
     else echo "bundle    missing, hired start builds it"; fi
     exit $bad ;;
-  help|-h|--help) usage; exit 0 ;;
   restart) stop; DEV= ;;
   dev)  DEV=1 ;;
   start) DEV= ;;
-  *) echo "hired: no such command '$1'" >&2; echo >&2; usage >&2; exit 2 ;;
 esac
 
 if running; then
   echo "already running on $URL"
-  open "$URL" 2>/dev/null || true
+  open_url "$URL"
   exit 0
 fi
 rm -f "$PIDFILE"
 
-[ -f "$BACKEND/.env" ] || { echo "No .env at $BACKEND. Copy .env.example and fill it in." >&2; exit 1; }
+[ -f "$ENVFILE" ] || { echo "No backend/.env yet. Run: hired setup" >&2; exit 1; }
 
 # Install Chromium up front so PDF export does not fail later.
 if ! browser; then
@@ -147,16 +276,12 @@ cd "$BACKEND"
 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port "$PORT" >>"$LOGFILE" 2>&1 &
 echo $! > "$PIDFILE"
 
-# Poll /api/health (no session needed) for up to 10s.
-for _ in $(seq 100); do
-  if curl -fsS --max-time 1 "$URL/api/health" >/dev/null 2>&1; then
-    open "$URL" 2>/dev/null || true
-    echo "hired is up on $URL   (hired stop | hired log)"
-    [ -n "$DEV" ] && (cd "$ROOT/frontend" && exec ./node_modules/.bin/ng serve --open)
-    exit 0
-  fi
-  running || { echo "it died on startup:" >&2; tail -20 "$LOGFILE" >&2; exit 1; }
-  sleep 0.1
-done
-
-echo "did not come up in 10s:" >&2; tail -20 "$LOGFILE" >&2; stop; exit 1
+if wait_up 100; then
+  open_url "$URL"
+  echo "hired is up on $URL   (hired stop | hired log)"
+  [ -n "$DEV" ] && (cd "$ROOT/frontend" && exec ./node_modules/.bin/ng serve --open)
+  exit 0
+fi
+if running; then echo "did not come up in 10s:" >&2; stop; else echo "it died on startup:" >&2; fi
+tail -20 "$LOGFILE" >&2
+exit 1

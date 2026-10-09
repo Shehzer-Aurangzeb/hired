@@ -17,7 +17,7 @@ def main() -> None:
     if password != getpass.getpass("Again: "):
         raise SystemExit("Those do not match.")
     print()
-    print(f"HIRED_PASSWORD_HASH={hash_password(password)}")
+    print(f"HIRED_PASSWORD_HASH='{hash_password(password)}'")
 
 
 if __name__ == "__main__":

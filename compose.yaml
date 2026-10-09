@@ -1,0 +1,15 @@
+services:
+  hired:
+    build: .
+    env_file: backend/.env
+    environment:
+      HIRED_DATABASE_URL: sqlite:////data/hired.db
+    # Published on localhost only: the database holds your CV data.
+    ports:
+      - "127.0.0.1:${HIRED_PORT:-8000}:8000"
+    volumes:
+      - hired-data:/data
+    restart: unless-stopped
+
+volumes:
+  hired-data:

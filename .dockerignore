@@ -1,0 +1,16 @@
+**/.env
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+.git
+.gstack
+landing
+docs
+frontend/dist
+frontend/.angular
+backend/hired.db*
+backend/backups
+backend/storage
+backend/profile
+backend/.hired.*

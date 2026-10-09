@@ -1,13 +1,15 @@
 """Back up hired.db (plus a plain master.md copy) into backups/ or argv[1], keeping the last 14.
 Uses SQLite's online backup API, since copying a WAL-mode file mid-write can tear it."""
 
+import os
 import sqlite3
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parents[1]
-LIVE = BACKEND / "hired.db"
+# Follows HIRED_DATABASE_URL so it also finds the database inside Docker.
+LIVE = BACKEND / os.environ.get("HIRED_DATABASE_URL", "sqlite:///./hired.db").removeprefix("sqlite:///")
 KEEP = 14
 
 
@@ -28,7 +30,7 @@ def backup(into: Path) -> Path:
             copy.execute("PRAGMA journal_mode=DELETE")
         finally:
             copy.close()
-        row = source.execute("SELECT text FROM profile_source").fetchone()
+        row = source.execute("SELECT text FROM profile_source ORDER BY id DESC LIMIT 1").fetchone()
     finally:
         source.close()
 
@@ -53,6 +55,6 @@ if __name__ == "__main__":
     check = sqlite3.connect(f"file:{written}?mode=ro", uri=True)
     apps = check.execute("SELECT count(*) FROM application").fetchone()[0]
     pdfs = check.execute("SELECT count(*) FROM application WHERE pdf IS NOT NULL").fetchone()[0]
-    chars = check.execute("SELECT length(text) FROM profile_source").fetchone()
+    chars = check.execute("SELECT length(text) FROM profile_source ORDER BY id DESC LIMIT 1").fetchone()
     check.close()
     print(f"verified: {apps} applications ({pdfs} with a PDF), profile {chars[0] if chars else 0} chars")
