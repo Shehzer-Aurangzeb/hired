@@ -1,5 +1,7 @@
 """Ask: the guard and the splicer."""
 
+import pathlib
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
@@ -86,8 +88,9 @@ def answers(monkeypatch, payload):
     """Stand in for the model, and hand back the prompt it was given."""
     sent = {}
 
-    def fake(prompt, schema):
+    def fake(prompt, schema, turns=None):
         sent["prompt"] = prompt
+        sent["turns"] = turns or []
         return payload
 
     monkeypatch.setattr(ask, "generate_json", fake)
@@ -387,13 +390,23 @@ def test_questions_come_back_with_no_changes(client, monkeypatch):
 
 def test_the_prompt_carries_the_file_the_history_and_real_bullets(client, monkeypatch):
     sent = answers(monkeypatch, {"reply": "ok", "changes": []})
-    say(client, "and what about Zustand", [{"role": "you", "text": "I used Redux"}])
+    say(
+        client,
+        "and what about Zustand",
+        [
+            {"role": "you", "text": "I used Redux"},
+            {"role": "ask", "text": "On which project?"},
+        ],
+    )
 
     prompt = sent["prompt"]
     assert "Shipped the thing" in prompt          # voice, from their own bullets
-    assert "# Skill Evidence" in prompt           # the whole file
-    assert "you: I used Redux" in prompt          # the conversation so far
-    assert "and what about Zustand" in prompt     # this turn
+    assert "# Skill Evidence" in prompt           # the slice it needs
+    assert sent["turns"] == [                     # a conversation, not a quoted transcript
+        ("user", "I used Redux"),
+        ("model", "On which project?"),
+        ("user", "and what about Zustand"),
+    ]
 
 
 # ---------- splicing directly ----------
@@ -557,3 +570,86 @@ def test_a_skills_row_nobody_named_says_which_rows_exist(client, monkeypatch):
 
     assert "no row was named" in body["refused"][0]
     assert "Frontend" in body["refused"][0]
+
+
+def test_every_turn_is_logged_raw(client, monkeypatch, tmp_path):
+    """The model's answer before any guard touches it, for tuning the prompt."""
+    log = ask.LOG
+    answers(
+        monkeypatch,
+        {"reply": "ok", "changes": [{"op": "add_skill_evidence", "target": "Jest"}]},
+    )
+    say(client, "ive used jest")
+
+    import json as _json
+
+    line = _json.loads(log.read_text().splitlines()[0])
+    assert line["message"] == "ive used jest"
+    # The refused change is still in the log: what it tried matters most.
+    assert line["answer"]["changes"][0]["target"] == "Jest"
+
+
+def test_a_broken_log_does_not_break_ask(client, monkeypatch):
+    monkeypatch.setattr(ask, "LOG", pathlib.Path("/nope/nowhere/ask.jsonl"))
+    answers(
+        monkeypatch,
+        {"reply": "ok", "changes": [{"op": "add_skill_evidence", "target": "Redux", "level": "working"}]},
+    )
+    assert say(client, "redux, working").json()["text"] is not None
+
+
+def test_an_item_with_no_name_is_refused(client, monkeypatch):
+    """The item goes in target. A change that leaves it blank adds nothing."""
+    answers(
+        monkeypatch,
+        {
+            "reply": "Added Docker.",
+            "changes": [{"op": "add_skill_item", "line": "Backend", "text": "Docker"}],
+        },
+    )
+    body = say(client, "working, shipped with it").json()
+
+    assert body["changes"] == []
+    assert "no item was named" in body["refused"][0]
+
+
+def test_a_date_nobody_gave_is_dropped(client, monkeypatch):
+    answers(
+        monkeypatch,
+        {
+            "reply": "ok",
+            "changes": [
+                {
+                    "op": "add_skill_evidence",
+                    "target": "Docker",
+                    "level": "working",
+                    "last_used": "2026-08",
+                }
+            ],
+        },
+    )
+    body = say(client, "working, shipped with it").json()
+
+    assert "last_used" not in body["text"].split("- name: Docker")[1]
+    assert "Dropped the date" in body["refused"][0]
+
+
+def test_a_date_they_gave_is_kept(client, monkeypatch):
+    answers(
+        monkeypatch,
+        {
+            "reply": "ok",
+            "changes": [
+                {
+                    "op": "add_skill_evidence",
+                    "target": "Docker",
+                    "level": "working",
+                    "last_used": "2026-08",
+                }
+            ],
+        },
+    )
+    body = say(client, "used docker up to august 2026").json()
+
+    assert "  last_used: 2026-08" in body["text"]
+    assert body["refused"] == []

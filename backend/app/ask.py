@@ -4,6 +4,8 @@ module splices the YAML in and returns a diff. Nothing is saved here."""
 import difflib
 import json
 import re
+from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -32,6 +34,12 @@ CONTEXTS = ("professional", "personal", "academic", "volunteer")
 
 # A digit that follows a letter is part of a name: Auth0, S3, HTML5.
 _NUMBER = re.compile(r"(?<![A-Za-z0-9])\d")
+# A year, a month name, or "last week"-style recency. Anything vaguer is not a date.
+_DATE = re.compile(
+    r"\b(20\d\d|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec"
+    r"|today|yesterday|last (week|month|year)|this (week|month|year))",
+    re.I,
+)
 
 
 class Turn(BaseModel):
@@ -175,7 +183,11 @@ def ask(body: AskRequest, session: SessionDep) -> AskResponse:
         raise HTTPException(404, "No profile saved yet. There is nothing to change.")
 
     profile = parse_text(row.text)
-    answer = generate_json(_prompt(profile, row.text, body), SCHEMA)
+    turns = [("user" if t.role == "you" else "model", t.text) for t in body.history]
+    answer = generate_json(
+        _prompt(profile, row.text, body), SCHEMA, turns + [("user", text)]
+    )
+    _log(body, answer)
 
     said = " ".join([turn.text for turn in body.history] + [body.message])
     fresh, refused = _allowed(
@@ -249,8 +261,71 @@ def _merge(pending: list[Change], fresh: list[Change]) -> list[Change]:
     return list(merged.values())
 
 
+# ponytail: one JSONL line per turn, no rotation, no levels. It is for reading
+# back what the model said while tuning the prompt, not for running anything on.
+# Add rotation if it ever gets big enough to care about.
+LOG = Path(__file__).resolve().parents[1] / ".ask-log.jsonl"
+
+
+def _log(body: AskRequest, answer: dict) -> None:
+    """What was asked and what came back, raw, before any guard touches it."""
+    try:
+        line = {
+            "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "message": body.message,
+            "turns": len(body.history),
+            "pending": [c.model_dump(exclude_defaults=True) for c in body.pending],
+            "answer": answer,
+        }
+        with LOG.open("a") as out:
+            out.write(json.dumps(line) + "\n")
+    except Exception:  # noqa: BLE001
+        pass  # A log that breaks the feature is worse than no log.
+
+
+def _text_of(lines: list[str], name: str) -> str:
+    start, end = _section_bounds(lines, name)
+    return "\n".join(lines[start:end])
+
+
+def _context(profile: Profile, source: str, body: AskRequest) -> str:
+    """
+    What the question needs, not the whole file. Skills and Skill Evidence are a
+    few hundred lines and every skill op touches them. A project's bullets only
+    travel when the conversation names that project, which is most of the file.
+
+    # ponytail: substring match on id and name. A project nobody names is one the
+    # model has to ask about, which is what we want it to do anyway.
+    """
+    lines = source.split("\n")
+    said = " ".join([turn.text for turn in body.history] + [body.message]).casefold()
+    blocks = [
+        f"# Skills\n{_text_of(lines, 'Skills')}",
+        f"# Skill Evidence\n{_text_of(lines, 'Skill Evidence')}",
+    ]
+    for project in profile.all_projects():
+        if project.id.casefold() not in said and project.name.casefold() not in said:
+            continue
+        blocks.append(
+            "PROJECT "
+            + json.dumps(
+                {
+                    "id": project.id,
+                    "name": project.name,
+                    "claim_boundary": project.claim_boundary.model_dump(),
+                    "bullets": [
+                        {"id": b.id, "text": b.text, "status": b.status}
+                        for b in project.bullets
+                    ],
+                }
+            )
+        )
+    return "\n\n".join(blocks)
+
+
 def _prompt(profile: Profile, source: str, body: AskRequest) -> str:
-    """The whole file, the conversation, and six real bullets as a style guide."""
+    """The briefing: rules, voice, and the slice of the file this question needs.
+    The conversation itself travels as real turns, not quoted in here."""
     samples = [
         bullet.text
         for project in profile.all_projects()
@@ -262,7 +337,6 @@ def _prompt(profile: Profile, source: str, body: AskRequest) -> str:
         "skills_lines": [row.line for row in profile.skills],
         "skills_with_evidence": [s.name for s in profile.skill_evidence],
     }
-    talk = "\n".join(f"{turn.role}: {turn.text}" for turn in body.history)
     proposed = json.dumps(
         [
             {k: v for k, v in change.model_dump().items() if v not in ("", [], None, False)}
@@ -272,8 +346,7 @@ def _prompt(profile: Profile, source: str, body: AskRequest) -> str:
     return (
         f"{INSTRUCTIONS}\n\nHOW THEIR BULLETS READ:\n" + "\n\n".join(samples)
         + f"\n\nWHAT EXISTS ALREADY:\n{json.dumps(known)}"
-        + f"\n\nTHE PROFILE:\n{source}"
-        + (f"\n\nCONVERSATION SO FAR:\n{talk}" if talk else "")
+        + f"\n\nTHE PROFILE:\n{_context(profile, source, body)}"
         + (
             f"\n\nALREADY PROPOSED, NOT YET SAVED:\n{proposed}"
             "\nReturn a change for anything you are adding or correcting. Leave the rest"
@@ -281,7 +354,6 @@ def _prompt(profile: Profile, source: str, body: AskRequest) -> str:
             if body.pending
             else ""
         )
-        + f"\n\nTHEY SAY:\n{body.message}"
     )
 
 
@@ -294,6 +366,7 @@ def _allowed(
     # Years can only come from the person. If they typed no digit, the model
     # invented it, so the field is dropped.
     told_a_number = bool(re.search(r"\d", said))
+    told_a_date = bool(_DATE.search(said))
     projects = {p.id for p in profile.all_projects()}
     lines = {row.line.casefold() for row in profile.skills}
     bullets = {b.id for p in profile.all_projects() for b in p.bullets}
@@ -314,6 +387,12 @@ def _allowed(
             refused.append(f'No project called {", ".join(missing)} in the profile.')
             continue
 
+        if change.op == "add_skill_item" and not change.target.strip():
+            refused.append(
+                f'Did not add anything to "{change.line}": no item was named. '
+                "The item goes in target."
+            )
+            continue
         if change.op == "add_skill_item" and not change.line.strip():
             refused.append(
                 f'Did not add "{change.target}" to Skills: no row was named. '
@@ -356,6 +435,15 @@ def _allowed(
                 "A name on its own says less than leaving it out."
             )
             continue
+
+        # Same bargain as years: the neighbouring entries carry dates, and the
+        # model copies one when nobody gave it. A date is a claim about when.
+        if change.last_used and not told_a_date:
+            refused.append(
+                f'Dropped the date on "{change.target}". You did not say when you '
+                "last used it, and a date nobody gave is one you have to defend."
+            )
+            change = change.model_copy(update={"last_used": ""})
 
         if change.years is not None and not told_a_number:
             refused.append(

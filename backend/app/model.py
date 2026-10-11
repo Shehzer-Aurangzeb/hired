@@ -24,8 +24,18 @@ _CLIENT = httpx.Client(
 )
 
 
-def generate_json(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
-    """Return one JSON object matching `schema`, or raise HTTPException with a readable reason."""
+def generate_json(
+    prompt: str,
+    schema: dict[str, Any],
+    turns: list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    """
+    Return one JSON object matching `schema`, or raise HTTPException with a readable reason.
+
+    `turns` is a conversation as (role, text) pairs, role being "user" or "model".
+    Sent as real turns rather than a transcript quoted inside `prompt`: a model
+    treats what it said itself as its own, and quoted text as background reading.
+    """
     settings = get_settings()
 
     if settings.demo:
@@ -36,7 +46,7 @@ def generate_json(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
 
     if settings.gemini_api_key:
         try:
-            return _gemini(prompt, schema, settings)
+            return _gemini(prompt, schema, settings, turns)
         except HTTPException:
             # Fall through only if OpenRouter is configured.
             if not settings.openrouter_api_key:
@@ -44,10 +54,28 @@ def generate_json(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
 
     if not settings.openrouter_api_key:
         raise HTTPException(503, "No model key is configured on this instance.")
-    return _openrouter(prompt, schema, settings)
+    return _openrouter(prompt, schema, settings, turns)
 
 
-def _openrouter(prompt: str, schema: dict[str, Any], settings: Settings) -> dict[str, Any]:
+def _turns(turns: list[tuple[str, str]] | None, assistant: str) -> list[dict[str, str]]:
+    """The conversation, with a short ack so the briefing reads as a turn of its own.
+
+    # ponytail: no merging of consecutive same-role turns. Ask alternates by
+    # construction; merge them here if a caller ever sends two in a row.
+    """
+    if not turns:
+        return []
+    out = [{"role": assistant, "text": "Understood."}]
+    out += [{"role": assistant if role == "model" else "user", "text": text} for role, text in turns]
+    return out
+
+
+def _openrouter(
+    prompt: str,
+    schema: dict[str, Any],
+    settings: Settings,
+    turns: list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
     # require_parameters keeps it off models that would ignore the schema.
     # No `strict: true`: it limits which JSON Schema keywords are allowed.
     try:
@@ -56,7 +84,11 @@ def _openrouter(prompt: str, schema: dict[str, Any], settings: Settings) -> dict
             headers={"Authorization": f"Bearer {settings.openrouter_api_key}"},
             json={
                 "model": FREE_POOL,
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": [{"role": "user", "content": prompt}]
+                + [
+                    {"role": turn["role"], "content": turn["text"]}
+                    for turn in _turns(turns, "assistant")
+                ],
                 "provider": {"require_parameters": True},
                 "response_format": {
                     "type": "json_schema",
@@ -95,13 +127,22 @@ def _openrouter(prompt: str, schema: dict[str, Any], settings: Settings) -> dict
         raise HTTPException(502, f"{served} returned something unreadable.") from error
 
 
-def _gemini(prompt: str, schema: dict[str, Any], settings: Settings) -> dict[str, Any]:
+def _gemini(
+    prompt: str,
+    schema: dict[str, Any],
+    settings: Settings,
+    turns: list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
     try:
         response = _CLIENT.post(
             f"{GEMINI}/{settings.gemini_model}:generateContent",
             headers={"x-goog-api-key": settings.gemini_api_key},
             json={
-                "contents": [{"parts": [{"text": prompt}]}],
+                "contents": [{"role": "user", "parts": [{"text": prompt}]}]
+                + [
+                    {"role": turn["role"], "parts": [{"text": turn["text"]}]}
+                    for turn in _turns(turns, "model")
+                ],
                 "generationConfig": {
                     "responseMimeType": "application/json",
                     "responseSchema": schema,
