@@ -1013,7 +1013,15 @@
                   </span>
                   <button
                     type="button"
-                    class="btn btn-primary ml-auto"
+                    class="btn btn-ghost ml-auto !px-2 !py-1"
+                    [attr.aria-pressed]="correcting()"
+                    (click)="correcting.set(!correcting())"
+                  >
+                    {{ correcting() ? 'Hide fields' : 'Edit fields' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-primary"
                     [disabled]="!canConfirm()"
                     (click)="confirm()"
                   >
@@ -1030,6 +1038,49 @@
                     Unsaved edits in Source. Save or revert them first, or one would overwrite
                     the other.
                   </p>
+                }
+
+                <!-- Correct a field the model got wrong, rather than asking again. -->
+                @if (correcting()) {
+                  <div class="border-line bg-surface/40 border-b px-3 py-2.5">
+                    @for (change of pending()!.changes; track $index) {
+                      <p class="text-fg-subtle mb-1.5 text-[11px]">{{ change.op }}</p>
+                      <div class="mb-3 grid gap-1.5 last:mb-0 sm:grid-cols-2">
+                        @for (field of fieldsOf(change); track field) {
+                          <label class="flex items-center gap-2 text-[11px]">
+                            <span class="text-fg-subtle w-20 shrink-0">{{ field }}</span>
+                            @if (CHOICES[field]) {
+                              <select
+                                class="border-line-strong bg-raised focus:border-ink min-w-0 flex-1 rounded border px-1.5 py-1 text-[12px] outline-none"
+                                [value]="valueOf(change, field)"
+                                (change)="setField($index, field, $any($event.target).value)"
+                              >
+                                <option value="">—</option>
+                                @for (choice of CHOICES[field]; track choice) {
+                                  <option [value]="choice">{{ choice }}</option>
+                                }
+                              </select>
+                            } @else {
+                              <input
+                                type="text"
+                                class="border-line-strong bg-raised focus:border-ink min-w-0 flex-1 rounded border px-1.5 py-1 text-[12px] outline-none"
+                                [value]="valueOf(change, field)"
+                                (change)="setField($index, field, $any($event.target).value)"
+                              />
+                            }
+                          </label>
+                        }
+                      </div>
+                    }
+                    <p class="text-fg-subtle text-[11px]">
+                      @if (recomputing()) {
+                        Re-checking…
+                      } @else {
+                        Edited values are yours, so they are kept as typed. The diff updates as
+                        you go.
+                      }
+                    </p>
+                  </div>
                 }
                 <pre
                   class="mono max-h-[28rem] overflow-auto px-3 py-2 text-[11px] leading-relaxed"

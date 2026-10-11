@@ -149,8 +149,10 @@ def answer(schema: dict) -> dict:
     properties = schema.get("properties", {})
     if "title_id" in properties:
         return SELECTION
+    if "op" in properties:
+        return {"op": ASK["changes"][0]["op"], "reply": ASK["reply"], "questions": []}
     if "changes" in properties:
-        return ASK
+        return {"changes": [{k: v for k, v in c.items() if k != "op"} for c in ASK["changes"]]}
     return FIT
 
 

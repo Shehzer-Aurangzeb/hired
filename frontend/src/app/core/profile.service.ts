@@ -84,6 +84,11 @@ export class ProfileService {
     return this.http.post<AskReply>(`${API}/api/profile/ask`, { message, history, pending });
   }
 
+  /** Re-apply a proposal the person corrected. Same guards, no model call. */
+  editChanges(changes: AskChange[]): Observable<AskReply> {
+    return this.http.post<AskReply>(`${API}/api/profile/ask/edit`, { changes });
+  }
+
   /** Newest first; the first is current. */
   versions(): Observable<ProfileVersion[]> {
     return this.http.get<ProfileVersion[]>(`${API}/api/profile/versions`);

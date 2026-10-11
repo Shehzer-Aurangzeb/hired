@@ -91,7 +91,15 @@ def answers(monkeypatch, payload):
     def fake(prompt, schema, turns=None):
         sent["prompt"] = prompt
         sent["turns"] = turns or []
-        return payload
+        # Ask makes two calls: the op, then that op's fields.
+        changes = payload.get("changes") or []
+        if "op" in schema["properties"]:
+            return {
+                "op": changes[0]["op"] if changes else "ask",
+                "reply": payload.get("reply", ""),
+                "questions": payload.get("questions", []),
+            }
+        return {"changes": [{k: v for k, v in c.items() if k != "op"} for c in changes]}
 
     monkeypatch.setattr(ask, "generate_json", fake)
     return sent
@@ -653,3 +661,85 @@ def test_a_date_they_gave_is_kept(client, monkeypatch):
 
     assert "  last_used: 2026-08" in body["text"]
     assert body["refused"] == []
+
+
+# ---------- editing a proposal before saving ----------
+
+
+def test_a_corrected_level_is_applied(client):
+    """The model said working, the person says advanced. No model call."""
+    body = client.post(
+        "/api/profile/ask/edit",
+        json={
+            "changes": [
+                {"op": "add_skill_evidence", "target": "Tailwind", "level": "advanced"}
+            ]
+        },
+    ).json()
+
+    assert "  level: advanced" in body["text"]
+    assert body["refused"] == []
+
+
+def test_an_edit_still_passes_the_structural_guards(client):
+    body = client.post(
+        "/api/profile/ask/edit",
+        json={"changes": [{"op": "add_skill_evidence", "target": "X", "level": "guru"}]},
+    ).json()
+
+    assert body["text"] is None
+    assert "not a level" in body["refused"][0]
+
+
+def test_a_number_the_person_typed_is_kept(client):
+    """They edited the field themselves, so nobody invented it."""
+    body = client.post(
+        "/api/profile/ask/edit",
+        json={
+            "changes": [
+                {"op": "add_skill_evidence", "target": "Tailwind", "level": "advanced",
+                 "years": 4, "last_used": "2026-10"}
+            ]
+        },
+    ).json()
+
+    assert "  years: 4" in body["text"]
+    assert "  last_used: 2026-10" in body["text"]
+    assert body["refused"] == []
+
+
+# ---------- the two calls ----------
+
+
+def test_a_question_turn_costs_one_call(client, monkeypatch):
+    """No op means nothing to fill in, so the second call is skipped."""
+    calls = []
+
+    def fake(prompt, schema, turns=None):
+        calls.append(schema)
+        return {"op": "ask", "reply": "Which project?", "questions": ["Which project?"]}
+
+    monkeypatch.setattr(ask, "generate_json", fake)
+    body = say(client, "i used redux").json()
+
+    assert len(calls) == 1
+    assert body["questions"] == ["Which project?"]
+
+
+def test_the_second_call_only_offers_its_own_fields(client, monkeypatch):
+    """A skill call has no project_id; a bullet call has no level."""
+    seen = {}
+
+    def fake(prompt, schema, turns=None):
+        if "op" in schema["properties"]:
+            return {"op": "add_bullet", "reply": "ok"}
+        seen["fields"] = set(schema["properties"]["changes"]["items"]["properties"])
+        seen["required"] = schema["properties"]["changes"]["items"]["required"]
+        return {"changes": []}
+
+    monkeypatch.setattr(ask, "generate_json", fake)
+    say(client, "add a bullet to thing")
+
+    assert "level" not in seen["fields"]
+    assert "years" not in seen["fields"]
+    assert seen["required"] == ["project_id", "text"]

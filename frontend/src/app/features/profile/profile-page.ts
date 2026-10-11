@@ -433,6 +433,24 @@ export class ProfilePage {
   readonly asking = signal(false);
   readonly askError = signal<string | null>(null);
 
+  // Which fields each op shows for editing, in the order they read best.
+  private readonly EDITABLE: Record<string, string[]> = {
+    add_skill_evidence: ['target', 'level', 'last_used', 'years', 'context', 'evidence'],
+    update_skill_evidence: ['target', 'level', 'last_used', 'years', 'context', 'evidence'],
+    add_skill_item: ['line', 'target'],
+    add_bullet: ['project_id', 'text', 'metric_value', 'metric_source', 'metric_method'],
+    update_bullet: ['bullet_id', 'text', 'metric_value', 'metric_source', 'metric_method'],
+  };
+
+  readonly CHOICES: Record<string, string[]> = {
+    level: ['familiar', 'working', 'advanced', 'expert'],
+    context: ['professional', 'personal', 'academic', 'volunteer'],
+    metric_source: ['measured', 'estimated', 'reported'],
+  };
+
+  readonly correcting = signal(false);
+  readonly recomputing = signal(false);
+
   readonly canAsk = computed(() => !!this.draft().trim() && !this.asking());
   /** Confirming replaces the editor text, so wait for no unsaved edits. */
   readonly canConfirm = computed(
@@ -467,6 +485,52 @@ export class ProfilePage {
     });
   }
 
+  fieldsOf(change: AskChange): string[] {
+    return this.EDITABLE[change.op] ?? ['target'];
+  }
+
+  valueOf(change: AskChange, field: string): string {
+    const value = change[field];
+    if (Array.isArray(value)) {
+      return value.join(', ');
+    }
+    return value === null || value === undefined ? '' : String(value);
+  }
+
+  /** Write the typed value back, then re-splice server-side for a fresh diff. */
+  setField(index: number, field: string, raw: string): void {
+    const held = this.pending();
+    if (!held) {
+      return;
+    }
+    const value =
+      field === 'evidence'
+        ? raw.split(',').map((part) => part.trim()).filter(Boolean)
+        : field === 'years'
+          ? (raw.trim() === '' ? null : Number(raw))
+          : raw;
+    const changes = held.changes.map((change, i) =>
+      i === index ? { ...change, [field]: value } : change,
+    );
+    this.pending.set({ ...held, changes });
+    this.recompute(changes);
+  }
+
+  private recompute(changes: AskChange[]): void {
+    this.recomputing.set(true);
+    this.service.editChanges(changes).subscribe({
+      next: (reply) => {
+        this.recomputing.set(false);
+        // Keep the model's reply; only the proposal changed.
+        this.pending.update((held) => (held ? { ...reply, reply: held.reply } : reply));
+      },
+      error: () => {
+        this.recomputing.set(false);
+        this.askError.set('Could not re-check that edit.');
+      },
+    });
+  }
+
   private keptProposal(reply: AskReply): Partial<AskReply> {
     const held = this.pending();
     return held?.text
@@ -477,6 +541,7 @@ export class ProfilePage {
   discard(): void {
     this.turns.set([]);
     this.pending.set(null);
+    this.correcting.set(false);
     this.draft.set('');
     this.askError.set(null);
   }

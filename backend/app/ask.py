@@ -56,6 +56,12 @@ class AskRequest(BaseModel):
     pending: list["Change"] = []
 
 
+class EditRequest(BaseModel):
+    """A proposal after the person has corrected it. No message, no history."""
+
+    changes: list["Change"] = []
+
+
 class Change(BaseModel):
     """Flat on purpose: a response schema wants one concrete shape."""
 
@@ -77,6 +83,7 @@ class Change(BaseModel):
 
 
 AskRequest.model_rebuild()
+EditRequest.model_rebuild()
 
 
 class AskResponse(BaseModel):
@@ -92,43 +99,86 @@ class AskResponse(BaseModel):
     refused: list[str] = []
 
 
-SCHEMA = {
+SOURCES = ("measured", "estimated", "reported")
+
+# One JSON type per field. Shared, so a field means the same thing in every op.
+FIELD = {
+    "target": {"type": "string"},
+    "level": {"type": "string", "enum": list(LEVELS)},
+    "last_used": {"type": "string"},
+    "years": {"type": "number"},
+    "context": {"type": "string", "enum": list(CONTEXTS)},
+    "evidence": {"type": "array", "items": {"type": "string"}},
+    "gated": {"type": "boolean"},
+    "line": {"type": "string"},
+    "project_id": {"type": "string"},
+    "bullet_id": {"type": "string"},
+    "text": {"type": "string"},
+    "metric_value": {"type": "string"},
+    "metric_source": {"type": "string", "enum": list(SOURCES)},
+    "metric_method": {"type": "string"},
+}
+
+# (must have, may have) per op. An op is only asked for the fields it uses, so a
+# date cannot land in `years` and a bullet cannot arrive with a skill level.
+OP_FIELDS = {
+    "add_skill_evidence": (
+        ["target", "level"],
+        ["last_used", "years", "context", "evidence", "gated"],
+    ),
+    "update_skill_evidence": (
+        ["target"],
+        ["level", "last_used", "years", "context", "evidence", "gated"],
+    ),
+    "add_skill_item": (["line", "target"], []),
+    "add_bullet": (
+        ["project_id", "text"],
+        ["metric_value", "metric_source", "metric_method"],
+    ),
+    "update_bullet": (
+        ["bullet_id", "text"],
+        ["metric_value", "metric_source", "metric_method"],
+    ),
+}
+
+# Call one: which op, or "ask" when something is still missing.
+ROUTE_SCHEMA = {
     "type": "object",
     "properties": {
+        "op": {"type": "string", "enum": [*OPS, "ask"]},
         "reply": {"type": "string"},
         "questions": {"type": "array", "items": {"type": "string"}},
-        "changes": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "op": {"type": "string", "enum": list(OPS)},
-                    "target": {"type": "string"},
-                    "level": {"type": "string"},
-                    "last_used": {"type": "string"},
-                    "years": {"type": "number"},
-                    "context": {"type": "string"},
-                    "evidence": {"type": "array", "items": {"type": "string"}},
-                    "gated": {"type": "boolean"},
-                    "line": {"type": "string"},
-                    "project_id": {"type": "string"},
-                    "bullet_id": {"type": "string"},
-                    "text": {"type": "string"},
-                    "metric_value": {"type": "string"},
-                    "metric_source": {"type": "string"},
-                    "metric_method": {"type": "string"},
-                },
-                "required": ["op"],
-            },
-        },
     },
-    "required": ["reply", "changes"],
+    "required": ["op", "reply"],
 }
+
+
+def schema_for(op: str) -> dict:
+    """Call two: the changes array, holding only this op's fields."""
+    required, optional = OP_FIELDS[op]
+    return {
+        "type": "object",
+        "properties": {
+            "changes": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {f: FIELD[f] for f in required + optional},
+                    "required": required,
+                },
+            }
+        },
+        "required": ["changes"],
+    }
+
 
 INSTRUCTIONS = """You are helping someone keep their master profile accurate. They
 describe a change in plain language and you work out what it means for the file.
 
 You never write the file. You return changes, and the application renders them.
+
+You answer twice: first which one operation this is, or "ask" if anything is
+still missing, then that operation's fields.
 
 The operations you may use:
 
@@ -164,7 +214,7 @@ Rules:
   first person, one accomplishment each.
 - You may not loosen anything. Removing a cannot_claim, clearing a gap or
   unblocking a bullet are not operations you have.
-- When the request is ambiguous, return no changes and ask. One or two questions,
+- When the request is ambiguous, set op to "ask" and ask. One or two questions,
   not a form. Being asked is why they are here rather than editing YAML.
 - reply is one or two sentences, plain, addressed to them. Say what you changed
   or what you need. No flattery and no restating their message back."""
@@ -184,51 +234,88 @@ def ask(body: AskRequest, session: SessionDep) -> AskResponse:
 
     profile = parse_text(row.text)
     turns = [("user" if t.role == "you" else "model", t.text) for t in body.history]
-    answer = generate_json(
-        _prompt(profile, row.text, body), SCHEMA, turns + [("user", text)]
-    )
-    _log(body, answer)
+    turns.append(("user", text))
+    prompt = _prompt(profile, row.text, body)
+
+    # Two calls: which kind of change, then that kind's fields. One call with
+    # every field at once had the model putting dates in `years`.
+    route = generate_json(prompt, ROUTE_SCHEMA, turns)
+    op = str(route.get("op", "ask"))
+    reply = str(route.get("reply", ""))
+    questions = [str(q) for q in route.get("questions") or []]
+
+    answer = {"changes": []}
+    unknown = [] if op in OPS or op == "ask" else [f'"{op}" is not something Ask can do.']
+    if op in OPS:
+        answer = generate_json(f"{prompt}\n\nRETURN {op} CHANGES ONLY.", schema_for(op), turns)
+    _log(body, {"op": op, "reply": reply, "questions": questions, **answer})
 
     said = " ".join([turn.text for turn in body.history] + [body.message])
     fresh, refused = _allowed(
-        [Change.model_validate(c) for c in answer.get("changes") or []], profile, said
+        [
+            Change.model_validate({"op": op, **c})
+            for c in answer.get("changes") or []
+        ],
+        profile,
+        said,
     )
     # Keep what was already agreed; a later change on the same target wins.
     changes = _merge(body.pending, fresh)
 
-    updated = row.text
+    return _respond(row.text, changes, unknown + refused, reply=reply, questions=questions)
+
+
+@router.post("/profile/ask/edit")
+def edit(body: EditRequest, session: SessionDep) -> AskResponse:
+    """
+    Re-apply a proposal the person has edited by hand. Same guards, same splice,
+    no model call. Values they typed are their own, so the "nobody said this"
+    checks do not run on them.
+    """
+    row = session.exec(select(ProfileSource).order_by(ProfileSource.id.desc())).first()
+    if row is None:
+        raise HTTPException(404, "No profile saved yet. There is nothing to change.")
+
+    changes, refused = _allowed(body.changes, parse_text(row.text), said="", trusted=True)
+    return _respond(row.text, changes, refused, reply="", questions=[])
+
+
+def _respond(
+    source: str,
+    changes: list[Change],
+    refused: list[str],
+    reply: str,
+    questions: list[str],
+) -> AskResponse:
+    """Splice the changes in, then hand back the diff. Nothing is saved here."""
+    updated = source
     for change in changes:
         try:
             updated = _apply(updated, change)
         except ProfileError as error:
             refused.append(error.message)
 
-    questions = [str(q) for q in answer.get("questions") or []]
-    if updated == row.text:
-        return AskResponse(
-            reply=str(answer.get("reply", "")),
-            questions=questions,
-            refused=refused,
-        )
+    if updated == source:
+        return AskResponse(reply=reply, questions=questions, refused=refused)
 
     # Never hand back text that cannot be saved.
     result = validate_text(updated)
     if not result.ok:
         return AskResponse(
-            reply=str(answer.get("reply", "")),
+            reply=reply,
             questions=questions,
-            refused=refused + [f"{issue.message}" for issue in result.errors],
+            refused=refused + [issue.message for issue in result.errors],
         )
 
     lines = [
         {"op": line[0], "text": line}
         for line in difflib.unified_diff(
-            row.text.splitlines(), updated.splitlines(), lineterm="", n=3
+            source.splitlines(), updated.splitlines(), lineterm="", n=3
         )
         if not line.startswith(("---", "+++"))
     ]
     return AskResponse(
-        reply=str(answer.get("reply", "")),
+        reply=reply,
         questions=questions,
         changes=changes,
         text=updated,
@@ -358,15 +445,20 @@ def _prompt(profile: Profile, source: str, body: AskRequest) -> str:
 
 
 def _allowed(
-    changes: list[Change], profile: Profile, said: str = ""
+    changes: list[Change], profile: Profile, said: str = "", trusted: bool = False
 ) -> tuple[list[Change], list[str]]:
-    """Enforce in code what the prompt only asks for. Returns (allowed, refusals)."""
+    """
+    Enforce in code what the prompt only asks for. Returns (allowed, refusals).
+
+    `trusted` means the person typed these values, so the checks for numbers and
+    dates nobody gave are skipped. Everything structural still runs.
+    """
     ok: list[Change] = []
     refused: list[str] = []
-    # Years can only come from the person. If they typed no digit, the model
-    # invented it, so the field is dropped.
-    told_a_number = bool(re.search(r"\d", said))
-    told_a_date = bool(_DATE.search(said))
+    # Years and dates can only come from the person. With no digit and no date in
+    # what they said, the model invented it, so the field is dropped.
+    told_a_number = trusted or bool(re.search(r"\d", said))
+    told_a_date = trusted or bool(_DATE.search(said))
     projects = {p.id for p in profile.all_projects()}
     lines = {row.line.casefold() for row in profile.skills}
     bullets = {b.id for p in profile.all_projects() for b in p.bullets}
