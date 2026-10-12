@@ -34,6 +34,9 @@ CONTEXTS = ("professional", "personal", "academic", "volunteer")
 
 # A digit that follows a letter is part of a name: Auth0, S3, HTML5.
 _NUMBER = re.compile(r"(?<![A-Za-z0-9])\d")
+# Dates are digits that are not a duration. Stripped before looking for a number,
+# so "last used 2026-10" does not read as permission to write years.
+_DATEISH = re.compile(r"\b(19|20)\d\d([-/]\d{1,2})?\b")
 # A year, a month name, or "last week"-style recency. Anything vaguer is not a date.
 _DATE = re.compile(
     r"\b(20\d\d|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec"
@@ -468,7 +471,7 @@ def _allowed(
     refused: list[str] = []
     # Years and dates can only come from the person. With no digit and no date in
     # what they said, the model invented it, so the field is dropped.
-    told_a_number = trusted or bool(re.search(r"\d", said))
+    told_a_number = trusted or bool(re.search(r"\d", _DATEISH.sub(" ", said)))
     told_a_date = trusted or bool(_DATE.search(said))
     projects = {p.id for p in profile.all_projects()}
     lines = {row.line.casefold() for row in profile.skills}

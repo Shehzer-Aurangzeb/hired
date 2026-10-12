@@ -768,3 +768,25 @@ def test_a_question_that_is_not_a_sentence_is_dropped(client, monkeypatch):
     body = say(client, "i used redux").json()
 
     assert body["questions"] == ["Which project?"]
+
+
+def test_a_date_is_not_permission_to_write_years(client, monkeypatch):
+    """"last used 2026-10" has digits in it, and says nothing about duration."""
+    answers(
+        monkeypatch,
+        {
+            "reply": "ok",
+            "changes": [
+                {"op": "add_skill_evidence", "target": "Tailwind",
+                 "level": "advanced", "years": 3.5}
+            ],
+        },
+    )
+    body = say(client, "tailwind, advanced, last used 2026-10").json()
+
+    entry = next(
+        s for s in parse_text(body["text"]).skill_evidence if s.name == "Tailwind"
+    )
+    assert entry.years is None
+    assert entry.level == "advanced"
+    assert "Dropped the years" in body["refused"][0]
