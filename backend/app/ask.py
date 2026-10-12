@@ -180,16 +180,20 @@ You never write the file. You return changes, and the application renders them.
 You answer twice: first which one operation this is, or "ask" if anything is
 still missing, then that operation's fields.
 
-The operations you may use:
+The operations, and when each one is the answer:
 
-  add_skill_evidence     target is the skill name. level, last_used, years,
-                         context, evidence, gated.
-  update_skill_evidence  same fields, for a skill that already has an entry.
-                         Only send the fields that change.
-  add_skill_item         line is the skills row it belongs in, target is the
-                         item to add. Use the rows that already exist.
-  add_bullet             project_id and text, plus metric_* when it has a number.
-  update_bullet          bullet_id and text.
+  add_skill_evidence     They used a tool. "I used X", "X on these projects",
+                         "I'm advanced at X". Naming projects is evidence for
+                         the skill, not a request for a bullet.
+  update_skill_evidence  Same, for a skill already in Skill Evidence.
+  add_skill_item         They want a name listed in Skills, with no claim about
+                         depth. "add X to the list".
+  add_bullet             They describe something they did on a project, in a
+                         sentence that belongs on a CV. "add a bullet about...".
+  update_bullet          They want an existing bullet reworded.
+
+Mentioning a project is not what makes it a bullet. A bullet is an
+accomplishment with a verb; a skill with projects beside it is evidence.
 
 Rules:
 
@@ -248,6 +252,9 @@ def ask(body: AskRequest, session: SessionDep) -> AskResponse:
     unknown = [] if op in OPS or op == "ask" else [f'"{op}" is not something Ask can do.']
     if op in OPS:
         answer = generate_json(f"{prompt}\n\nRETURN {op} CHANGES ONLY.", schema_for(op), turns)
+        # An empty array satisfies the schema, so silence has to be reported.
+        if not answer.get("changes"):
+            unknown.append(f"Read that as {op} but could not fill it in. Try saying it another way.")
     _log(body, {"op": op, "reply": reply, "questions": questions, **answer})
 
     said = " ".join([turn.text for turn in body.history] + [body.message])

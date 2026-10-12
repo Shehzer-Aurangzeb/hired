@@ -743,3 +743,18 @@ def test_the_second_call_only_offers_its_own_fields(client, monkeypatch):
     assert "level" not in seen["fields"]
     assert "years" not in seen["fields"]
     assert seen["required"] == ["project_id", "text"]
+
+
+def test_an_op_that_fills_in_nothing_is_reported(client, monkeypatch):
+    """An empty changes array is valid JSON and a silent no-op. Say so."""
+
+    def fake(prompt, schema, turns=None):
+        if "op" in schema["properties"]:
+            return {"op": "add_bullet", "reply": "Adding that."}
+        return {"changes": []}
+
+    monkeypatch.setattr(ask, "generate_json", fake)
+    body = say(client, "tailwind on thing").json()
+
+    assert body["text"] is None
+    assert "could not fill it in" in body["refused"][0]
