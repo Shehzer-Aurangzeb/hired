@@ -218,6 +218,9 @@ Rules:
   first person, one accomplishment each.
 - You may not loosen anything. Removing a cannot_claim, clearing a gap or
   unblocking a bullet are not operations you have.
+- Ask only for what the entry cannot exist without: the skill name and the
+  level, the project and the text. years, context, last_used and gated are
+  optional, and an entry without them is complete. Never ask how many years.
 - When the request is ambiguous, set op to "ask" and ask. One or two questions,
   not a form. Being asked is why they are here rather than editing YAML.
 - reply is one or two sentences, plain, addressed to them. Say what you changed
@@ -246,7 +249,8 @@ def ask(body: AskRequest, session: SessionDep) -> AskResponse:
     route = generate_json(prompt, ROUTE_SCHEMA, turns)
     op = str(route.get("op", "ask"))
     reply = str(route.get("reply", ""))
-    questions = [str(q) for q in route.get("questions") or []]
+    # A question is a sentence. Anything shorter is the model leaking a token.
+    questions = [str(q) for q in route.get("questions") or [] if " " in str(q)]
 
     answer = {"changes": []}
     unknown = [] if op in OPS or op == "ask" else [f'"{op}" is not something Ask can do.']

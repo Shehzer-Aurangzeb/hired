@@ -758,3 +758,13 @@ def test_an_op_that_fills_in_nothing_is_reported(client, monkeypatch):
 
     assert body["text"] is None
     assert "could not fill it in" in body["refused"][0]
+
+
+def test_a_question_that_is_not_a_sentence_is_dropped(client, monkeypatch):
+    def fake(prompt, schema, turns=None):
+        return {"op": "ask", "reply": "ok", "questions": ["Which project?", "op2"]}
+
+    monkeypatch.setattr(ask, "generate_json", fake)
+    body = say(client, "i used redux").json()
+
+    assert body["questions"] == ["Which project?"]
