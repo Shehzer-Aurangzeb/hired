@@ -363,6 +363,21 @@
           <button
             type="button"
             class="btn btn-outline !min-h-8"
+            [disabled]="!canRegenerate()"
+            (click)="regenerate()"
+            title="Ask the model to pick again from the same posting. Costs one call."
+          >
+            @if (gen.generating()) {
+              <app-icon name="refresh" [size]="14" class="animate-spin" />
+              Selecting
+            } @else {
+              <app-icon name="refresh" [size]="14" />
+              Regenerate
+            }
+          </button>
+          <button
+            type="button"
+            class="btn btn-outline !min-h-8"
             [disabled]="!hasVariants()"
             (click)="nextVariant()"
             title="Switch to another headline and summary you wrote. Nothing is generated."

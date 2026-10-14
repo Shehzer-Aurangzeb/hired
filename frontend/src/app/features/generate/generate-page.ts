@@ -336,6 +336,31 @@ export class GeneratePage {
 
   readonly exported = signal(false);
 
+  /** Ask the model for a fresh selection against the same posting. */
+  regenerate(): void {
+    const fit = this.gen.fit();
+    if (!fit || !this.canRegenerate()) {
+      return;
+    }
+    if (this.edited() && !confirm('This replaces the selection, including your edits. Go ahead?')) {
+      return;
+    }
+    this.gen
+      .generate({
+        jd_text: this.gen.jdText(),
+        parsed_jd: fit.parsed_jd,
+        title_variant: this.form.getRawValue().title_variant || undefined,
+      })
+      // The exported PDF is now older than what is on screen.
+      .subscribe({ next: () => this.exported.set(false), error: () => {} });
+  }
+
+  readonly applied = signal(false);
+
+  readonly canRegenerate = computed(
+    () => !!this.gen.result() && !this.gen.generating() && !this.gen.exporting() && !this.applied(),
+  );
+
   /** applied_at is stamped once and never overwritten. */
   markApplied(): void {
     const id = this.gen.applicationId();
@@ -344,6 +369,7 @@ export class GeneratePage {
     }
     this.applications.patch(id, { status: 'applied' }).subscribe({
       next: () => {
+        this.applied.set(true);
         this.toast.ok('Marked as applied.');
         this.router.navigate(['/applications', id]);
       },
@@ -356,6 +382,7 @@ export class GeneratePage {
     this.form.reset();
     this.editing.set(false);
     this.exported.set(false);
+    this.applied.set(false);
   }
 
   readonly verdict = verdict;
