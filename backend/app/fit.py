@@ -11,7 +11,7 @@ from .db import SessionDep
 from .model import generate_json
 from .models import Fit, ParsedJd, Profile
 from .profile_parser import parse_text
-from .tables import Application, ProfileSource, stamp
+from .tables import Application, ProfileSource, current_profile, stamp
 
 router = APIRouter(tags=["fit"])
 
@@ -115,6 +115,12 @@ Rules:
   but cannot tie to a listed project. Credit it as familiarity: enough that they
   are not starting from nothing, never as depth, and never as the thing that
   makes them a fit. Do not report it as a gap.
+- A skill listed under skills with no skill_evidence entry is claimed but not
+  detailed. They have used it. Credit it as present, never as depth, and do not
+  report it as a gap. The gap is depth, if the posting asks for depth.
+- A gap is something the profile does not have. Eligibility, clearances and work
+  authorisation are facts about the person, not skills; name one as a gap only
+  when the profile itself says they lack it.
 - Compare years honestly. skill_evidence carries years and last_used; a posting
   asking for more than the profile shows is a gap even if the skill is listed.
 - Every gap must be one specific thing the posting requires and the profile does
@@ -135,7 +141,7 @@ def check_fit(body: FitRequest, session: SessionDep) -> FitResponse:
             422, "That is too short to score. Paste the requirements, not just the title."
         )
 
-    row = session.exec(select(ProfileSource)).first()
+    row = current_profile(session)
     if row is None:
         raise HTTPException(404, "No profile saved yet. There is nothing to score against.")
 

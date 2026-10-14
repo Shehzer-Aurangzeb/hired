@@ -76,3 +76,13 @@ class Application(SQLModel, table=True):
     applied_at: datetime | None = None
     created_at: datetime = Field(default_factory=now)
     notes: str | None = None
+
+
+def current_profile(session) -> "ProfileSource | None":
+    """
+    The profile in use: the newest row. profile_source is an append-only log, so
+    an unordered first() returns v1 and silently scores against an old file.
+    """
+    from sqlmodel import select
+
+    return session.exec(select(ProfileSource).order_by(ProfileSource.id.desc())).first()

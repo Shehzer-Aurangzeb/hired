@@ -839,3 +839,19 @@ def test_url_filter_only_passes_safe_schemes():
     assert render._url("mailto:a@b.c") == "mailto:a@b.c"
     assert render._url("javascript:alert(1)").startswith("https://")
     assert render._url("file:///etc/passwd").startswith("https://")
+
+
+def test_an_unknown_title_falls_back_to_the_declared_default():
+    """File order put "mobile" first. The profile says which one is the default."""
+    from app.generate import _assemble
+    from app.models import ParsedJd
+    from app.profile_parser import parse_text
+    from app.profile_template import DEFAULT_TEMPLATE
+
+    profile = parse_text(DEFAULT_TEMPLATE)
+    default = next(t for t in profile.titles if "default" in t.use_when.casefold())
+
+    cv, flags = _assemble(profile, {"title_id": "dedicate", "sections": []}, None, ParsedJd())
+
+    assert cv.title == default.text
+    assert 'No title called "dedicate"' in flags[0].message

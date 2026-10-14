@@ -332,3 +332,31 @@ def test_the_prompt_says_what_an_unpinned_skill_means(client, monkeypatch):
 
     assert "empty evidence list" in sent["prompt"]
     assert "never as depth" in sent["prompt"]
+
+
+def test_it_scores_against_the_newest_version(client, monkeypatch):
+    """
+    profile_source is an append-only log. An unordered first() returns v1, so
+    every edit since version history landed would be invisible to scoring.
+    """
+    save_profile(client)
+    save_profile(
+        client,
+        DEFAULT_TEMPLATE.replace("[React, TypeScript, RxJS", "[React, TypeScript, Svelte, RxJS", 1),
+    )
+    sent = answers(monkeypatch, {"score": 5, "reasoning": "ok", "gaps": [], "parsed_jd": {}})
+
+    client.post("/api/fit", json={"jd_text": JD})
+
+    assert "Svelte" in sent["prompt"]
+
+
+def test_a_listed_skill_is_not_a_gap(monkeypatch):
+    """
+    Git and Node.js sat in skills with no skill_evidence row, and one posting
+    came back scoring them as gaps. A listed skill is claimed, not missing.
+    """
+    from app import fit
+
+    assert "no skill_evidence entry is claimed but not" in fit.INSTRUCTIONS
+    assert "do not\n  report it as a gap" in fit.INSTRUCTIONS

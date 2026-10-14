@@ -15,7 +15,7 @@ from .db import SessionDep
 from .model import generate_json
 from .models import Profile
 from .profile_parser import ProfileError, parse_text, replace_bullet_text, validate_text
-from .tables import ProfileSource
+from .tables import ProfileSource, current_profile
 
 router = APIRouter(tags=["ask"])
 
@@ -236,9 +236,7 @@ def ask(body: AskRequest, session: SessionDep) -> AskResponse:
     if not text:
         raise HTTPException(422, "Say what you want to change.")
 
-    row = session.exec(
-        select(ProfileSource).order_by(ProfileSource.id.desc())
-    ).first()
+    row = current_profile(session)
     if row is None:
         raise HTTPException(404, "No profile saved yet. There is nothing to change.")
 
@@ -286,7 +284,7 @@ def edit(body: EditRequest, session: SessionDep) -> AskResponse:
     no model call. Values they typed are their own, so the "nobody said this"
     checks do not run on them.
     """
-    row = session.exec(select(ProfileSource).order_by(ProfileSource.id.desc())).first()
+    row = current_profile(session)
     if row is None:
         raise HTTPException(404, "No profile saved yet. There is nothing to change.")
 

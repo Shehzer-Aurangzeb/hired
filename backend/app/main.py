@@ -20,7 +20,7 @@ from .models import Profile, ValidationResult
 from .profile_parser import ProfileError, parse_text, replace_bullet_text, validate_text
 from .profile_template import claude_prompt, template
 from .settings import get_settings
-from .tables import VERSION_DAYS, VERSIONS_KEPT, ProfileSource, now, stamp
+from .tables import VERSION_DAYS, VERSIONS_KEPT, ProfileSource, current_profile, now, stamp
 
 settings = get_settings()
 
@@ -110,9 +110,7 @@ class BulletBody(BaseModel):
 
 def _row(session: SessionDep) -> ProfileSource | None:
     """The newest version is the current profile."""
-    return session.exec(
-        select(ProfileSource).order_by(ProfileSource.id.desc())
-    ).first()
+    return current_profile(session)
 
 
 def _prune(session: SessionDep) -> None:

@@ -24,7 +24,7 @@ from .models import (
 )
 from .profile_parser import parse_text
 from .render import filename, measurer, render_html, to_pdf
-from .tables import Application, ProfileSource
+from .tables import Application, ProfileSource, current_profile
 
 router = APIRouter(tags=["generate"])
 
@@ -127,7 +127,7 @@ def generate(body: GenerateRequest, session: SessionDep) -> GenerateResponse:
     if len(text) < 80:
         raise HTTPException(422, "That is too short to select against.")
 
-    row = session.exec(select(ProfileSource)).first()
+    row = current_profile(session)
     if row is None:
         raise HTTPException(404, "No profile saved yet. There is nothing to select from.")
     profile = parse_text(row.text)
@@ -210,7 +210,12 @@ def _assemble(
     title_id = forced or str(answer.get("title_id") or "")
     title = next((t for t in profile.titles if t.id == title_id), None)
     if title is None:
-        title = profile.titles[0] if profile.titles else None
+        # The profile names its own fallback ("Default when nothing else fits").
+        # File order picked "mobile" for a React web posting.
+        title = next(
+            (t for t in profile.titles if "default" in t.use_when.casefold()),
+            profile.titles[0] if profile.titles else None,
+        )
         if title_id:
             flags.append(
                 Flag(
@@ -504,7 +509,7 @@ class PreviewRequest(BaseModel):
 @router.post("/preview", response_class=HTMLResponse)
 def preview(body: PreviewRequest, session: SessionDep) -> str:
     """Preview HTML, from the same render_html the PDF uses."""
-    source = session.exec(select(ProfileSource)).first()
+    source = current_profile(session)
     if source is None:
         raise HTTPException(404, "No profile saved yet.")
     return render_html(parse_text(source.text), body.cv)
@@ -516,7 +521,7 @@ def export(body: ExportRequest, session: SessionDep) -> ExportResponse:
     if row is None:
         raise HTTPException(404, "No such application to attach a CV to.")
 
-    source = session.exec(select(ProfileSource)).first()
+    source = current_profile(session)
     if source is None:
         raise HTTPException(404, "No profile saved yet.")
     profile = parse_text(source.text)
@@ -557,7 +562,7 @@ def reexport(body: ReexportRequest, session: SessionDep) -> ExportResponse:
     if not row.selected_bullets:
         raise HTTPException(422, "No CV was ever exported for this one, so there is nothing to rebuild.")
 
-    source = session.exec(select(ProfileSource)).first()
+    source = current_profile(session)
     if source is None:
         raise HTTPException(404, "No profile saved yet.")
     profile = parse_text(source.text)
