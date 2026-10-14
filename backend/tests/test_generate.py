@@ -866,3 +866,18 @@ def test_preferred_skills_break_ties_in_the_selector():
 
     assert "Preferred skills" in INSTRUCTIONS
     assert "Preferred never outranks required" in INSTRUCTIONS
+
+
+def test_the_response_names_the_model_that_answered(client, monkeypatch):
+    """A silent fallback to OpenRouter is indistinguishable from a bad day."""
+    from app import model as M
+
+    def fake(prompt, schema, turns=None):
+        M.served.set("openrouter/free")
+        return {"title_id": "frontend", "sections": []}
+
+    monkeypatch.setattr(generate, "generate_json", fake)
+    save_profile(client)
+    body = client.post("/api/generate", json={"jd_text": JD, "parsed_jd": {}}).json()
+
+    assert body["model"] == "openrouter/free"

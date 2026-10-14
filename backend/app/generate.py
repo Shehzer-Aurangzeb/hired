@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from .db import SessionDep
-from .model import generate_json
+from .model import generate_json, served
 from .models import (
     Bullet,
     CvSection,
@@ -38,6 +38,8 @@ class GenerateRequest(BaseModel):
 class GenerateResponse(BaseModel):
     cv: GeneratedCv
     flags: list[Flag]
+    # Which model answered, so a fallback is visible rather than silent.
+    model: str = ""
 
 
 SCHEMA = {
@@ -146,7 +148,7 @@ def generate(body: GenerateRequest, session: SessionDep) -> GenerateResponse:
 
     answer = generate_json(_prompt(profile, text, body), SCHEMA)
     cv, flags = _assemble(profile, answer, body.title_variant, body.parsed_jd)
-    return GenerateResponse(cv=cv, flags=flags)
+    return GenerateResponse(cv=cv, flags=flags, model=served.get())
 
 
 def _pool(profile: Profile) -> list[Bullet]:

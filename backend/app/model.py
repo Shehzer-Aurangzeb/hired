@@ -1,6 +1,7 @@
 """Calls the LLM: Gemini first, OpenRouter's free pool as fallback.
 No retries, only failover, since free tiers are rationed per day."""
 
+import contextvars
 import json
 from typing import Any
 
@@ -13,6 +14,11 @@ GEMINI = "https://generativelanguage.googleapis.com/v1beta/models"
 OPENROUTER = "https://openrouter.ai/api/v1/chat/completions"
 
 FREE_POOL = "openrouter/free"
+
+# Which model answered the call in progress. A ContextVar rather than a global
+# because sync routes run on a threadpool, and two requests must not see each
+# other's answer.
+served: contextvars.ContextVar[str] = contextvars.ContextVar("served", default="")
 
 TIMEOUT = 60.0
 
@@ -42,10 +48,12 @@ def generate_json(
         # A demo must not spend a rationed call, and must work with no network.
         from . import demo
 
+        served.set("demo")
         return demo.answer(schema)
 
     if settings.gemini_api_key:
         try:
+            served.set(settings.gemini_model)
             return _gemini(prompt, schema, settings, turns)
         except HTTPException:
             # Fall through only if OpenRouter is configured.
@@ -54,6 +62,7 @@ def generate_json(
 
     if not settings.openrouter_api_key:
         raise HTTPException(503, "No model key is configured on this instance.")
+    served.set(FREE_POOL)
     return _openrouter(prompt, schema, settings, turns)
 
 
@@ -120,11 +129,11 @@ def _openrouter(
     choices = body.get("choices") or []
     if not choices:
         raise HTTPException(502, "OpenRouter returned nothing. It may have been filtered.")
+    served.set(body.get("model") or FREE_POOL)
     try:
         return json.loads(choices[0]["message"]["content"])
     except (KeyError, IndexError, TypeError, ValueError) as error:
-        served = body.get("model") or FREE_POOL
-        raise HTTPException(502, f"{served} returned something unreadable.") from error
+        raise HTTPException(502, f"{served.get()} returned something unreadable.") from error
 
 
 def _gemini(

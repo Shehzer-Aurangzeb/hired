@@ -360,6 +360,19 @@
               Blocked by the claim guard
             </span>
           }
+          @if (servedBy()) {
+            <span
+              class="stat-chip"
+              [class]="fellBack() ? 'bg-warn-soft text-warn' : 'text-fg-subtle'"
+              [title]="
+                fellBack()
+                  ? 'Gemini did not answer, so this came from the OpenRouter fallback.'
+                  : 'The model that chose these bullets.'
+              "
+            >
+              {{ servedBy() }}
+            </span>
+          }
           <button
             type="button"
             class="btn btn-outline !min-h-8"

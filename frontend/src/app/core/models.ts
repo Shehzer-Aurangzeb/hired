@@ -395,6 +395,8 @@ export interface FitResponse {
   parsed_jd: ParsedJd;
   fit: Fit;
   seen: PriorApplication[];
+  /** Which model answered. Empty in demo mode and on older rows. */
+  model: string;
 }
 
 /** POST /api/generate */
@@ -407,6 +409,8 @@ export interface GenerateRequest {
 export interface GenerateResponse {
   cv: GeneratedCv;
   flags: Flag[];
+  /** Which model answered, so a fallback to OpenRouter is visible. */
+  model: string;
 }
 
 /** POST /api/export. Attaches a PDF to an existing row. */

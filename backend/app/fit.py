@@ -8,7 +8,7 @@ from sqlalchemy import func
 from sqlmodel import select
 
 from .db import SessionDep
-from .model import generate_json
+from .model import generate_json, served
 from .models import Fit, ParsedJd, Profile
 from .profile_parser import parse_text
 from .tables import Application, ProfileSource, current_profile, stamp
@@ -31,6 +31,8 @@ class PriorApplication(BaseModel):
 class FitResponse(BaseModel):
     parsed_jd: ParsedJd
     fit: Fit
+    # Which model answered, so a fallback is visible rather than silent.
+    model: str = ""
     # Earlier applications to the same company.
     seen: list[PriorApplication] = []
 
@@ -154,6 +156,7 @@ def check_fit(body: FitRequest, session: SessionDep) -> FitResponse:
     parsed_jd = ParsedJd.model_validate(answer.get("parsed_jd") or {})
     return FitResponse(
         parsed_jd=parsed_jd,
+        model=served.get(),
         seen=_seen(session, parsed_jd.company),
         fit=Fit(
             # Clamp: the model sometimes returns scores outside 1-10.
