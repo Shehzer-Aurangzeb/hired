@@ -98,6 +98,12 @@ Rules:
   reaches you, it is still not eligible.
 - Prefer a bullet that evidences something the posting explicitly requires over
   one that is merely impressive.
+- Required skills decide whether a project belongs on the page. Preferred skills
+  decide which of the close ones wins. When two projects back the requirements
+  about equally, take the one that also evidences something from the preferred
+  list: every applicant has the required list, which is why the posting bothered
+  to write the other one. Preferred never outranks required, and never carries a
+  project that fails the requirements.
 - A project whose cannot_claim excludes what the posting is asking for is weak
   evidence for that requirement, however good the bullets read.
 - Leave a project out entirely rather than padding it with a bullet that says

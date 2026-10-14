@@ -855,3 +855,14 @@ def test_an_unknown_title_falls_back_to_the_declared_default():
 
     assert cv.title == default.text
     assert 'No title called "dedicate"' in flags[0].message
+
+
+def test_preferred_skills_break_ties_in_the_selector():
+    """
+    Every project backed React and TypeScript, so the required list separated
+    nothing and the nice-to-haves never entered the choice.
+    """
+    from app.generate import INSTRUCTIONS
+
+    assert "Preferred skills" in INSTRUCTIONS
+    assert "Preferred never outranks required" in INSTRUCTIONS
