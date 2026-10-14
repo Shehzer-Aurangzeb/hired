@@ -683,6 +683,9 @@ def _jd(*names: str) -> ParsedJd:
     return ParsedJd(required_skills=[RequiredSkill(name=n, importance=3) for n in names])
 
 
+_PROFILE = parse_text(DEFAULT_TEMPLATE)
+
+
 def _sections(**by_project: list[str]) -> list[CvSection]:
     return [
         CvSection(
@@ -698,7 +701,7 @@ def _sections(**by_project: list[str]) -> list[CvSection]:
 
 def test_coverage_credits_a_bullet_that_never_says_the_words():
     answer = {"coverage": [{"skill": "Mobile App Development", "bullet_ids": ["sp-app"]}]}
-    result = generate._coverage(_jd("Mobile App Development"), answer, _sections(sp=["sp-app"]))
+    result = generate._coverage(_jd("Mobile App Development"), answer, _sections(sp=["sp-app"]), _PROFILE)
     assert [(c.skill, c.bullet_ids) for c in result] == [
         ("Mobile App Development", ["sp-app"])
     ]
@@ -708,14 +711,14 @@ def test_coverage_credits_a_bullet_that_never_says_the_words():
 def test_coverage_drops_a_bullet_that_did_not_print():
     """The page-fill loop and a deselect both change what is on the page."""
     answer = {"coverage": [{"skill": "TypeScript", "bullet_ids": ["gone", "here"]}]}
-    result = generate._coverage(_jd("TypeScript"), answer, _sections(sp=["here"]))
+    result = generate._coverage(_jd("TypeScript"), answer, _sections(sp=["here"]), _PROFILE)
     assert result[0].bullet_ids == ["here"]
 
 
 def test_coverage_reports_every_requirement_even_the_unbacked_ones():
     answer = {"coverage": [{"skill": "React Native", "bullet_ids": ["sp-app"]}]}
     result = generate._coverage(
-        _jd("React Native", "Xcode"), answer, _sections(sp=["sp-app"])
+        _jd("React Native", "Xcode"), answer, _sections(sp=["sp-app"]), _PROFILE
     )
     assert [c.skill for c in result] == ["React Native", "Xcode"]
     assert result[1].bullet_ids == []
@@ -723,13 +726,13 @@ def test_coverage_reports_every_requirement_even_the_unbacked_ones():
 
 def test_coverage_ignores_a_skill_the_posting_never_asked_for():
     answer = {"coverage": [{"skill": "Fortran", "bullet_ids": ["sp-app"]}]}
-    result = generate._coverage(_jd("TypeScript"), answer, _sections(sp=["sp-app"]))
+    result = generate._coverage(_jd("TypeScript"), answer, _sections(sp=["sp-app"]), _PROFILE)
     assert [c.skill for c in result] == ["TypeScript"]
 
 
 def test_coverage_matches_the_skill_name_case_and_space_insensitively():
     answer = {"coverage": [{"skill": " restful apis ", "bullet_ids": ["sp-app"]}]}
-    result = generate._coverage(_jd("RESTful APIs"), answer, _sections(sp=["sp-app"]))
+    result = generate._coverage(_jd("RESTful APIs"), answer, _sections(sp=["sp-app"]), _PROFILE)
     assert result[0].bullet_ids == ["sp-app"]
 
 
@@ -910,3 +913,53 @@ def test_a_per_minute_limit_is_not_reported_as_a_spent_day(monkeypatch):
 
     assert "Per-minute limit" in str(caught.value.detail)
     assert "27s" in str(caught.value.detail)
+
+
+def test_a_degree_requirement_is_backed_by_the_profile_not_a_bullet():
+    """No bullet can evidence a degree, so it showed a cross on every posting."""
+    result = generate._coverage(
+        _jd("Degree in Computer Science or related field"), {}, _sections(sp=["sp-app"]), _PROFILE
+    )
+    assert result[0].bullet_ids == []
+    assert result[0].backed_by  # names the qualification instead
+
+
+def test_a_disposition_is_not_reported_as_an_unbacked_gap():
+    result = generate._coverage(
+        _jd("Clear written communication"), {}, _sections(sp=["sp-app"]), _PROFILE
+    )
+    assert result[0].backed_by == "not something a CV evidences"
+
+
+def test_export_stamps_the_model_onto_the_row(client, monkeypatch):
+    """The CV you kept should say what made it, not what is configured today."""
+    save_profile(client)
+    row = client.post(
+        "/api/applications",
+        json={"company": "C", "role": "R", "source": "LinkedIn", "jd_text": JD, "fit_score": 7},
+    ).json()
+    cv = GeneratedCv(title="T", summary="S", sections=[], skills_lines=[], coverage=[])
+    monkeypatch.setattr(generate, "to_pdf", lambda html: (b"%PDF-", 1))
+    client.post(
+        "/api/export",
+        json={"application_id": row["id"], "cv": cv.model_dump(), "model": "gemini-3.6-flash"},
+    )
+
+    detail = client.get(f"/api/applications/{row['id']}").json()
+    assert detail["model"] == "gemini-3.6-flash"
+
+
+def test_the_page_fills_with_what_the_posting_asked_for():
+    """Filling by the person's own priority put unrelated work on the page."""
+    from app.generate import _relevance
+
+    jd = ParsedJd(
+        required_skills=[RequiredSkill(name="WebSockets", importance=3)],
+        preferred_skills=[RequiredSkill(name="Zustand", importance=1)],
+    )
+    on_topic = _relevance("Moved monitoring from polling to WebSockets.", jd)
+    off_topic = _relevance("Integrated Stripe for physical book purchases.", jd)
+
+    assert on_topic == 3
+    assert off_topic == 0
+    assert _relevance("Built it on WebSockets and Zustand.", jd) == 4  # importance adds up

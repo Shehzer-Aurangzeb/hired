@@ -352,6 +352,9 @@ class SkillCoverage(BaseModel):
 
     skill: str
     bullet_ids: list[str] = []
+    # What backs a requirement no bullet can: a degree, a language, eligibility.
+    # Filled by code from the profile, never by the model.
+    backed_by: str = ""
 
 
 class GeneratedCv(BaseModel):

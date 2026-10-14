@@ -57,6 +57,8 @@ class ApplicationOut(BaseModel):
     selected_bullet_ids: list[str]
     selected_bullets: list[dict]
     coverage: list[dict]
+    # Which model chose the bullets on the saved PDF.
+    model: str = ""
 
     has_pdf: bool
     filename: str | None

@@ -2,6 +2,7 @@
 the pick and fills the page, then preview and PDF export."""
 
 import json
+import re
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
@@ -165,6 +166,12 @@ def _prompt(profile: Profile, jd_text: str, body: GenerateRequest) -> str:
     rules = profile.rules
     context = {
         "titles": [{"id": t.id, "text": t.text, "use_when": t.use_when} for t in profile.titles],
+        # Printed on every CV, so a posting asking for a degree is already met.
+        # Without this the selector was asked which bullet backs a degree, and
+        # the honest answer, none, read as a gap on every posting.
+        "education": [
+            {"school": e.school, "degree": e.degree, "field": e.field} for e in profile.education
+        ],
         "projects": [
             {
                 "id": project.id,
@@ -263,7 +270,7 @@ def _assemble(
                 )
             )
 
-    _fill_page(profile, title, summary, sections, projects, rules, flags)
+    _fill_page(profile, title, summary, sections, projects, rules, flags, jd)
 
     printed = " ".join(
         [summary.text if summary else ""]
@@ -277,7 +284,7 @@ def _assemble(
         summary=summary.text if summary else "",
         skills_lines=_skills(profile, {section.project_id for section in sections}),
         sections=sections,
-        coverage=_coverage(jd, answer, sections),
+        coverage=_coverage(jd, answer, sections, profile),
     )
     if not sections:
         flags.append(Flag(type="block", message="Nothing was selected, so there is no CV."))
@@ -314,7 +321,30 @@ def _bullets(project: Project, ids: list, rules, flags: list[Flag]) -> list[Sele
     return chosen
 
 
-def _coverage(jd: ParsedJd, answer: dict, sections: list[CvSection]) -> list[SkillCoverage]:
+# A requirement no bullet can answer. Matched here rather than asked of the model,
+# because the answer is a lookup in the profile and a lookup cannot be wrong.
+_SCHOOLING = re.compile(r"\b(degree|diploma|bachelor|master|b\.?sc|m\.?sc|post-secondary|graduate)\b", re.I)
+_DISPOSITION = re.compile(
+    r"\b(communication|communicate|problem.solving|critical thinking|curiosity|curious"
+    r"|patience|patient|attention to detail|self.starter|self.motivated|motivated"
+    r"|willingness|eagerness|interest in|passion|team player|interpersonal|collaborat)",
+    re.I,
+)
+
+
+def _non_bullet(skill: str, profile: Profile) -> str:
+    """What backs this requirement if no bullet ever could."""
+    if _SCHOOLING.search(skill) and profile.education:
+        top = profile.education[0]
+        return f"{top.degree} {top.field}".strip() or top.school
+    if _DISPOSITION.search(skill):
+        return "not something a CV evidences"
+    return ""
+
+
+def _coverage(
+    jd: ParsedJd, answer: dict, sections: list[CvSection], profile: Profile
+) -> list[SkillCoverage]:
     """The model's coverage claims, limited to bullets that printed.
     Bullets added by the fill loop back nothing, on purpose."""
     printed = {bullet.id for section in sections for bullet in section.bullets}
@@ -329,6 +359,7 @@ def _coverage(jd: ParsedJd, answer: dict, sections: list[CvSection]) -> list[Ski
             bullet_ids=[
                 i for i in claimed.get(skill.name.strip().casefold(), []) if i in printed
             ],
+            backed_by=_non_bullet(skill.name, profile),
         )
         for skill in [*jd.required_skills, *jd.preferred_skills]
     ]
@@ -372,7 +403,22 @@ MIN_FILL = 0.90
 MAX_FILL = 1.25
 
 
-def _fill_page(profile, title, summary, sections, projects, rules, flags) -> None:
+def _relevance(text: str, jd: ParsedJd) -> int:
+    """
+    How much of what the posting asks for this text names, weighted by importance.
+
+    # ponytail: substring match, which is also what a keyword filter does. If it
+    # ever needs to match meaning rather than words, that is a model's job.
+    """
+    low = text.casefold()
+    return sum(
+        skill.importance
+        for skill in [*jd.required_skills, *jd.preferred_skills]
+        if skill.name.casefold() in low
+    )
+
+
+def _fill_page(profile, title, summary, sections, projects, rules, flags, jd) -> None:
     """Add unused bullets in priority order until the page is full, measured in Chromium."""
     def build() -> GeneratedCv:
         return GeneratedCv(
@@ -383,17 +429,23 @@ def _fill_page(profile, title, summary, sections, projects, rules, flags) -> Non
         )
 
     on_page = {b.source_id for s in sections for b in s.bullets}
-    chosen = [projects[s.project_id] for s in sections]
-    rest = sorted(
-        (p for p in profile.all_projects() if p.id not in {c.id for c in chosen}),
-        key=lambda p: p.priority,
+    used = {s.project_id for s in sections}
+    # Projects already on the page first, then the rest. Within that, the most
+    # relevant bullet to this posting, then the person's own priority. Filling
+    # by priority alone put unrelated work on the page to make up the height.
+    spare: list[tuple[Project, Bullet]] = sorted(
+        (
+            (project, bullet)
+            for project in profile.all_projects()
+            for bullet in project.bullets
+            if bullet.id not in on_page and bullet.status != "blocked"
+        ),
+        key=lambda pair: (
+            pair[0].id not in used,
+            -_relevance(f"{pair[1].text} {' '.join(pair[0].stack)}", jd),
+            pair[1].priority,
+        ),
     )
-    spare: list[tuple[Project, Bullet]] = [
-        (project, bullet)
-        for project in chosen + rest
-        for bullet in sorted(project.bullets, key=lambda b: b.priority)
-        if bullet.id not in on_page and bullet.status != "blocked"
-    ]
 
     try:
         with measurer() as pages:
@@ -500,6 +552,8 @@ def _codepoint(raw: str) -> str:
 class ExportRequest(BaseModel):
     application_id: int
     cv: GeneratedCv
+    # The model that chose these bullets, carried from the generate response.
+    model: str = ""
 
 
 class ExportResponse(BaseModel):
@@ -548,6 +602,7 @@ def export(body: ExportRequest, session: SessionDep) -> ExportResponse:
         for bullet in section.bullets
     ]
     row.coverage = [item.model_dump() for item in body.cv.coverage]
+    row.model = body.model or row.model
     session.add(row)
     session.commit()
     session.refresh(row)

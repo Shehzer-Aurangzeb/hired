@@ -63,7 +63,12 @@ export class GenerateService {
   export(applicationId: number, cv: GeneratedCv): Observable<ExportResponse> {
     this.exporting.set(true);
     return this.http
-      .post<ExportResponse>(`${API}/api/export`, { application_id: applicationId, cv })
+      .post<ExportResponse>(`${API}/api/export`, {
+        application_id: applicationId,
+        cv,
+        // Stamped on the row, so the saved PDF records what chose its bullets.
+        model: this.result()?.model ?? '',
+      })
       .pipe(finalize(() => this.exporting.set(false)));
   }
 

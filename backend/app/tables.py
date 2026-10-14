@@ -67,6 +67,9 @@ class Application(SQLModel, table=True):
     # Snapshot as printed, not linked to the current profile.
     selected_bullets: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
     coverage: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
+    # Which model chose these bullets. Stamped at export, so the page you kept
+    # says what made it rather than what is configured today.
+    model: str = ""
 
     # Stored as bytes so the database is the only file to back up.
     pdf: bytes | None = Field(default=None, sa_column=Column(LargeBinary, nullable=True))

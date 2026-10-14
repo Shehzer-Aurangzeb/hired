@@ -29,6 +29,15 @@
           @if (application.title_variant) {
             · <span class="mono">{{ application.title_variant }}</span> variant
           }
+          @if (application.model) {
+            ·
+            <span
+              class="mono"
+              [class]="application.model.startsWith('openrouter') || application.model.includes('/') ? 'text-warn' : 'text-fg-subtle'"
+              title="The model that chose these bullets."
+              >{{ application.model }}</span
+            >
+          }
         </p>
       </div>
 
@@ -265,7 +274,9 @@
                     unrecorded()
                       ? 'bg-surface text-fg-muted'
                       : item.evidenced
-                        ? 'border-accent/50 bg-accent-soft text-accent'
+                        ? item.byMeaning
+                          ? 'border-accent/50 border-dashed bg-accent-soft text-accent'
+                          : 'border-accent/50 bg-accent-soft text-accent'
                         : item.required
                           ? 'border-danger/50 bg-danger-soft text-danger'
                           : 'bg-surface text-fg-subtle'
@@ -274,9 +285,13 @@
                     (item.required ? 'Required' : 'Preferred') +
                     (unrecorded()
                       ? '. This record predates coverage, so nothing is known either way.'
-                      : item.evidenced
-                        ? '. A bullet on the page backs it.'
-                        : '. No bullet on the page backs it.')
+                      : item.backedBy
+                        ? '. ' + item.backedBy
+                        : item.byMeaning
+                          ? '. A bullet backs this by meaning, but the words are not on the page.'
+                          : item.evidenced
+                            ? '. A bullet on the page backs it.'
+                            : '. No bullet on the page backs it.')
                   "
                 >
                   @if (!unrecorded()) {

@@ -469,7 +469,9 @@
                         class="chip font-medium"
                         [class]="
                           item.evidenced
-                            ? 'border-accent/50 bg-accent-soft text-accent'
+                            ? item.byMeaning
+                              ? 'border-accent/50 border-dashed bg-accent-soft text-accent'
+                              : 'border-accent/50 bg-accent-soft text-accent'
                             : item.covered
                               ? 'border-warn/50 bg-warn-soft text-warn'
                               : item.required
@@ -480,11 +482,15 @@
                           (item.required ? 'Required' : 'Preferred') +
                           ', importance ' +
                           item.importance +
-                          (item.evidenced
-                            ? '. Backed by a bullet on the page.'
-                            : item.covered
-                              ? '. On the skills line, but no bullet backs it.'
-                              : '. Not on the page at all.')
+                          (item.backedBy
+                            ? '. ' + item.backedBy
+                            : item.byMeaning
+                              ? '. A bullet backs this by meaning, but the words are not on the page.'
+                              : item.evidenced
+                                ? '. Backed by a bullet on the page.'
+                                : item.covered
+                                  ? '. On the skills line, but no bullet backs it.'
+                                  : '. Not on the page at all.')
                         "
                       >
                         <app-icon

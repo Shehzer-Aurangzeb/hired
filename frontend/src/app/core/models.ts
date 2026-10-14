@@ -364,6 +364,8 @@ export interface CvSection {
 
 /** One posting requirement and the bullets on the page that back it. */
 export interface SkillCoverage {
+  /** What backs a requirement no bullet can: a degree, or nothing a CV shows. */
+  backed_by?: string;
   skill: string;
   bullet_ids: string[];
 }
@@ -459,6 +461,8 @@ export interface Application {
   selected_bullet_ids: string[];
   selected_bullets: SentBullet[];
   coverage: SkillCoverage[];
+  /** Which model chose the bullets on the saved PDF. Empty on older rows. */
+  model: string;
   /** The PDF itself is at /api/applications/{id}/pdf. */
   has_pdf: boolean;
   filename: string | null;
