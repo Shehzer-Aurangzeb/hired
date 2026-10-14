@@ -881,3 +881,32 @@ def test_the_response_names_the_model_that_answered(client, monkeypatch):
     body = client.post("/api/generate", json={"jd_text": JD, "parsed_jd": {}}).json()
 
     assert body["model"] == "openrouter/free"
+
+
+def test_a_per_minute_limit_is_not_reported_as_a_spent_day(monkeypatch):
+    """Both limits return 429. Calling every one a spent day wastes a day."""
+    import httpx
+    from app.settings import Settings
+
+    body = {
+        "error": {
+            "code": 429,
+            "message": "Quota exceeded",
+            "details": [
+                {
+                    "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                    "violations": [{"quotaId": "GenerateRequestsPerMinutePerProjectPerModel"}],
+                },
+                {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "27s"},
+            ],
+        }
+    }
+    monkeypatch.setattr(
+        model._CLIENT, "post",
+        lambda *a, **k: httpx.Response(429, json=body, request=httpx.Request("POST", "http://x")),
+    )
+    with pytest.raises(Exception) as caught:
+        model._gemini("p", {}, Settings(secret_key="t", gemini_api_key="k"))
+
+    assert "Per-minute limit" in str(caught.value.detail)
+    assert "27s" in str(caught.value.detail)

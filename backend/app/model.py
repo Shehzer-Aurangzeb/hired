@@ -164,9 +164,7 @@ def _gemini(
         raise HTTPException(502, "Could not reach the model.") from error
 
     if response.status_code == 429:
-        raise HTTPException(
-            429, "The model's rate limit is spent. The free tier resets daily."
-        )
+        raise HTTPException(429, f"Gemini refused on rate. {_limit(response)}")
     if response.status_code == 404:
         # Retired model name; the error body names the replacement.
         raise HTTPException(502, f"{_message(response)} Set HIRED_GEMINI_MODEL.")
@@ -174,6 +172,29 @@ def _gemini(
         raise HTTPException(502, f"The model refused the request. {_message(response)}")
 
     return _first_json(response)
+
+
+def _limit(response: httpx.Response) -> str:
+    """
+    Say which limit was hit. The free tier caps requests per minute as well as
+    per day, both as 429, and a per-minute block clears in a minute. Calling
+    every 429 a spent day sent two people off diagnosing the wrong problem.
+    """
+    try:
+        details = response.json()["error"].get("details") or []
+    except Exception:  # noqa: BLE001
+        return _message(response)
+
+    quota = [d for d in details if "QuotaFailure" in d.get("@type", "")]
+    ids = [v.get("quotaId", "") for d in quota for v in d.get("violations") or []]
+    retry = next(
+        (d.get("retryDelay") for d in details if "RetryInfo" in d.get("@type", "")), ""
+    )
+    if any("PerMinute" in i or "per_minute" in i for i in ids):
+        return f"Per-minute limit, not the daily one. Wait {retry or 'a minute'} and retry."
+    if any("PerDay" in i or "per_day" in i for i in ids):
+        return "The daily free-tier limit. It resets at midnight Pacific."
+    return _message(response) + (f" Retry in {retry}." if retry else "")
 
 
 def _message(response: httpx.Response) -> str:
