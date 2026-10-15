@@ -61,7 +61,6 @@ FIT = {
             {"name": "Playwright", "importance": 1},
             {"name": "React Native", "importance": 1},
         ],
-        "keywords": ["payments", "dashboard", "merchant"],
         "years_required": 5,
     },
     "score": 8,

@@ -382,6 +382,4 @@ class ParsedJd(BaseModel):
     work_mode: str = ""
     required_skills: list[RequiredSkill] = []
     preferred_skills: list[RequiredSkill] = []
-    keywords: list[str] = []
-    french_required: bool = False
     years_required: int | None = None

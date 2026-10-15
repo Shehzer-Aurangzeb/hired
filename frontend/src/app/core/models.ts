@@ -336,8 +336,6 @@ export interface ParsedJd {
   work_mode: string;
   required_skills: RequiredSkill[];
   preferred_skills: RequiredSkill[];
-  keywords: string[];
-  french_required: boolean;
   years_required: number | null;
 }
 

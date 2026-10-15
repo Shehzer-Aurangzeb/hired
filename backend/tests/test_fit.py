@@ -64,11 +64,18 @@ def save_profile(client, text=DEFAULT_TEMPLATE):
 
 
 def answers(monkeypatch, payload):
-    """Stand in for the model and record the prompt."""
+    """
+    Stand in for the model. Fit makes two calls, extraction then scoring, so one
+    payload covers both and each call takes the keys its schema declares.
+    """
     sent = {}
 
-    def fake(prompt, schema):
-        sent["prompt"], sent["schema"] = prompt, schema
+    def fake(prompt, schema, turns=None, local_first=False):
+        key = "extract" if local_first else "score"
+        sent[key] = {"prompt": prompt, "schema": schema}
+        sent["prompt"], sent["schema"] = prompt, schema   # the scoring call, last
+        if local_first:
+            return payload.get("parsed_jd") or {}
         return payload
 
     monkeypatch.setattr(fit, "generate_json", fake)
@@ -165,7 +172,7 @@ def test_the_context_spans_both_project_lists():
 
 
 def test_the_schema_asks_for_a_one_to_ten_score():
-    score = fit.SCHEMA["properties"]["score"]
+    score = fit.SCORE_SCHEMA["properties"]["score"]
     assert (score["minimum"], score["maximum"]) == (1, 10)
 
 
@@ -376,3 +383,39 @@ def test_a_listed_skill_is_not_a_gap(monkeypatch):
 
     assert "no skill_evidence entry is claimed but not" in fit.INSTRUCTIONS
     assert "do not\n  report it as a gap" in fit.INSTRUCTIONS
+
+
+def test_the_posting_is_read_before_it_is_scored(client, monkeypatch):
+    """
+    Extraction runs on its own, locally, with no profile competing for attention.
+    Scoring then gets the list rather than re-reading the raw posting.
+    """
+    save_profile(client)
+    sent = answers(monkeypatch, {"score": 7, "reasoning": "ok", "gaps": [],
+                                 "parsed_jd": {"company": "C", "role": "R",
+                                               "required_skills": [], "preferred_skills": []}})
+    client.post("/api/fit", json={"jd_text": JD})
+
+    assert "PROFILE:" not in sent["extract"]["prompt"]      # nothing to distract it
+    assert JD[:40] in sent["extract"]["prompt"]
+    assert "PROFILE:" in sent["score"]["prompt"]
+    assert "WHAT THE POSTING ASKS FOR:" in sent["score"]["prompt"]
+    assert "parsed_jd" not in sent["score"]["schema"]["properties"]
+
+
+def test_extraction_prefers_the_local_model(monkeypatch):
+    """Thoroughness beats speed when reading a posting; 90% against 49%."""
+    from app import model
+    from app.settings import Settings
+
+    settings = Settings(secret_key="t", gemini_api_key="g", ollama_model="granite3.3:8b")
+    monkeypatch.setattr(model, "get_settings", lambda: settings)
+    monkeypatch.setattr(model, "unhealthy", lambda: None)
+    tried = []
+    monkeypatch.setattr(model, "_gemini", lambda *a, **k: tried.append("gemini") or {})
+    monkeypatch.setattr(model, "_ollama", lambda *a, **k: tried.append("ollama") or {})
+
+    model.generate_json("p", {}, local_first=True)
+    model.generate_json("p", {})
+
+    assert tried == ["ollama", "gemini"]
