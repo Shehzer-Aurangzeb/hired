@@ -78,8 +78,18 @@ Why this split. Measured on 8 real postings, counting the technologies each one
 names: Gemini found 49% of them, granite3.3:8b found most of the rest, at about
 40 seconds a posting against 4. A fit check that silently drops a third of the
 requirements produces a confident CV for the wrong job, so the forty seconds
-buys something. Scoring and bullet selection stay on Gemini, where speed matters
-and the extracted list is already in hand.
+buys something.
+
+The local model is used three ways, by how much a wrong answer costs:
+
+| Step | Local model | Why |
+| --- | --- | --- |
+| Reading the posting | first | it reads better, and the wait is worth it |
+| Scoring the fit | only when Gemini is busy | a score you can argue with beats "try again later" |
+| Choosing bullets | never | it returned a bullet id as a project and invented a title; a fabricated page is worse than no page |
+
+When a local model answers, its name is shown beside the CV and on the saved
+application, so a weaker answer is visible rather than silent.
 
 Before each local call `hired` checks the machine: it declines when the battery
 is under 30% and unplugged, when macOS reports thermal throttling, or when less

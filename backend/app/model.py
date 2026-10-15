@@ -74,7 +74,7 @@ def generate_json(
     prompt: str,
     schema: dict[str, Any],
     turns: list[tuple[str, str]] | None = None,
-    local_first: bool = False,
+    local: str = "never",
 ) -> dict[str, Any]:
     """
     Return one JSON object matching `schema`, or raise HTTPException with a readable reason.
@@ -83,16 +83,18 @@ def generate_json(
     Sent as real turns rather than a transcript quoted inside `prompt`: a model
     treats what it said itself as its own, and quoted text as background reading.
 
-    `local_first` asks the model on this machine instead, and is the only way to
-    reach it. It is set for reading a posting, which it does better than Gemini
-    (most of the named requirements against about half of them) and where the
-    extra half minute buys something.
+    `local` says how the model on this machine may be used:
 
-    Everything else is Gemini or an error, deliberately. Judging a profile and
-    choosing bullets were never measured on the local model, and the one time it
-    was asked it returned a bullet id as a project, invented a title, and
-    described a candidate who does not exist. A fallback that fabricates is
-    worse than a failure, which at least says so.
+      "first"     ask it before Gemini. Reading a posting: it finds most of the
+                  named requirements against Gemini's half, and the extra half
+                  minute buys something.
+      "fallback"  ask it only when Gemini will not answer. Scoring: weaker, and
+                  it has described a candidate who does not exist, but a number
+                  you can second-guess beats a wall on the day you are applying.
+                  The answer carries the model's name so it can be distrusted.
+      "never"     Gemini or an error. Choosing bullets, where it returned a
+                  bullet id as a project and invented a title, and where a
+                  fabricated page is worse than no page.
     """
     settings = get_settings()
 
@@ -107,20 +109,30 @@ def generate_json(
         served.set(settings.gemini_model)
         return _gemini(prompt, schema, settings, turns)
 
-    def local() -> dict[str, Any]:
+    def run_local() -> dict[str, Any]:
         served.set(settings.ollama_model)
         return _ollama(prompt, schema, settings, turns)
 
-    if local_first and settings.ollama_model:
+    usable_local = local != "never" and bool(settings.ollama_model)
+
+    if local == "first" and usable_local:
         try:
-            return local()
+            return run_local()
         except HTTPException:
             if not settings.gemini_api_key:
                 raise
 
     if not settings.gemini_api_key:
+        if usable_local:
+            return run_local()
         raise HTTPException(503, "No model is configured on this instance.")
-    return gemini()
+
+    try:
+        return gemini()
+    except HTTPException:
+        if local == "fallback" and usable_local:
+            return run_local()
+        raise
 
 
 def _turns(turns: list[tuple[str, str]] | None, assistant: str) -> list[dict[str, str]]:

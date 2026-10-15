@@ -366,8 +366,10 @@
               [class]="fellBack() ? 'bg-warn-soft text-warn' : 'text-fg-subtle'"
               [title]="
                 fellBack()
-                  ? 'Gemini did not answer, so this came from the OpenRouter fallback.'
-                  : 'The model that chose these bullets.'
+                  ? 'Gemini was busy, so a model on this machine answered. It reads
+                     postings well and judges them less well: check the score and the
+                     reasoning, and re-run later for a second opinion.'
+                  : 'The model that read the posting and chose these bullets.'
               "
             >
               {{ servedBy() }}

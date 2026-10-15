@@ -157,7 +157,7 @@ def check_fit(body: FitRequest, session: SessionDep) -> FitResponse:
     # Two calls, each with one job. Done together, the extraction half lost a
     # third of the requirements with the profile sitting in the same context.
     parsed_jd = ParsedJd.model_validate(
-        generate_json(f"{EXTRACT}\n\nPOSTING:\n{text}", EXTRACT_SCHEMA, local_first=True)
+        generate_json(f"{EXTRACT}\n\nPOSTING:\n{text}", EXTRACT_SCHEMA, local="first")
     )
     read_by = served.get()
 
@@ -166,6 +166,9 @@ def check_fit(body: FitRequest, session: SessionDep) -> FitResponse:
         f"\n\nWHAT THE POSTING ASKS FOR:\n{parsed_jd.model_dump_json()}"
         f"\n\nPOSTING:\n{text}",
         SCORE_SCHEMA,
+        # A score you can argue with beats "try again later" on the day you are
+        # applying. The response names the model, so a weak one is visible.
+        local="fallback",
     )
 
     return FitResponse(
