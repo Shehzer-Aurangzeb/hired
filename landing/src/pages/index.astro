@@ -31,7 +31,7 @@ const steps = [
   },
   {
     title: 'Get a verdict first',
-    body: 'A score out of ten, the reasons, and the gaps. Being told to skip a posting is the most useful answer it gives.',
+    body: 'A local model reads the posting, Gemini scores it: out of ten, with reasons and gaps. Being told to skip a posting is the most useful answer it gives.',
     shot: fit,
     alt: 'Fit result: 8 out of 10, marked Apply, with the reasoning and one gap.',
   },
@@ -123,7 +123,7 @@ const profileViews = [
           <div class="hero-copy">
             <p class="eyebrow" data-reveal>
               <span class="pulse" aria-hidden="true"></span>
-              Open source · runs on your laptop · Gemini free tier
+              Open source · runs on your laptop · Gemini + a local model
             </p>
             <h1 data-reveal style="--i:1">
               A tailored CV you can{' '}
@@ -230,6 +230,43 @@ const profileViews = [
                 <div class="progress"><span data-progress></span></div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- two models ---------- -->
+      <section class="models">
+        <div class="wrap">
+          <div class="head" data-reveal>
+            <p class="label">Two models, two jobs</p>
+            <h2>Read slowly on your machine. Decide fast in the cloud.</h2>
+            <p class="sub">
+              A fit check that misses a third of the requirements writes a confident CV for the wrong job. So
+              reading the posting has its own call, on a local model, with nothing else in front of it.
+            </p>
+          </div>
+
+          <div class="model-grid">
+            <article class="model" data-reveal style="--i:1">
+              <p class="model-tag">Reads the posting · on your machine</p>
+              <h3 class="mono">granite3.3:8b</h3>
+              <p>Pulls out every technology and requirement, then hands the list on. About 40 seconds a posting, through ollama.</p>
+            </article>
+            <article class="model" data-reveal style="--i:2">
+              <p class="model-tag">Scores and selects · Gemini</p>
+              <h3 class="mono">gemini</h3>
+              <p>Gets the list, not the raw text. Scores the fit and picks bullet ids in seconds. When it is rate limited, the local model answers instead.</p>
+            </article>
+          </div>
+
+          <div class="recall" data-reveal style="--i:3">
+            <p class="recall-head">Technologies found, across 8 real postings</p>
+            <div class="recall-row"><span>granite3.3:8b</span><div class="recall-track"><span style="--w:90%"></span></div><strong>90%</strong></div>
+            <div class="recall-row"><span>Gemini</span><div class="recall-track"><span style="--w:49%"></span></div><strong>49%</strong></div>
+            <p class="recall-note">
+              Before each local call it checks the machine, and declines when the battery is under 30% and
+              unplugged, macOS is throttling, or less than 15% of memory is free.
+            </p>
           </div>
         </div>
       </section>
@@ -378,7 +415,7 @@ const profileViews = [
                 <div class="segments">{Array.from({ length: 10 }, (_, i) => <span class:list={{ fill: i < 8 }} style={`--d:${i}`} />)}</div>
               </div>
               <h3>A verdict before the work</h3>
-              <p>Score, reasons and gaps in one call. Skip a posting with a clear conscience.</p>
+              <p>Score, reasons and gaps before any CV work. Skip a posting with a clear conscience.</p>
             </article>
 
             <article class="tile" data-reveal style="--i:1">
@@ -458,13 +495,16 @@ const profileViews = [
               <h2>One command. One port. Your machine.</h2>
               <p class="sub">
                 Docker or a local Python setup, and the same <code class="mono">hired</code> command either
-                way. <code class="mono">hired setup</code> asks for a password and a free Gemini key, then the
-                app listens on 127.0.0.1 only, so nothing else on your network can reach it.
+                way. <code class="mono">hired setup</code> asks for a password and a free Gemini key, and
+                <code class="mono">hired</code> starts ollama for you (in Docker, run <code class="mono">ollama serve</code> on the host). It listens on 127.0.0.1 only, so nothing
+                else on your network can reach it.
               </p>
               <ul class="needs">
                 <li>Docker</li>
                 <li class="or">or</li>
                 <li>Python 3 · Node 20+ · pnpm</li>
+                <li class="or">plus</li>
+                <li>ollama</li>
               </ul>
               <a class="btn btn-primary btn-lg" href={REPO}>Get it on GitHub <span class="arrow" aria-hidden="true">→</span></a>
             </div>
@@ -473,6 +513,7 @@ const profileViews = [
               <pre class="mono"><code><span data-line="$ git clone https://github.com/Shehzer-Aurangzeb/hired"></span>
 <span data-line="$ cd hired"></span>
 <span data-line="$ ln -s &quot;$PWD/bin/hired&quot; ~/.local/bin/hired"></span>
+<span data-line="$ ollama pull granite3.3:8b"></span>
 <span data-line="$ hired setup"></span>
 <span data-line="$ hired"></span>
 <span class="t-dim" data-line="starting in docker (the first build takes a few minutes)..." data-instant></span>
@@ -1070,6 +1111,91 @@ const profileViews = [
         }
       }
 
+      /* ---------- two models ---------- */
+      .models {
+        padding: 0 0 120px;
+      }
+      .model-grid {
+        display: grid;
+        gap: 16px;
+        margin-top: 48px;
+      }
+      @media (min-width: 800px) {
+        .model-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      .model {
+        padding: 24px;
+        background: var(--raised);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+      }
+      .model-tag {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+      .model h3 {
+        margin-top: 12px;
+        font-size: 20px;
+      }
+      .model p:not(.model-tag) {
+        margin-top: 8px;
+        font-size: 15px;
+        color: var(--fg-muted);
+      }
+      .recall {
+        margin-top: 16px;
+        padding: 24px;
+        background: var(--raised);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        display: grid;
+        gap: 12px;
+      }
+      .recall-head {
+        font-weight: 600;
+      }
+      .recall-row {
+        display: grid;
+        grid-template-columns: 120px 1fr 44px;
+        align-items: center;
+        gap: 12px;
+        font-size: 14px;
+      }
+      .recall-row strong {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .recall-track {
+        height: 10px;
+        border-radius: 10px;
+        background: var(--line);
+        overflow: hidden;
+      }
+      .recall-track span {
+        display: block;
+        width: var(--w);
+        height: 100%;
+        border-radius: 10px;
+        background: var(--accent);
+        transform-origin: left;
+        transition: transform 1100ms cubic-bezier(0.2, 0.8, 0.2, 1) 400ms;
+      }
+      .recall-row:last-of-type .recall-track span {
+        background: var(--line-strong);
+      }
+      :global(.js) .recall:not(.in) .recall-track span {
+        transform: scaleX(0);
+      }
+      .recall-note {
+        font-size: 14px;
+        color: var(--fg-muted);
+      }
+
       /* ---------- ink band ---------- */
       .honest {
         padding: 120px 0;
@@ -1600,7 +1726,7 @@ const profileViews = [
       .terminal pre {
         margin: 0;
         /* Every line's height reserved up front, so typing never pushes the card. */
-        min-height: 240px;
+        min-height: 264px;
         padding: 20px;
         overflow-x: auto;
         font-size: 13px;
