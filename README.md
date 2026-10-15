@@ -29,7 +29,7 @@ qualifiers survive any rewording.
 | `backend/` | FastAPI, SQLModel on SQLite, Jinja + Playwright (Chromium) for the PDF |
 | `frontend/` | Angular 20, standalone components, signals, Tailwind 4 |
 | `landing/` | Astro, deployed separately on Vercel |
-| Models | Gemini, with OpenRouter's free tier as the fallback |
+| Models | Gemini for scoring and selection, granite3.3:8b on your own machine for reading the posting |
 | Run | `bin/hired` launcher, locally or in Docker |
 
 The profile is Markdown headings around YAML, parsed with `yaml.safe_load`, no
@@ -54,8 +54,37 @@ The first Docker start builds the image (about 1.4GB, a few minutes). Your
 data lives in the `hired-data` Docker volume, so it survives rebuilds.
 
 Get a Gemini key from [Google AI Studio](https://aistudio.google.com).
-`HIRED_OLLAMA_MODEL` in `backend/.env` is the fallback: a model running on your own
-machine through [ollama](https://ollama.com), with no key and no quota. `ollama pull granite3.3:8b` once, and `hired` starts and stops it for you.
+
+### The local model
+
+Reading a posting is done by a model on your own machine, through
+[ollama](https://ollama.com). It is also what answers when Gemini is rate
+limited, so there is no quota wall and no third party choosing the model.
+
+```bash
+ollama pull granite3.3:8b      # once, 4.9GB
+```
+
+`hired` starts ollama if it is not already running and unloads the model when
+you stop. Set `HIRED_OLLAMA_MODEL=` empty in `backend/.env` to turn it off and
+use Gemini for everything.
+
+In Docker the app is containerised but ollama is not, because Docker Desktop
+has no access to the Mac's GPU and a containerised model would run on the CPU.
+Start it yourself with `ollama serve`; compose points the container at
+`host.docker.internal` for you.
+
+Why this split. Measured on 8 real postings, counting the technologies each one
+names: Gemini found 49% of them, granite3.3:8b found most of the rest, at about
+40 seconds a posting against 4. A fit check that silently drops a third of the
+requirements produces a confident CV for the wrong job, so the forty seconds
+buys something. Scoring and bullet selection stay on Gemini, where speed matters
+and the extracted list is already in hand.
+
+Before each local call `hired` checks the machine: it declines when the battery
+is under 30% and unplugged, when macOS reports thermal throttling, or when less
+than 15% of memory is free. A loaded 8B model is about a third of 16GB, so that
+floor is what is left beyond it.
 
 ```bash
 hired stop | restart | status | log | backup | doctor | help

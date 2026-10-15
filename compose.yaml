@@ -4,6 +4,11 @@ services:
     env_file: backend/.env
     environment:
       HIRED_DATABASE_URL: sqlite:////data/hired.db
+      # localhost inside the container is the container. The model runs on the
+      # host, natively, because Docker Desktop has no access to the Mac's GPU.
+      HIRED_OLLAMA_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Linux; a no-op on Docker Desktop
     # Published on localhost only: the database holds your CV data.
     ports:
       - "127.0.0.1:${HIRED_PORT:-8000}:8000"
