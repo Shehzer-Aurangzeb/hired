@@ -3,6 +3,8 @@ No retries, only failover, since free tiers are rationed per day."""
 
 import contextvars
 import json
+import re
+import subprocess
 from typing import Any
 
 import httpx
@@ -11,9 +13,7 @@ from fastapi import HTTPException
 from .settings import Settings, get_settings
 
 GEMINI = "https://generativelanguage.googleapis.com/v1beta/models"
-OPENROUTER = "https://openrouter.ai/api/v1/chat/completions"
 
-FREE_POOL = "openrouter/free"
 
 # Which model answered the call in progress. A ContextVar rather than a global
 # because sync routes run on a threadpool, and two requests must not see each
@@ -21,6 +21,14 @@ FREE_POOL = "openrouter/free"
 served: contextvars.ContextVar[str] = contextvars.ContextVar("served", default="")
 
 TIMEOUT = 60.0
+# A local call generates at about 10 tokens a second, and a long posting can
+# want 1,500 of them.
+LOCAL_TIMEOUT = 600.0
+
+# A loaded 8B model is itself about a third of 16GB, so the floor is what is
+# left beyond it. Matches the figure wa2trello settled on.
+MIN_FREE_PCT = 15
+MIN_BATTERY_PCT = 30
 
 # Pinned to IPv4: httpx tries IPv6 addresses one by one, and on a network with
 # broken IPv6 that took ~64s before falling back. A v4 source address skips them.
@@ -28,6 +36,38 @@ _CLIENT = httpx.Client(
     timeout=TIMEOUT,
     transport=httpx.HTTPTransport(local_address="0.0.0.0"),
 )
+
+# Localhost, so none of the IPv6 reasoning above applies; only the patience does.
+_LOCAL = httpx.Client(timeout=LOCAL_TIMEOUT)
+
+
+def unhealthy() -> str | None:
+    """
+    Why it is a bad moment to run a model on this machine, or None. macOS only;
+    elsewhere it never objects, since the figures come from pmset and sysctl.
+    """
+    def sh(*cmd: str) -> str:
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=5).stdout
+        except Exception:  # noqa: BLE001
+            return ""
+
+    battery = sh("pmset", "-g", "batt")
+    charge = re.search(r"(\d+)%", battery)
+    if battery and "AC Power" not in battery and charge and int(charge[1]) < MIN_BATTERY_PCT:
+        return f"the battery is at {charge[1]}%, plug the charger in"
+
+    # ponytail: pmset reports OS-level throttling only; real temperatures need
+    # sudo powermetrics, which a web request has no business asking for.
+    thermal = sh("pmset", "-g", "therm")
+    limit = re.search(r"CPU_Speed_Limit\s*=\s*(\d+)", thermal)
+    if limit and int(limit[1]) < 100:
+        return "the Mac is thermally throttling, let it cool"
+
+    free = sh("sysctl", "-n", "kern.memorystatus_level").strip()
+    if free.isdigit() and int(free) < MIN_FREE_PCT:
+        return f"only {free}% of memory is free"
+    return None
 
 
 def generate_json(
@@ -56,14 +96,13 @@ def generate_json(
             served.set(settings.gemini_model)
             return _gemini(prompt, schema, settings, turns)
         except HTTPException:
-            # Fall through only if OpenRouter is configured.
-            if not settings.openrouter_api_key:
+            if not settings.ollama_model:
                 raise
 
-    if not settings.openrouter_api_key:
-        raise HTTPException(503, "No model key is configured on this instance.")
-    served.set(FREE_POOL)
-    return _openrouter(prompt, schema, settings, turns)
+    if not settings.ollama_model:
+        raise HTTPException(503, "No model is configured on this instance.")
+    served.set(settings.ollama_model)
+    return _ollama(prompt, schema, settings, turns)
 
 
 def _turns(turns: list[tuple[str, str]] | None, assistant: str) -> list[dict[str, str]]:
@@ -79,61 +118,54 @@ def _turns(turns: list[tuple[str, str]] | None, assistant: str) -> list[dict[str
     return out
 
 
-def _openrouter(
+def _ollama(
     prompt: str,
     schema: dict[str, Any],
     settings: Settings,
     turns: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
-    # require_parameters keeps it off models that would ignore the schema.
-    # No `strict: true`: it limits which JSON Schema keywords are allowed.
-    try:
-        response = _CLIENT.post(
-            OPENROUTER,
-            headers={"Authorization": f"Bearer {settings.openrouter_api_key}"},
-            json={
-                "model": FREE_POOL,
-                "messages": [{"role": "user", "content": prompt}]
-                + [
-                    {"role": turn["role"], "content": turn["text"]}
-                    for turn in _turns(turns, "assistant")
-                ],
-                "provider": {"require_parameters": True},
-                "response_format": {
-                    "type": "json_schema",
-                    "json_schema": {"name": "answer", "schema": schema},
-                },
-            },
-        )
-    except httpx.TimeoutException as error:
-        raise HTTPException(504, "The model took too long. Try again.") from error
-    except httpx.HTTPError as error:
-        raise HTTPException(502, "Could not reach OpenRouter.") from error
+    """The model on this machine. No key, no quota, no third party."""
+    if reason := unhealthy():
+        raise HTTPException(503, f"Not running a local model right now: {reason}")
 
-    if response.status_code == 429:
+    body = {
+        "model": settings.ollama_model,
+        "stream": False,
+        "format": schema,
+        # Reasoning tokens cost the same as useful ones, and generation is the
+        # whole expense locally. Extraction is reading, not reasoning.
+        "think": False,
+        "messages": [{"role": "user", "content": prompt}]
+        + [
+            {"role": turn["role"], "content": turn["text"]}
+            for turn in _turns(turns, "assistant")
+        ],
+    }
+    try:
+        response = _LOCAL.post(f"{settings.ollama_url}/api/chat", json=body)
+        if response.status_code >= 400 and "think" in body:
+            body.pop("think")  # the model has no thinking mode to turn off
+            response = _LOCAL.post(f"{settings.ollama_url}/api/chat", json=body)
+    except httpx.TimeoutException as error:
+        raise HTTPException(504, "The local model took too long.") from error
+    except httpx.HTTPError as error:
         raise HTTPException(
-            429,
-            "OpenRouter's rate limit is spent. Free models allow 50 requests a day "
-            "without credits, and the count resets at UTC midnight.",
-        )
-    if response.status_code == 402:
-        raise HTTPException(402, f"OpenRouter refused on credit. {_message(response)}")
-    if response.status_code == 503:
+            503, "Could not reach ollama. Start it with `ollama serve`."
+        ) from error
+
+    if response.status_code == 404:
         raise HTTPException(
-            502, f"No free OpenRouter model can serve a schema. {_message(response)}"
+            502, f"No model called {settings.ollama_model}. Pull it with `ollama pull`."
         )
     if response.status_code >= 400:
-        raise HTTPException(502, f"OpenRouter refused the request. {_message(response)}")
+        raise HTTPException(502, f"The local model refused the request. {_message(response)}")
 
-    body = response.json()
-    choices = body.get("choices") or []
-    if not choices:
-        raise HTTPException(502, "OpenRouter returned nothing. It may have been filtered.")
-    served.set(body.get("model") or FREE_POOL)
     try:
-        return json.loads(choices[0]["message"]["content"])
-    except (KeyError, IndexError, TypeError, ValueError) as error:
-        raise HTTPException(502, f"{served.get()} returned something unreadable.") from error
+        return json.loads(response.json()["message"]["content"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise HTTPException(
+            502, f"{settings.ollama_model} returned something unreadable."
+        ) from error
 
 
 def _gemini(

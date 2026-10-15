@@ -198,7 +198,7 @@ def _reply(status, payload):
     return httpx.Response(status, json=payload, request=httpx.Request("POST", "http://t"))
 
 
-OPENROUTER_OK = {"choices": [{"message": {"content": '{"score": 7}'}}]}
+OLLAMA_OK = {"message": {"content": '{"score": 7}'}}
 GEMINI_OK = {"candidates": [{"content": {"parts": [{"text": '{"score": 3}'}]}}]}
 
 
@@ -217,19 +217,21 @@ def calls(monkeypatch, settings, *replies):
 
 
 def test_gemini_is_tried_first_when_its_key_is_set(monkeypatch):
-    settings = Settings(secret_key="t", openrouter_api_key="or", gemini_api_key="g")
+    settings = Settings(secret_key="t", gemini_api_key="g")
     seen = calls(monkeypatch, settings, _reply(200, GEMINI_OK))
 
     assert model.generate_json("anything", {}) == {"score": 3}
     assert len(seen) == 1 and seen[0].startswith(model.GEMINI)
 
 
-def test_a_loaded_gemini_falls_through_to_openrouter(monkeypatch):
-    settings = Settings(secret_key="t", openrouter_api_key="or", gemini_api_key="g")
-    seen = calls(monkeypatch, settings, _reply(429, {}), _reply(200, OPENROUTER_OK))
+def test_a_loaded_gemini_falls_through_to_the_local_model(monkeypatch):
+    settings = Settings(secret_key="t", gemini_api_key="g", ollama_model="granite3.3:8b")
+    seen = calls(monkeypatch, settings, _reply(429, {}))
+    monkeypatch.setattr(model, "unhealthy", lambda: None)
+    monkeypatch.setattr(model._LOCAL, "post", lambda url, **kw: seen.append(url) or _reply(200, OLLAMA_OK))
 
     assert model.generate_json("anything", {}) == {"score": 7}
-    assert len(seen) == 2 and seen[1] == model.OPENROUTER
+    assert len(seen) == 2 and seen[1].endswith("/api/chat")
 
 
 def test_without_a_fallback_geminis_error_is_the_answer(monkeypatch):
@@ -241,29 +243,43 @@ def test_without_a_fallback_geminis_error_is_the_answer(monkeypatch):
     assert error.value.status_code == 429
 
 
-def test_openrouter_alone_still_works(monkeypatch):
-    settings = Settings(secret_key="t", openrouter_api_key="or")
-    seen = calls(monkeypatch, settings, _reply(200, OPENROUTER_OK))
+def test_the_local_model_alone_still_works(monkeypatch):
+    settings = Settings(secret_key="t", ollama_model="granite3.3:8b")
+    monkeypatch.setattr(model, "get_settings", lambda: settings)
+    monkeypatch.setattr(model, "unhealthy", lambda: None)
+    monkeypatch.setattr(model._LOCAL, "post", lambda url, **kw: _reply(200, OLLAMA_OK))
 
     assert model.generate_json("anything", {}) == {"score": 7}
-    assert seen[0] == model.OPENROUTER
 
 
-def test_the_free_pool_is_sent_so_openrouter_picks_the_model(monkeypatch):
-    settings = Settings(secret_key="t", openrouter_api_key="or")
+def test_the_local_call_asks_for_the_schema_and_no_thinking(monkeypatch):
+    """Reasoning tokens cost the same as useful ones, and generation is the expense."""
+    settings = Settings(secret_key="t", ollama_model="granite3.3:8b")
     monkeypatch.setattr(model, "get_settings", lambda: settings)
+    monkeypatch.setattr(model, "unhealthy", lambda: None)
     sent = {}
 
     def post(url, **kwargs):
         sent.update(kwargs["json"])
-        return _reply(200, OPENROUTER_OK)
+        return _reply(200, OLLAMA_OK)
 
-    monkeypatch.setattr(model._CLIENT, "post", post)
+    monkeypatch.setattr(model._LOCAL, "post", post)
     model.generate_json("anything", {"type": "object"})
 
-    assert sent["model"] == model.FREE_POOL
-    assert sent["provider"] == {"require_parameters": True}
-    assert sent["response_format"]["json_schema"]["schema"] == {"type": "object"}
+    assert sent["model"] == "granite3.3:8b"
+    assert sent["think"] is False
+    assert sent["format"] == {"type": "object"}
+
+
+def test_a_tired_mac_is_not_asked_to_run_a_model(monkeypatch):
+    settings = Settings(secret_key="t", ollama_model="granite3.3:8b")
+    monkeypatch.setattr(model, "get_settings", lambda: settings)
+    monkeypatch.setattr(model, "unhealthy", lambda: "only 4% of memory is free")
+
+    with pytest.raises(HTTPException) as error:
+        model.generate_json("anything", {})
+    assert error.value.status_code == 503
+    assert "4% of memory" in error.value.detail
 
 
 # ---------- applying twice to the same employer ----------

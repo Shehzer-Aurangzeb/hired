@@ -403,18 +403,40 @@ MIN_FILL = 0.90
 MAX_FILL = 1.25
 
 
+# Words that carry no signal in a requirement: "Experience with React" and
+# "React" ask for the same thing.
+_FILLER = frozenset(
+    "a an and or the of in on for to with using strong clear basic solid good"
+    " experience knowledge working familiarity understanding exposure ability"
+    " skills skill years proficiency demonstrated related least one".split()
+)
+
+
+def _terms(text: str) -> set[str]:
+    """
+    The meaningful words in a requirement or a bullet. Hyphens and slashes split,
+    because a posting writes "pull-request workflows" and a bullet writes
+    "reviewing pull requests", and those are the same thing.
+    """
+    plain = re.sub(r"[-\u2010-\u2015/]", " ", text)
+    return {w.rstrip("s") for w in _words(plain) if len(w) > 1} - _FILLER
+
+
 def _relevance(text: str, jd: ParsedJd) -> int:
     """
     How much of what the posting asks for this text names, weighted by importance.
 
-    # ponytail: substring match, which is also what a keyword filter does. If it
-    # ever needs to match meaning rather than words, that is a model's job.
+    Word overlap, not substring: a parsed requirement reads "TypeScript or
+    JavaScript with React", which appears verbatim in no bullet ever written.
+
+    # ponytail: whole words, so "SQL" does not match "PostgreSQL". Stemming or
+    # an alias table if that costs real matches; a model if it needs meaning.
     """
-    low = text.casefold()
+    have = _terms(text)
     return sum(
         skill.importance
         for skill in [*jd.required_skills, *jd.preferred_skills]
-        if skill.name.casefold() in low
+        if _terms(skill.name) & have
     )
 
 

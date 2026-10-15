@@ -22,7 +22,7 @@ os.environ.update(
     HIRED_DATABASE_URL=f"sqlite:///{tmp / 'demo.db'}",
     HIRED_SECRET_KEY="demo-only-not-a-secret",
     HIRED_GEMINI_API_KEY="",
-    HIRED_OPENROUTER_API_KEY="",
+    HIRED_OLLAMA_MODEL="",
 )
 sys.path.insert(0, str(BACKEND))
 

@@ -37,12 +37,11 @@ class Settings(BaseSettings):
     # Configurable because Google retires model names.
     gemini_model: str = "gemini-3.6-flash"
 
-    openrouter_api_key: str = Field(
-        "",
-        validation_alias=AliasChoices(
-            "HIRED_OPENROUTER_API_KEY", "OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY"
-        ),
-    )
+    # Runs on this Mac, so it has no quota and never routes to a stranger's
+    # model. Measured at 90% requirement recall against Gemini's 49% on the same
+    # eight postings, at ~39s a call against ~4s.
+    ollama_url: str = "http://localhost:11434"
+    ollama_model: str = "granite3.3:8b"
 
     # Fabricated profile, fabricated history, canned model answers. The database
     # has to be in memory, checked below, so a demo cannot write over real data.

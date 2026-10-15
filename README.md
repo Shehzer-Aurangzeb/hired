@@ -54,7 +54,8 @@ The first Docker start builds the image (about 1.4GB, a few minutes). Your
 data lives in the `hired-data` Docker volume, so it survives rebuilds.
 
 Get a Gemini key from [Google AI Studio](https://aistudio.google.com).
-`HIRED_OPENROUTER_API_KEY` in `backend/.env` is an optional fallback.
+`HIRED_OLLAMA_MODEL` in `backend/.env` is the fallback: a model running on your own
+machine through [ollama](https://ollama.com), with no key and no quota. `ollama pull granite3.3:8b` once, and `hired` starts and stops it for you.
 
 ```bash
 hired stop | restart | status | log | backup | doctor | help

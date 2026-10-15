@@ -876,14 +876,14 @@ def test_the_response_names_the_model_that_answered(client, monkeypatch):
     from app import model as M
 
     def fake(prompt, schema, turns=None):
-        M.served.set("openrouter/free")
+        M.served.set("granite3.3:8b")
         return {"title_id": "frontend", "sections": []}
 
     monkeypatch.setattr(generate, "generate_json", fake)
     save_profile(client)
     body = client.post("/api/generate", json={"jd_text": JD, "parsed_jd": {}}).json()
 
-    assert body["model"] == "openrouter/free"
+    assert body["model"] == "granite3.3:8b"
 
 
 def test_a_per_minute_limit_is_not_reported_as_a_spent_day(monkeypatch):
@@ -963,3 +963,18 @@ def test_the_page_fills_with_what_the_posting_asked_for():
     assert on_topic == 3
     assert off_topic == 0
     assert _relevance("Built it on WebSockets and Zustand.", jd) == 4  # importance adds up
+
+
+def test_relevance_matches_words_not_whole_phrases():
+    """A parsed requirement is a phrase. It appears verbatim in no bullet ever."""
+    from app.generate import _relevance
+
+    jd = ParsedJd(
+        required_skills=[
+            RequiredSkill(name="TypeScript or JavaScript with React", importance=3),
+            RequiredSkill(name="Git and pull-request workflows", importance=2),
+        ]
+    )
+    assert _relevance("Built the front-end in React and TypeScript.", jd) == 3
+    assert _relevance("Led delivery, reviewing pull requests.", jd) == 2
+    assert _relevance("Redesigned client hosting to cap blast radius.", jd) == 0

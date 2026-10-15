@@ -359,7 +359,7 @@ export class GeneratePage {
 
   /** Named on the page when it is not the model you configured. */
   readonly servedBy = computed(() => this.gen.result()?.model ?? this.gen.fit()?.model ?? '');
-  readonly fellBack = computed(() => this.servedBy().startsWith('openrouter'));
+  readonly fellBack = computed(() => !this.servedBy().startsWith('gemini'));
 
   readonly canRegenerate = computed(
     () => !!this.gen.result() && !this.gen.generating() && !this.gen.exporting() && !this.applied(),

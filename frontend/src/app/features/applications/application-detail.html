@@ -33,7 +33,7 @@
             ·
             <span
               class="mono"
-              [class]="application.model.startsWith('openrouter') || application.model.includes('/') ? 'text-warn' : 'text-fg-subtle'"
+              [class]="application.model.startsWith('gemini') ? 'text-fg-subtle' : 'text-warn'"
               title="The model that chose these bullets."
               >{{ application.model }}</span
             >

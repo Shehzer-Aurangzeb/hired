@@ -10,9 +10,9 @@ os.environ["HIRED_PASSWORD_HASH"] = ""
 # Blank every accepted key spelling so the suite never calls a real provider.
 os.environ["HIRED_GEMINI_API_KEY"] = ""
 os.environ["GEMINI_API_KEY"] = ""
-os.environ["HIRED_OPENROUTER_API_KEY"] = ""
-os.environ["OPENROUTER_API_KEY"] = ""
-os.environ["OPEN_ROUTER_API_KEY"] = ""
+# And the local model, which needs no key: ollama is probably running on this
+# machine, and a suite that quietly spends 40s a call is a suite nobody runs.
+os.environ["HIRED_OLLAMA_MODEL"] = ""
 
 
 @pytest.fixture(autouse=True)
