@@ -83,9 +83,16 @@ def generate_json(
     Sent as real turns rather than a transcript quoted inside `prompt`: a model
     treats what it said itself as its own, and quoted text as background reading.
 
-    `local_first` for work where being thorough beats being quick. Reading a
-    posting is that: measured at 90% of the named requirements against Gemini's
-    49%, for about 39 seconds against 4.
+    `local_first` asks the model on this machine instead, and is the only way to
+    reach it. It is set for reading a posting, which it does better than Gemini
+    (most of the named requirements against about half of them) and where the
+    extra half minute buys something.
+
+    Everything else is Gemini or an error, deliberately. Judging a profile and
+    choosing bullets were never measured on the local model, and the one time it
+    was asked it returned a bullet id as a project, invented a title, and
+    described a candidate who does not exist. A fallback that fabricates is
+    worse than a failure, which at least says so.
     """
     settings = get_settings()
 
@@ -96,24 +103,24 @@ def generate_json(
         served.set("demo")
         return demo.answer(schema)
 
-    providers = [("gemini", settings.gemini_api_key), ("ollama", settings.ollama_model)]
-    if local_first:
-        providers.reverse()
-    usable = [(name, _) for name, _ in providers if _]
-    if not usable:
-        raise HTTPException(503, "No model is configured on this instance.")
+    def gemini() -> dict[str, Any]:
+        served.set(settings.gemini_model)
+        return _gemini(prompt, schema, settings, turns)
 
-    for n, (name, _) in enumerate(usable):
+    def local() -> dict[str, Any]:
+        served.set(settings.ollama_model)
+        return _ollama(prompt, schema, settings, turns)
+
+    if local_first and settings.ollama_model:
         try:
-            if name == "gemini":
-                served.set(settings.gemini_model)
-                return _gemini(prompt, schema, settings, turns)
-            served.set(settings.ollama_model)
-            return _ollama(prompt, schema, settings, turns)
+            return local()
         except HTTPException:
-            if n == len(usable) - 1:
+            if not settings.gemini_api_key:
                 raise
-    raise HTTPException(503, "No model is configured on this instance.")
+
+    if not settings.gemini_api_key:
+        raise HTTPException(503, "No model is configured on this instance.")
+    return gemini()
 
 
 def _turns(turns: list[tuple[str, str]] | None, assistant: str) -> list[dict[str, str]]:

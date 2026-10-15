@@ -231,14 +231,20 @@ def test_gemini_is_tried_first_when_its_key_is_set(monkeypatch):
     assert len(seen) == 1 and seen[0].startswith(model.GEMINI)
 
 
-def test_a_loaded_gemini_falls_through_to_the_local_model(monkeypatch):
+def test_a_loaded_gemini_does_not_fall_through_to_the_local_model(monkeypatch):
+    """
+    The local model reads postings well and judges profiles badly. Asked to
+    score, it returned a bullet id as a project and described someone else.
+    Scoring and selection are Gemini or an error.
+    """
     settings = Settings(secret_key="t", gemini_api_key="g", ollama_model="granite3.3:8b")
-    seen = calls(monkeypatch, settings, _reply(429, {}))
+    calls(monkeypatch, settings, _reply(429, {}))
     monkeypatch.setattr(model, "unhealthy", lambda: None)
-    monkeypatch.setattr(model._LOCAL, "post", lambda url, **kw: seen.append(url) or _reply(200, OLLAMA_OK))
+    monkeypatch.setattr(model._LOCAL, "post", lambda *a, **k: pytest.fail("asked the local model"))
 
-    assert model.generate_json("anything", {}) == {"score": 7}
-    assert len(seen) == 2 and seen[1].endswith("/api/chat")
+    with pytest.raises(HTTPException) as error:
+        model.generate_json("anything", {})
+    assert error.value.status_code == 429
 
 
 def test_without_a_fallback_geminis_error_is_the_answer(monkeypatch):
@@ -250,13 +256,24 @@ def test_without_a_fallback_geminis_error_is_the_answer(monkeypatch):
     assert error.value.status_code == 429
 
 
-def test_the_local_model_alone_still_works(monkeypatch):
-    settings = Settings(secret_key="t", ollama_model="granite3.3:8b")
+def test_reading_a_posting_goes_to_the_local_model(monkeypatch):
+    settings = Settings(secret_key="t", gemini_api_key="g", ollama_model="granite3.3:8b")
     monkeypatch.setattr(model, "get_settings", lambda: settings)
     monkeypatch.setattr(model, "unhealthy", lambda: None)
     monkeypatch.setattr(model._LOCAL, "post", lambda url, **kw: _reply(200, OLLAMA_OK))
+    monkeypatch.setattr(model, "_gemini", lambda *a, **k: pytest.fail("asked gemini"))
 
-    assert model.generate_json("anything", {}) == {"score": 7}
+    assert model.generate_json("anything", {}, local_first=True) == {"score": 7}
+
+
+def test_a_dead_local_model_still_lets_the_posting_be_read(monkeypatch):
+    """Gemini reads a posting worse, not not at all."""
+    settings = Settings(secret_key="t", gemini_api_key="g", ollama_model="granite3.3:8b")
+    monkeypatch.setattr(model, "get_settings", lambda: settings)
+    monkeypatch.setattr(model, "unhealthy", lambda: "the Mac is thermally throttling")
+    monkeypatch.setattr(model, "_gemini", lambda *a, **k: {"score": 7})
+
+    assert model.generate_json("anything", {}, local_first=True) == {"score": 7}
 
 
 def test_the_local_call_asks_for_the_schema_and_no_thinking(monkeypatch):
@@ -271,7 +288,7 @@ def test_the_local_call_asks_for_the_schema_and_no_thinking(monkeypatch):
         return _reply(200, OLLAMA_OK)
 
     monkeypatch.setattr(model._LOCAL, "post", post)
-    model.generate_json("anything", {"type": "object"})
+    model.generate_json("anything", {"type": "object"}, local_first=True)
 
     assert sent["model"] == "granite3.3:8b"
     assert sent["think"] is False
@@ -284,7 +301,7 @@ def test_a_tired_mac_is_not_asked_to_run_a_model(monkeypatch):
     monkeypatch.setattr(model, "unhealthy", lambda: "only 4% of memory is free")
 
     with pytest.raises(HTTPException) as error:
-        model.generate_json("anything", {})
+        model.generate_json("anything", {}, local_first=True)
     assert error.value.status_code == 503
     assert "4% of memory" in error.value.detail
 
