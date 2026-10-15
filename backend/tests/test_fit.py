@@ -461,3 +461,60 @@ def test_choosing_bullets_never_falls_back(monkeypatch):
 
     with pytest.raises(HTTPException):
         model.generate_json("p", {})
+
+
+def test_counting_words_never_claims_either_extreme(client):
+    """
+    A posting asking for "AI capability" names nothing a skills list holds, and
+    counting scored it 1 of 10 for a job worth applying to.
+    """
+    from app.fit import _without_a_model
+    from app.models import ParsedJd, RequiredSkill
+    from app.profile_parser import parse_text
+    from app.profile_template import DEFAULT_TEMPLATE
+
+    profile = parse_text(DEFAULT_TEMPLATE)
+    nothing = ParsedJd(required_skills=[RequiredSkill(name="AI capability", importance=3)])
+    everything = ParsedJd(required_skills=[RequiredSkill(name="React", importance=3)])
+
+    assert _without_a_model(profile, nothing)[0] == 3
+    assert _without_a_model(profile, everything)[0] == 8
+
+
+def test_a_disposition_is_neither_met_nor_missing(client):
+    """No profile evidences communication, so it cannot count either way."""
+    from app.fit import _without_a_model
+    from app.models import ParsedJd, RequiredSkill
+    from app.profile_parser import parse_text
+    from app.profile_template import DEFAULT_TEMPLATE
+
+    profile = parse_text(DEFAULT_TEMPLATE)
+    jd = ParsedJd(required_skills=[
+        RequiredSkill(name="React", importance=3),
+        RequiredSkill(name="Clear written communication", importance=3),
+    ])
+    score, _, missing = _without_a_model(profile, jd)
+
+    assert missing == []
+    assert score == 8
+
+
+def test_a_gap_for_react_native_is_not_a_gap_for_react(client):
+    """Flattened, "React Native" lent its "react" and made React a gap."""
+    from app.fit import _without_a_model
+    from app.models import ParsedJd, RequiredSkill
+    from app.profile_parser import parse_text
+    from app.profile_template import DEFAULT_TEMPLATE
+
+    profile = parse_text(DEFAULT_TEMPLATE)
+    assert "React Native" in [gap.skill for gap in profile.gaps]
+
+    _, _, missing = _without_a_model(
+        profile, ParsedJd(required_skills=[RequiredSkill(name="React", importance=3)])
+    )
+    assert missing == []
+
+    _, _, still = _without_a_model(
+        profile, ParsedJd(required_skills=[RequiredSkill(name="React Native", importance=3)])
+    )
+    assert "React Native" in still[0]

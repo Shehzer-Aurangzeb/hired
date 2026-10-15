@@ -85,7 +85,7 @@ The local model is used three ways, by how much a wrong answer costs:
 | Step | Local model | Why |
 | --- | --- | --- |
 | Reading the posting | first | it reads better, and the wait is worth it |
-| Scoring the fit | only when Gemini is busy | a score you can argue with beats "try again later" |
+| Scoring the fit | never | asked to judge, it reported Azure, open source contributions and authoring GraphQL APIs, none of which are in the profile. When Gemini will not answer, the score is counted in code instead: how many of the things the posting names appear in the profile, clamped to the middle of the scale because counting words cannot earn either extreme |
 | Choosing bullets | never | it returned a bullet id as a project and invented a title; a fabricated page is worse than no page |
 
 When a local model answers, its name is shown beside the CV and on the saved
