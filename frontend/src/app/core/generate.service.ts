@@ -3,6 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { Observable, finalize, tap } from 'rxjs';
 
 import { API } from './api';
+import { ToastService } from './toast.service';
 import {
   ExportResponse,
   FitResponse,
@@ -15,6 +16,7 @@ import {
 @Injectable({ providedIn: 'root' })
 export class GenerateService {
   private readonly http = inject(HttpClient);
+  private readonly toast = inject(ToastService);
 
   readonly fit = signal<FitResponse | null>(null);
   readonly result = signal<GenerateResponse | null>(null);
@@ -34,6 +36,7 @@ export class GenerateService {
         this.jdText.set(jdText);
         this.result.set(null);
         this.applicationId.set(null);
+        this.say(res.notice);
       }),
       finalize(() => this.checking.set(false)),
     );
@@ -42,9 +45,19 @@ export class GenerateService {
   generate(body: GenerateRequest): Observable<GenerateResponse> {
     this.generating.set(true);
     return this.http.post<GenerateResponse>(`${API}/api/generate`, body).pipe(
-      tap((res) => this.result.set(res)),
+      tap((res) => {
+        this.result.set(res);
+        this.say(res.notice);
+      }),
       finalize(() => this.generating.set(false)),
     );
+  }
+
+  /** A silent retry looks like a slow call, so the screen says it happened. */
+  private say(notice: string | undefined): void {
+    if (notice) {
+      this.toast.error(notice);
+    }
   }
 
   /** Swaps in another hand-written title and summary. No model call. */

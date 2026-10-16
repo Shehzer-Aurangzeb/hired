@@ -70,7 +70,7 @@ def answers(monkeypatch, payload):
     """
     sent = {}
 
-    def fake(prompt, schema, turns=None, local="never"):
+    def fake(prompt, schema, turns=None, local="never", **_):
         key = "extract" if local == "first" else "score"
         sent[key] = {"prompt": prompt, "schema": schema}
         sent["prompt"], sent["schema"] = prompt, schema   # the scoring call, last
@@ -293,6 +293,10 @@ def test_the_local_call_asks_for_the_schema_and_no_thinking(monkeypatch):
     assert sent["model"] == "granite3.3:8b"
     assert sent["think"] is False
     assert sent["format"] == {"type": "object"}
+    # Without this ollama defaults to 4096 and silently truncates the prompt
+    # from the front, so scoring and selection arrived with no profile in them.
+    assert sent["options"]["num_ctx"] == settings.ollama_ctx
+    assert sent["options"]["num_ctx"] >= 12288
 
 
 def test_a_tired_mac_is_not_asked_to_run_a_model(monkeypatch):
@@ -463,58 +467,60 @@ def test_choosing_bullets_never_falls_back(monkeypatch):
         model.generate_json("p", {})
 
 
-def test_counting_words_never_claims_either_extreme(client):
-    """
-    A posting asking for "AI capability" names nothing a skills list holds, and
-    counting scored it 1 of 10 for a job worth applying to.
-    """
-    from app.fit import _without_a_model
-    from app.models import ParsedJd, RequiredSkill
-    from app.profile_parser import parse_text
-    from app.profile_template import DEFAULT_TEMPLATE
+def test_scoring_asks_the_local_model_when_gemini_will_not_answer(client, monkeypatch):
+    """The route must pass local="fallback", not only support it."""
+    asked = []
 
-    profile = parse_text(DEFAULT_TEMPLATE)
-    nothing = ParsedJd(required_skills=[RequiredSkill(name="AI capability", importance=3)])
-    everything = ParsedJd(required_skills=[RequiredSkill(name="React", importance=3)])
+    def generate_json(prompt, schema, turns=None, local="never", **_):
+        asked.append(local)
+        if local == "first":
+            return {"company": "Acme", "role": "Dev",
+                    "required_skills": [], "preferred_skills": []}
+        return {"score": 7, "reasoning": "fine", "gaps": []}
 
-    assert _without_a_model(profile, nothing)[0] == 3
-    assert _without_a_model(profile, everything)[0] == 8
+    monkeypatch.setattr(fit, "generate_json", generate_json)
+    save_profile(client)
+    response = client.post("/api/fit", json={"jd_text": "x" * 200})
 
-
-def test_a_disposition_is_neither_met_nor_missing(client):
-    """No profile evidences communication, so it cannot count either way."""
-    from app.fit import _without_a_model
-    from app.models import ParsedJd, RequiredSkill
-    from app.profile_parser import parse_text
-    from app.profile_template import DEFAULT_TEMPLATE
-
-    profile = parse_text(DEFAULT_TEMPLATE)
-    jd = ParsedJd(required_skills=[
-        RequiredSkill(name="React", importance=3),
-        RequiredSkill(name="Clear written communication", importance=3),
-    ])
-    score, _, missing = _without_a_model(profile, jd)
-
-    assert missing == []
-    assert score == 8
+    assert response.status_code == 200
+    assert asked == ["first", "fallback"]
 
 
-def test_a_gap_for_react_native_is_not_a_gap_for_react(client):
-    """Flattened, "React Native" lent its "react" and made React a gap."""
-    from app.fit import _without_a_model
-    from app.models import ParsedJd, RequiredSkill
-    from app.profile_parser import parse_text
-    from app.profile_template import DEFAULT_TEMPLATE
+def test_an_empty_answer_is_asked_again_and_says_so(monkeypatch):
+    """A posting with no requirements in it is valid JSON and not an answer."""
+    settings = Settings(secret_key="t", gemini_api_key="g")
+    monkeypatch.setattr(model, "get_settings", lambda: settings)
+    replies = iter([{"required_skills": []}, {"required_skills": [{"name": "React"}]}])
+    monkeypatch.setattr(model, "_gemini", lambda *a, **k: next(replies))
 
-    profile = parse_text(DEFAULT_TEMPLATE)
-    assert "React Native" in [gap.skill for gap in profile.gaps]
+    answer = model.generate_json("p", {}, good=lambda a: bool(a["required_skills"]))
 
-    _, _, missing = _without_a_model(
-        profile, ParsedJd(required_skills=[RequiredSkill(name="React", importance=3)])
-    )
-    assert missing == []
+    assert answer["required_skills"] == [{"name": "React"}]
+    assert "asked again" in model.notice.get()
 
-    _, _, still = _without_a_model(
-        profile, ParsedJd(required_skills=[RequiredSkill(name="React Native", importance=3)])
-    )
-    assert "React Native" in still[0]
+
+def test_empty_twice_is_an_error_not_a_third_try(monkeypatch):
+    settings = Settings(secret_key="t", gemini_api_key="g")
+    monkeypatch.setattr(model, "get_settings", lambda: settings)
+    tries = []
+    monkeypatch.setattr(model, "_gemini",
+                        lambda *a, **k: tries.append(1) or {"required_skills": []})
+
+    with pytest.raises(HTTPException) as error:
+        model.generate_json("p", {}, good=lambda a: bool(a["required_skills"]))
+
+    assert len(tries) == 2
+    assert error.value.status_code == 502
+
+
+def test_a_good_answer_is_not_retried_and_leaves_no_notice(monkeypatch):
+    settings = Settings(secret_key="t", gemini_api_key="g")
+    monkeypatch.setattr(model, "get_settings", lambda: settings)
+    tries = []
+    monkeypatch.setattr(model, "_gemini",
+                        lambda *a, **k: tries.append(1) or {"required_skills": ["React"]})
+
+    model.generate_json("p", {}, good=lambda a: bool(a["required_skills"]))
+
+    assert len(tries) == 1
+    assert model.notice.get() == ""

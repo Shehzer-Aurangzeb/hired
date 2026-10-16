@@ -61,13 +61,19 @@ def save_profile(client, text=DEFAULT_TEMPLATE):
 
 
 def answers(monkeypatch, payload):
+    """A finished selection, so the test exercises what is built from it.
+
+    _select asks one small question per project, so faking the model call itself
+    would mean answering each of them; these tests are about the page, not the
+    asking. test_the_pool_never_contains_a_blocked_bullet covers the asking.
+    """
     sent = {}
 
-    def fake(prompt, schema):
-        sent["prompt"] = prompt
+    def fake(profile, jd_text, body):
+        sent["jd_text"] = jd_text
         return payload
 
-    monkeypatch.setattr(generate, "generate_json", fake)
+    monkeypatch.setattr(generate, "_select", fake)
     return sent
 
 
@@ -116,15 +122,23 @@ def test_the_text_comes_from_the_profile_not_the_model(client, monkeypatch):
 
 
 def test_the_pool_never_contains_a_blocked_bullet(client, monkeypatch):
+    """A blocked bullet is never offered, so it cannot be picked by mistake."""
+    asked = []
+
+    def fake(prompt, schema, **_):
+        asked.append(prompt)
+        return {"title_id": "frontend", "bullet_ids": []}
+
+    monkeypatch.setattr(generate, "generate_json", fake)
     save_profile(client)
-    sent = answers(monkeypatch, PICKED)
     client.post("/api/generate", json={"jd_text": JD})
 
     profile = parse_text(DEFAULT_TEMPLATE)
     blocked = next(
         b for p in profile.all_projects() for b in p.bullets if b.status == "blocked"
     )
-    assert blocked.id not in sent["prompt"]
+    assert asked, "the selector asked nothing"
+    assert not any(blocked.id in prompt for prompt in asked)
 
 
 def test_an_unknown_title_falls_back_and_says_so(client, monkeypatch):
@@ -708,32 +722,41 @@ def test_coverage_credits_a_bullet_that_never_says_the_words():
     assert result[0].bullet_ids  # evidenced
 
 
-def test_coverage_drops_a_bullet_that_did_not_print():
-    """The page-fill loop and a deselect both change what is on the page."""
-    answer = {"coverage": [{"skill": "TypeScript", "bullet_ids": ["gone", "here"]}]}
-    result = generate._coverage(_jd("TypeScript"), answer, _sections(sp=["here"]), _PROFILE)
-    assert result[0].bullet_ids == ["here"]
+def test_coverage_only_ever_names_a_bullet_that_printed():
+    """Read off the page, so a bullet that is not on it cannot be cited."""
+    result = generate._coverage(
+        _jd("TypeScript"), {}, _sections(sp=["TypeScript here"]), _PROFILE
+    )
+    assert result[0].bullet_ids == ["TypeScript here"]
+
+    gone = generate._coverage(_jd("TypeScript"), {}, _sections(sp=["Go elsewhere"]), _PROFILE)
+    assert gone[0].bullet_ids == []
 
 
 def test_coverage_reports_every_requirement_even_the_unbacked_ones():
-    answer = {"coverage": [{"skill": "React Native", "bullet_ids": ["sp-app"]}]}
     result = generate._coverage(
-        _jd("React Native", "Xcode"), answer, _sections(sp=["sp-app"]), _PROFILE
+        _jd("React Native", "Xcode"), {}, _sections(sp=["Shipped a React Native app"]), _PROFILE
     )
     assert [c.skill for c in result] == ["React Native", "Xcode"]
-    assert result[1].bullet_ids == []
+    assert result[0].bullet_ids and result[1].bullet_ids == []
 
 
-def test_coverage_ignores_a_skill_the_posting_never_asked_for():
-    answer = {"coverage": [{"skill": "Fortran", "bullet_ids": ["sp-app"]}]}
-    result = generate._coverage(_jd("TypeScript"), answer, _sections(sp=["sp-app"]), _PROFILE)
+def test_coverage_reports_the_posting_requirements_and_nothing_else():
+    result = generate._coverage(
+        _jd("TypeScript"), {}, _sections(sp=["Fortran and TypeScript"]), _PROFILE
+    )
     assert [c.skill for c in result] == ["TypeScript"]
 
 
-def test_coverage_matches_the_skill_name_case_and_space_insensitively():
-    answer = {"coverage": [{"skill": " restful apis ", "bullet_ids": ["sp-app"]}]}
-    result = generate._coverage(_jd("RESTful APIs"), answer, _sections(sp=["sp-app"]), _PROFILE)
-    assert result[0].bullet_ids == ["sp-app"]
+def test_coverage_matches_a_requirement_by_meaning_not_by_wording():
+    """A posting writes "pull-request workflows"; a bullet writes "reviewing pull requests"."""
+    result = generate._coverage(
+        _jd("Pull-request workflows"),
+        {},
+        _sections(sp=["Reviewed pull requests to hold code quality"]),
+        _PROFILE,
+    )
+    assert result[0].bullet_ids
 
 
 # ---------- preview ----------
@@ -811,14 +834,14 @@ def _wrapped(text: str) -> dict:
 def test_prose_where_json_was_asked_for_is_a_502(monkeypatch):
     _reply(monkeypatch, _wrapped("Sure! Here is your CV: ..."))
     with pytest.raises(HTTPException) as caught:
-        model.generate_json("p", generate.SCHEMA)
+        model.generate_json("p", generate.BULLETS_SCHEMA)
     assert caught.value.status_code == 502 and "unreadable" in caught.value.detail
 
 
 def test_truncated_json_is_a_502(monkeypatch):
     _reply(monkeypatch, _wrapped('{"title_id": "frontend", "sections": ['))
     with pytest.raises(HTTPException) as caught:
-        model.generate_json("p", generate.SCHEMA)
+        model.generate_json("p", generate.BULLETS_SCHEMA)
     assert caught.value.status_code == 502
 
 
@@ -826,14 +849,14 @@ def test_a_blocked_or_empty_answer_says_so(monkeypatch):
     """No candidates is a safety block, not a parse problem, and reads that way."""
     _reply(monkeypatch, {"candidates": []})
     with pytest.raises(HTTPException) as caught:
-        model.generate_json("p", generate.SCHEMA)
+        model.generate_json("p", generate.BULLETS_SCHEMA)
     assert caught.value.status_code == 502 and "blocked" in caught.value.detail
 
 
 def test_a_shape_we_did_not_expect_is_a_502_not_a_keyerror(monkeypatch):
     _reply(monkeypatch, {"candidates": [{"content": {}}]})
     with pytest.raises(HTTPException) as caught:
-        model.generate_json("p", generate.SCHEMA)
+        model.generate_json("p", generate.BULLETS_SCHEMA)
     assert caught.value.status_code == 502
 
 
@@ -860,22 +883,34 @@ def test_an_unknown_title_falls_back_to_the_declared_default():
     assert 'No title called "dedicate"' in flags[0].message
 
 
-def test_preferred_skills_break_ties_in_the_selector():
+def test_preferred_skills_break_ties_between_projects():
     """
     Every project backed React and TypeScript, so the required list separated
     nothing and the nice-to-haves never entered the choice.
     """
-    from app.generate import INSTRUCTIONS
+    from app.models import ParsedJd, RequiredSkill
 
-    assert "Preferred skills" in INSTRUCTIONS
-    assert "Preferred never outranks required" in INSTRUCTIONS
+    profile = parse_text(DEFAULT_TEMPLATE)
+    required_only = generate._rank(
+        profile, ParsedJd(required_skills=[RequiredSkill(name="React", importance=3)]), 3
+    )
+    with_preferred = generate._rank(
+        profile,
+        ParsedJd(
+            required_skills=[RequiredSkill(name="React", importance=3)],
+            preferred_skills=[RequiredSkill(name="PostgreSQL", importance=1)],
+        ),
+        3,
+    )
+    assert required_only != with_preferred, "the nice-to-have changed nothing"
+    assert any("postgres" in " ".join(p.stack).casefold() for p in with_preferred)
 
 
 def test_the_response_names_the_model_that_answered(client, monkeypatch):
     """A silent fallback to OpenRouter is indistinguishable from a bad day."""
     from app import model as M
 
-    def fake(prompt, schema, turns=None):
+    def fake(prompt, schema, turns=None, **_):
         M.served.set("granite3.3:8b")
         return {"title_id": "frontend", "sections": []}
 
@@ -978,3 +1013,37 @@ def test_relevance_matches_words_not_whole_phrases():
     assert _relevance("Built the front-end in React and TypeScript.", jd) == 3
     assert _relevance("Led delivery, reviewing pull requests.", jd) == 2
     assert _relevance("Redesigned client hosting to cap blast radius.", jd) == 0
+
+
+def test_a_selection_that_overruns_the_page_is_trimmed_to_one_page(monkeypatch):
+    """
+    The fill loop only ever added, because the model came back short. Code picks
+    a full slate, so it overruns instead: the first live run printed two pages.
+    """
+    from app.generate import _assemble
+    from app.models import ParsedJd
+    from app.profile_parser import parse_text
+    from app.profile_template import DEFAULT_TEMPLATE
+
+    profile = parse_text(DEFAULT_TEMPLATE)
+    everything = {
+        "title_id": "frontend",
+        "sections": [
+            {
+                "project_id": p.id,
+                "bullet_ids": [b.id for b in p.bullets if b.status != "blocked"],
+            }
+            for p in profile.all_projects()
+            if any(b.status != "blocked" for b in p.bullets)
+        ],
+    }
+    asked = sum(len(s["bullet_ids"]) for s in everything["sections"])
+    # Over a page, and under it only once two bullets have gone.
+    fill_to(monkeypatch, [1.6, 1.3, 0.95])
+
+    cv, flags = _assemble(profile, everything, None, ParsedJd())
+
+    assert any("to keep this to one page" in f.message for f in flags), [
+        f.message for f in flags
+    ]
+    assert sum(len(s.bullets) for s in cv.sections) < asked

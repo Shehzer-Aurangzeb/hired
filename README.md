@@ -58,7 +58,7 @@ Get a Gemini key from [Google AI Studio](https://aistudio.google.com).
 ### The local model
 
 Reading a posting is done by a model on your own machine, through
-[ollama](https://ollama.com). It is also what answers when Gemini is rate
+[ollama](https://ollama.com). It is also what scores the fit when Gemini is rate
 limited, so there is no quota wall and no third party choosing the model.
 
 ```bash
@@ -68,6 +68,14 @@ ollama pull granite3.3:8b      # once, 4.9GB
 `hired` starts ollama if it is not already running and unloads the model when
 you stop. Set `HIRED_OLLAMA_MODEL=` empty in `backend/.env` to turn it off and
 use Gemini for everything.
+
+Every call sends an explicit context window, `HIRED_OLLAMA_CTX`, 12288 by
+default. Ollama otherwise uses 4096 whatever the model was trained for and drops
+the front of anything longer, which cost us a week of believing the model could
+not reason: scoring sends about 7.9k tokens and selection 9.3k, so both arrived
+with the profile cut off and the posting intact. Raising it costs memory —
+granite3.3:8b is 5.7GB at 4096, 7.1GB at 12288 and 7.8GB at 16384 — so keep it
+just above your longest prompt rather than at the model's maximum.
 
 In Docker the app is containerised but ollama is not, because Docker Desktop
 has no access to the Mac's GPU and a containerised model would run on the CPU.
@@ -85,8 +93,8 @@ The local model is used three ways, by how much a wrong answer costs:
 | Step | Local model | Why |
 | --- | --- | --- |
 | Reading the posting | first | it reads better, and the wait is worth it |
-| Scoring the fit | never | asked to judge, it reported Azure, open source contributions and authoring GraphQL APIs, none of which are in the profile. When Gemini will not answer, the score is counted in code instead: how many of the things the posting names appear in the profile, clamped to the middle of the scale because counting words cannot earn either extreme |
-| Choosing bullets | never | it returned a bullet id as a project and invented a title; a fabricated page is worse than no page |
+| Scoring the fit | fallback | about a minute against four seconds, and plainer, but it names real gaps and invents nothing. A daily quota that runs out at noon is not an answer |
+| Choosing bullets | never | it picks only real ids, but across three runs of one posting it chose a different title each time, and a page assembled from a shuffle is worse than no page |
 
 When a local model answers, its name is shown beside the CV and on the saved
 application, so a weaker answer is visible rather than silent.

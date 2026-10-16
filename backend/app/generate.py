@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from .db import SessionDep
-from .model import generate_json, served
+from .model import generate_json, notice, served
 from .models import (
     Bullet,
     CvSection,
@@ -25,7 +25,7 @@ from .models import (
 )
 from .profile_parser import parse_text
 from .render import filename, measurer, render_html, to_pdf
-from .tables import Application, ProfileSource, current_profile
+from .tables import Application, current_profile
 
 router = APIRouter(tags=["generate"])
 
@@ -41,93 +41,164 @@ class GenerateResponse(BaseModel):
     flags: list[Flag]
     # Which model answered, so a fallback is visible rather than silent.
     model: str = ""
+    # Said out loud when the first answer was unusable and the call was repeated.
+    notice: str = ""
 
 
-SCHEMA = {
+TITLE_ASK = """Pick the framing this CV should use for the posting below.
+
+Each option says when it applies. The posting decides which one, nothing else:
+not the order they are listed in, and not which projects the CV will show.
+
+{options}
+
+Answer with one id, copied exactly."""
+
+BULLETS_ASK = """Choose the {most} bullets from this one project that best evidence
+what the posting asks for, strongest first.
+
+You are not writing anything. You return ids, and the page is built from these
+exact sentences afterwards, so anything you invent is discarded.
+
+Prefer a bullet that evidences something the posting explicitly asks for over one
+that is merely impressive. If fewer than {most} are relevant, return only those.
+
+PROJECT: {name}
+{bullets}
+
+WHAT THE POSTING ASKS FOR:
+{asks}
+
+Answer with bullet ids, copied exactly."""
+
+TITLE_SCHEMA = {
     "type": "object",
-    "properties": {
-        "title_id": {"type": "string"},
-        "sections": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "project_id": {"type": "string"},
-                    "bullet_ids": {"type": "array", "items": {"type": "string"}},
-                },
-                "required": ["project_id", "bullet_ids"],
-            },
-        },
-        "coverage": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "skill": {"type": "string"},
-                    "bullet_ids": {"type": "array", "items": {"type": "string"}},
-                },
-                "required": ["skill", "bullet_ids"],
-            },
-        },
-    },
-    "required": ["title_id", "sections", "coverage"],
+    "properties": {"title_id": {"type": "string"}},
+    "required": ["title_id"],
+}
+BULLETS_SCHEMA = {
+    "type": "object",
+    "properties": {"bullet_ids": {"type": "array", "items": {"type": "string"}}},
+    "required": ["bullet_ids"],
 }
 
-INSTRUCTIONS = """You are choosing which of a candidate's existing bullets belong on a
-one-page CV for one specific posting.
 
-You are not writing anything. You return ids. The words on the page are the ones
-already in the profile, and they will be assembled from it after you answer, so
-anything you invent here is discarded rather than printed.
+def _select(profile: Profile, jd_text: str, body: "GenerateRequest") -> dict:
+    """
+    Four small questions instead of one big one.
 
-What to do:
+    Asked as a single call, this picked one project out of sixteen and a mobile
+    framing for a web posting, on four runs out of four. Asked separately, the
+    same model got the title right nine times out of nine and returned identical
+    bullets three times out of three. It is good at a small judgement and bad at
+    ranking sixteen things while filling a coverage table in the same breath,
+    which is the same lesson the fit check already learned when its two halves
+    were split.
 
-- Pick the title_id whose use_when best matches the posting.
-- Pick the projects worth the page, most relevant first, at most {max_projects}.
-- Within each, pick at most {max_bullets} bullet ids, strongest evidence first.
-- Order matters. What you put first is what gets read.
+    Which projects is not asked at all. The model offered a project with no
+    overlap with the posting; code ranks them by what they cover, which is
+    deterministic and cannot invent.
+    """
+    rules = profile.rules
+    jd = body.parsed_jd
 
-Fill the page. It is one page and it should be a full one, roughly {target}
-bullets in total across the projects you choose. Under-filling is the failure
-this gets wrong most often: half a page of white space reads as a thin
-candidate, not a focused one. If a project is relevant, give it the evidence it
-deserves rather than a single line.
+    title_id = body.title_variant or str(
+        generate_json(
+            TITLE_ASK.format(
+                options="\n".join(f"- {t.id}: use when {t.use_when}" for t in profile.titles)
+            )
+            + f"\n\nPOSTING:\n{jd_text}",
+            TITLE_SCHEMA,
+            local="first",
+            good=lambda answer: bool(str(answer.get("title_id") or "").strip()),
+        ).get("title_id")
+        or ""
+    )
 
-Rules:
+    asks = jd.model_dump_json()
+    sections = []
+    for project in _rank(profile, jd, rules.max_projects):
+        pool = [b for b in project.bullets if b.status != "blocked"]
+        answer = generate_json(
+            BULLETS_ASK.format(
+                most=rules.max_bullets_per_project,
+                name=project.name,
+                bullets="\n".join(f"- {b.id}: {b.text}" for b in pool),
+                asks=asks,
+            ),
+            BULLETS_SCHEMA,
+            local="first",
+            good=lambda answer: bool(answer.get("bullet_ids")),
+        )
+        ids = [str(i) for i in answer.get("bullet_ids") or []]
+        if ids:
+            sections.append({"project_id": project.id, "bullet_ids": ids})
 
-- Only ids that appear in the pool below. An id you cannot find is a mistake,
-  not a suggestion.
-- Never pick a blocked bullet. They are excluded from the pool already; if one
-  reaches you, it is still not eligible.
-- Prefer a bullet that evidences something the posting explicitly requires over
-  one that is merely impressive.
-- Required skills decide whether a project belongs on the page. Preferred skills
-  decide which of the close ones wins. When two projects back the requirements
-  about equally, take the one that also evidences something from the preferred
-  list: every applicant has the required list, which is why the posting bothered
-  to write the other one. Preferred never outranks required, and never carries a
-  project that fails the requirements.
-- A project whose cannot_claim excludes what the posting is asking for is weak
-  evidence for that requirement, however good the bullets read.
-- Leave a project out entirely rather than padding it with a bullet that says
-  nothing about this posting. Relevance decides what goes on, and the target
-  above decides how much: never both at once, and never padding to reach it.
-- Do not pick a project only because it is recent.
+    return {"title_id": title_id, "sections": sections}
 
-Then say what the page backs. For every skill in WHAT THE POSTING ASKS FOR,
-required and preferred alike, return one coverage entry: the skill name copied
-exactly as the posting listed it, and the ids of the bullets you selected that
-the person could point at if an interviewer asked about that skill.
 
-- Judge it by meaning, not by wording. A bullet about shipping a React Native
-  app to both stores backs "mobile app development" without using the phrase,
-  and a bullet naming GitHub Actions backs "CI/CD".
-- Only ids you actually selected above. A bullet that is not on the page cannot
-  back anything, however well it would have.
-- Return an empty list when nothing you picked backs it, and do not stretch to
-  avoid one. The empty lists are the point of this field: they are what tells
-  the person the posting asks for something their page does not show.
-- One entry per skill, and every skill gets one."""
+def _wants(jd: ParsedJd) -> list[tuple[str, int, set[str]]]:
+    """Everything the posting asks for, with what it weighs and the words it uses."""
+    return [
+        (skill.name, weight, _terms(skill.name))
+        for skill, weight in [
+            *((s, s.importance) for s in jd.required_skills),
+            *((s, 1) for s in jd.preferred_skills),
+        ]
+    ]
+
+
+def _rank(profile: Profile, jd: ParsedJd, limit: int) -> list[Project]:
+    """
+    The projects that between them back the most of what the posting asks for.
+
+    Taking the `limit` most relevant projects separately is not the same thing:
+    for a posting wanting React and SQL it returned five front-end projects and
+    left the database work off, because every one of them scored well on the
+    same words. Each pick here is worth what it adds to the ones already chosen,
+    so the second database project is worth less than the first.
+    """
+    pool = [
+        project
+        for project in profile.all_projects()
+        if any(bullet.status != "blocked" for bullet in project.bullets)
+    ]
+    wants = _wants(jd)
+    covers = {
+        project.id: {
+            name: weight
+            for name, weight, words in wants
+            if words
+            & _terms(
+                " ".join(
+                    [bullet.text for bullet in project.bullets if bullet.status != "blocked"]
+                    + project.stack
+                    + project.tags
+                )
+            )
+        }
+        for project in pool
+    }
+
+    chosen: list[Project] = []
+    covered: set[str] = set()
+    while pool and len(chosen) < limit:
+        def gain(project: Project) -> int:
+            return sum(w for name, w in covers[project.id].items() if name not in covered)
+
+        best = max(pool, key=lambda project: (gain(project), -project.priority))
+        if gain(best) == 0:
+            break
+        covered |= covers[best.id].keys()
+        chosen.append(best)
+        pool.remove(best)
+
+    # A posting that names nothing a bullet mentions still needs a page.
+    for project in sorted(pool, key=lambda project: project.priority):
+        if len(chosen) >= min(limit, 4):
+            break
+        chosen.append(project)
+    return chosen
 
 
 @router.post("/generate")
@@ -147,9 +218,9 @@ def generate(body: GenerateRequest, session: SessionDep) -> GenerateResponse:
             422, "Every bullet in your profile is blocked, so there is nothing to print."
         )
 
-    answer = generate_json(_prompt(profile, text, body), SCHEMA)
+    answer = _select(profile, text, body)
     cv, flags = _assemble(profile, answer, body.title_variant, body.parsed_jd)
-    return GenerateResponse(cv=cv, flags=flags, model=served.get())
+    return GenerateResponse(cv=cv, flags=flags, model=served.get(), notice=notice.get())
 
 
 def _pool(profile: Profile) -> list[Bullet]:
@@ -160,59 +231,6 @@ def _pool(profile: Profile) -> list[Bullet]:
         for bullet in project.bullets
         if bullet.status != "blocked"
     ]
-
-
-def _prompt(profile: Profile, jd_text: str, body: GenerateRequest) -> str:
-    rules = profile.rules
-    context = {
-        "titles": [{"id": t.id, "text": t.text, "use_when": t.use_when} for t in profile.titles],
-        # Printed on every CV, so a posting asking for a degree is already met.
-        # Without this the selector was asked which bullet backs a degree, and
-        # the honest answer, none, read as a gap on every posting.
-        "education": [
-            {"school": e.school, "degree": e.degree, "field": e.field} for e in profile.education
-        ],
-        "projects": [
-            {
-                "id": project.id,
-                "name": project.name,
-                "label": project.label,
-                "stack": project.stack,
-                "tags": project.tags,
-                "my_role": project.my_role,
-                "priority": project.priority,
-                "cannot_claim": project.claim_boundary.cannot_claim,
-                "bullets": [
-                    {
-                        "id": bullet.id,
-                        "text": bullet.text,
-                        "priority": bullet.priority,
-                        "tags": bullet.tags,
-                    }
-                    for bullet in project.bullets
-                    if bullet.status != "blocked"
-                ],
-            }
-            for project in profile.all_projects()
-            if any(b.status != "blocked" for b in project.bullets)
-        ],
-    }
-    instructions = INSTRUCTIONS.format(
-        max_projects=rules.max_projects,
-        max_bullets=rules.max_bullets_per_project,
-        target=_target(rules),
-    )
-    chosen = (
-        f"\n\nThe person has already chosen the framing: use title_id "
-        f'"{body.title_variant}".'
-        if body.title_variant
-        else ""
-    )
-    return (
-        f"{instructions}{chosen}\n\nPOOL:\n{json.dumps(context)}"
-        f"\n\nWHAT THE POSTING ASKS FOR:\n{body.parsed_jd.model_dump_json()}"
-        f"\n\nPOSTING:\n{jd_text}"
-    )
 
 
 def _assemble(
@@ -345,23 +363,26 @@ def _non_bullet(skill: str, profile: Profile) -> str:
 def _coverage(
     jd: ParsedJd, answer: dict, sections: list[CvSection], profile: Profile
 ) -> list[SkillCoverage]:
-    """The model's coverage claims, limited to bullets that printed.
-    Bullets added by the fill loop back nothing, on purpose."""
-    printed = {bullet.id for section in sections for bullet in section.bullets}
-    claimed: dict[str, list[str]] = {}
-    for entry in answer.get("coverage") or []:
-        name = str(entry.get("skill") or "").strip().casefold()
-        if name:
-            claimed[name] = [str(i) for i in entry.get("bullet_ids") or []]
+    """
+    What the printed page backs, read off the page itself.
+
+    Asked for this as a third job in the selection call, the model returned
+    entries for requirements that were not in the posting and left real ones
+    empty. The bullets are known and the requirements are known, so nothing here
+    needs a model: a bullet backs a requirement when it uses its words.
+    """
     return [
         SkillCoverage(
-            skill=skill.name,
+            skill=name,
             bullet_ids=[
-                i for i in claimed.get(skill.name.strip().casefold(), []) if i in printed
+                bullet.source_id or bullet.id
+                for section in sections
+                for bullet in section.bullets
+                if words & _terms(bullet.text)
             ],
-            backed_by=_non_bullet(skill.name, profile),
+            backed_by=_non_bullet(name, profile),
         )
-        for skill in [*jd.required_skills, *jd.preferred_skills]
+        for name, _weight, words in _wants(jd)
     ]
 
 
@@ -472,7 +493,19 @@ def _fill_page(profile, title, summary, sections, projects, rules, flags, jd) ->
     try:
         with measurer() as pages:
             filled = started = pages(render_html(profile, build()))
-            added = 0
+            added = dropped = 0
+
+            # The selector used to come back short, so this loop only ever added.
+            # Code now picks a full slate, which overruns the page as easily as it
+            # falls short: the first live run printed two pages. Trim from the
+            # tail, which is the least relevant project's weakest bullet.
+            while filled > 1.0 and sum(len(s.bullets) for s in sections) > 1:
+                last = sections[-1]
+                last.bullets.pop()
+                if not last.bullets:
+                    sections.pop()
+                filled = pages(render_html(profile, build()))
+                dropped += 1
             while filled < MIN_FILL and spare:
                 project, bullet = spare.pop(0)
                 # Look the section up each time so a second bullet doesn't start a duplicate.
@@ -503,6 +536,15 @@ def _fill_page(profile, title, summary, sections, projects, rules, flags, jd) ->
                     break
                 filled, added = grown, added + 1
 
+            if dropped:
+                flags.append(
+                    Flag(
+                        type="warn",
+                        message=f"Dropped {dropped} bullet{'s' if dropped > 1 else ''} to keep "
+                        f"this to one page: it came to {started:.2f} of a page, now "
+                        f"{filled:.2f}. The weakest evidence went first.",
+                    )
+                )
             if added:
                 flags.append(
                     Flag(

@@ -397,6 +397,8 @@ export interface FitResponse {
   seen: PriorApplication[];
   /** Which model answered. Empty in demo mode and on older rows. */
   model: string;
+  /** Set when the first answer was unusable and the call was repeated. */
+  notice?: string;
 }
 
 /** POST /api/generate */
@@ -409,8 +411,10 @@ export interface GenerateRequest {
 export interface GenerateResponse {
   cv: GeneratedCv;
   flags: Flag[];
-  /** Which model answered, so a fallback to OpenRouter is visible. */
+  /** Which model answered, so a fallback to the local one is visible. */
   model: string;
+  /** Set when the first answer was unusable and the call was repeated. */
+  notice?: string;
 }
 
 /** POST /api/export. Attaches a PDF to an existing row. */

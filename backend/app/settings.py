@@ -43,6 +43,14 @@ class Settings(BaseSettings):
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "granite3.3:8b"
 
+    # Ollama defaults to 4096 whatever the model was trained for, and silently
+    # drops the front of anything longer. Scoring sends ~7.9k tokens and
+    # selection ~9.3k, so both arrived with the profile cut off and the posting
+    # intact: the model invented a title from the posting and scored a candidate
+    # it had never seen. 12288 fits the largest prompt with room to answer.
+    # Costs memory: granite3.3:8b is 5.7GB at 4096, 7.1GB here, 7.8GB at 16384.
+    ollama_ctx: int = 12288
+
     # Fabricated profile, fabricated history, canned model answers. The database
     # has to be in memory, checked below, so a demo cannot write over real data.
     demo: bool = False

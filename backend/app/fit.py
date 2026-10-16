@@ -8,11 +8,10 @@ from sqlalchemy import func
 from sqlmodel import select
 
 from .db import SessionDep
-from .generate import _non_bullet, _terms
-from .model import generate_json, served
+from .model import generate_json, notice, served
 from .models import Fit, ParsedJd, Profile
 from .profile_parser import parse_text
-from .tables import Application, ProfileSource, current_profile, stamp
+from .tables import Application, current_profile, stamp
 
 router = APIRouter(tags=["fit"])
 
@@ -34,6 +33,8 @@ class FitResponse(BaseModel):
     fit: Fit
     # Which model answered, so a fallback is visible rather than silent.
     model: str = ""
+    # Said out loud when the first answer was unusable and the call was repeated.
+    notice: str = ""
     # Earlier applications to the same company.
     seen: list[PriorApplication] = []
 
@@ -131,14 +132,21 @@ Rules:
   report it as a gap. The gap is depth, if the posting asks for depth.
 - A gap is something the profile does not have. Eligibility, clearances and work
   authorisation are facts about the person, not skills; name one as a gap only
-  when the profile itself says they lack it. Dispositions are not gaps either:
-  no profile evidences communication, curiosity or attention to detail.
+  when the profile itself says they lack it. Dispositions cut both ways: no
+  profile evidences communication, curiosity or attention to detail, so never
+  name one as a gap and never count one as met. Leave them out of the verdict.
 - Compare years honestly. skill_evidence carries years and last_used; a posting
   asking for more than the profile shows is a gap even if the skill is listed.
 - Every gap must be one specific thing the posting requires and the profile does
   not evidence. Not advice, not a list of what they should learn.
+- Where the posting offers a choice, meeting either half meets it. "TypeScript
+  with React, or C# with .NET" is satisfied by React alone; the other half is
+  worth knowing about, not a gap.
 - The reasoning is two or three sentences, addressed to the person, naming the
-  evidence you scored on. No flattery.
+  evidence you scored on. Say what the profile shows and what it does not. It
+  is not a cover letter, not a study plan and not a summary of the posting: no
+  flattery, no advice about what to go and learn, nothing written in their
+  voice. Three sentences they could read before deciding whether to apply.
 - Say plainly when the answer is that they should not apply. Being told to skip
   a posting is the most useful thing this can do."""
 
@@ -158,29 +166,36 @@ def check_fit(body: FitRequest, session: SessionDep) -> FitResponse:
     # Two calls, each with one job. Done together, the extraction half lost a
     # third of the requirements with the profile sitting in the same context.
     parsed_jd = ParsedJd.model_validate(
-        generate_json(f"{EXTRACT}\n\nPOSTING:\n{text}", EXTRACT_SCHEMA, local="first")
+        generate_json(
+            f"{EXTRACT}\n\nPOSTING:\n{text}",
+            EXTRACT_SCHEMA,
+            local="first",
+            # A posting with no requirements in it is not a posting. This came
+            # back empty once and every later step ran against the empty list.
+            good=lambda answer: bool(answer.get("required_skills")),
+        )
     )
     read_by = served.get()
+    said = notice.get()
 
     profile = parse_text(row.text)
-    try:
-        answer = generate_json(
-            f"{INSTRUCTIONS}\n\nPROFILE:\n{json.dumps(context(profile))}"
-            f"\n\nWHAT THE POSTING ASKS FOR:\n{parsed_jd.model_dump_json()}"
-            f"\n\nPOSTING:\n{text}",
-            SCORE_SCHEMA,
-        )
-        scored_by = served.get()
-    except HTTPException:
-        # Busy is not an answer on the day you are applying, and the local model
-        # answers this one by inventing experience. Count instead.
-        score, reasoning, gaps = _without_a_model(profile, parsed_jd)
-        answer = {"score": score, "reasoning": reasoning, "gaps": gaps}
-        scored_by = "counted, no model"
+    # Busy is not an answer on the day you are applying. The local model takes
+    # about a minute and reads plainer, and its name travels with the score.
+    answer = generate_json(
+        f"{INSTRUCTIONS}\n\nPROFILE:\n{json.dumps(context(profile))}"
+        f"\n\nWHAT THE POSTING ASKS FOR:\n{parsed_jd.model_dump_json()}"
+        f"\n\nPOSTING:\n{text}",
+        SCORE_SCHEMA,
+        local="fallback",
+        good=lambda answer: bool(str(answer.get("reasoning") or "").strip()),
+    )
+    scored_by = served.get()
+    said = said or notice.get()
 
     return FitResponse(
         parsed_jd=parsed_jd,
         model=f"{read_by} + {scored_by}" if read_by != scored_by else read_by,
+        notice=said,
         seen=_seen(session, parsed_jd.company),
         fit=Fit(
             # Clamp: the model sometimes returns scores outside 1-10.
@@ -188,67 +203,6 @@ def check_fit(body: FitRequest, session: SessionDep) -> FitResponse:
             reasoning=str(answer.get("reasoning", "")),
             gaps=[str(gap) for gap in answer.get("gaps") or []],
         ),
-    )
-
-
-def _without_a_model(profile: Profile, jd: ParsedJd) -> tuple[int, str, list[str]]:
-    """
-    A score with no model in it, for when Gemini will not answer.
-
-    Every input is a lookup in the profile, so it cannot invent experience. The
-    local model can and did: asked to score, it reported Azure, open source
-    contributions and authoring GraphQL APIs, none of which are in the file.
-    Dull and checkable beats fluent and false.
-    """
-    have = {w for row in profile.skills for item in row.items for w in _terms(item)}
-    have |= {w for entry in profile.skill_evidence for w in _terms(entry.name)}
-    # Per gap, not one flat pile: flattened, a gap for "React Native" lent its
-    # "react" to the pile and reported React as a gap for a React developer.
-    # A gap blocks a requirement only when every word of it is in that
-    # requirement, so "React Native" blocks React Native and nothing else.
-    cannot = [(_terms(gap.skill), gap.skill) for gap in profile.gaps]
-
-    met: list[str] = []
-    missing: list[str] = []
-    points = possible = 0
-    # Preferred skills count for less, not nothing: a posting writes that list
-    # precisely to tell applicants apart.
-    for skill, weight in [
-        *((s, s.importance) for s in jd.required_skills),
-        *((s, 1) for s in jd.preferred_skills),
-    ]:
-        backing = _non_bullet(skill.name, profile)
-        if backing == "not something a CV evidences":
-            continue  # neither met nor missing: no profile answers it
-        possible += weight
-        words = _terms(skill.name)
-        if backing:  # a degree, answered by the education section
-            points += weight
-            met.append(skill.name)
-        elif named := next((g for terms, g in cannot if terms and terms <= words), ""):
-            missing.append(f"{skill.name} (your own gaps list says {named})")
-        elif words & have:
-            # ponytail: whole words only. "SQL" therefore misses "PostgreSQL",
-            # which costs a point; matching inside words made "cloud" match
-            # "Cloudflare" and scored Azure as met, which costs an application.
-            points += weight
-            met.append(skill.name)
-        else:
-            missing.append(skill.name)
-
-    # Clamped to the middle, because counting words cannot earn either extreme.
-    # A posting asking for "AI capability" and "software engineering best
-    # practices" names nothing a skills list contains, and scored 1 of 10 for a
-    # job worth applying to. Never "definitely skip", never "definitely apply".
-    score = round(3 + 5 * points / possible) if possible else 5
-    return (
-        max(3, min(8, score)),
-        f"Counted, not judged: Gemini would not answer, so this is {len(met)} of "
-        f"{len(met) + len(missing)} things the posting names appearing in your "
-        "profile. It cannot read a requirement written as a description rather "
-        "than a technology, so it stays off both ends of the scale. Run it again "
-        "when Gemini is free.",
-        missing,
     )
 
 

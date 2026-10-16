@@ -1,10 +1,11 @@
-"""Calls the LLM: Gemini first, OpenRouter's free pool as fallback.
+"""Calls a model: Gemini over the network, granite on this machine.
 No retries, only failover, since free tiers are rationed per day."""
 
 import contextvars
 import json
 import re
 import subprocess
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -19,6 +20,10 @@ GEMINI = "https://generativelanguage.googleapis.com/v1beta/models"
 # because sync routes run on a threadpool, and two requests must not see each
 # other's answer.
 served: contextvars.ContextVar[str] = contextvars.ContextVar("served", default="")
+
+# Set when an answer came back schema-valid but useless and had to be asked for
+# again, so the screen can say so instead of the retry being invisible.
+notice: contextvars.ContextVar[str] = contextvars.ContextVar("notice", default="")
 
 TIMEOUT = 60.0
 # A local call generates at about 10 tokens a second, and a long posting can
@@ -75,6 +80,7 @@ def generate_json(
     schema: dict[str, Any],
     turns: list[tuple[str, str]] | None = None,
     local: str = "never",
+    good: Callable[[dict[str, Any]], bool] | None = None,
 ) -> dict[str, Any]:
     """
     Return one JSON object matching `schema`, or raise HTTPException with a readable reason.
@@ -88,15 +94,23 @@ def generate_json(
       "first"     ask it before Gemini. Reading a posting: it finds most of the
                   named requirements against Gemini's half, and the extra half
                   minute buys something.
-      "fallback"  ask it only when Gemini will not answer. Scoring: weaker, and
-                  it has described a candidate who does not exist, but a number
-                  you can second-guess beats a wall on the day you are applying.
-                  The answer carries the model's name so it can be distrusted.
-      "never"     Gemini or an error. Choosing bullets, where it returned a
-                  bullet id as a project and invented a title, and where a
-                  fabricated page is worse than no page.
+      "fallback"  ask it only when Gemini will not answer. Scoring: slower and
+                  plainer, but given the whole profile it names real gaps and
+                  invents nothing, and a daily quota that runs out at noon is
+                  not an answer. The answer carries the model's name.
+      "never"     Gemini or an error. Choosing bullets: the local model picks
+                  only real ids, but across three runs of one posting it chose
+                  a different title each time, and a page assembled from a
+                  shuffle is worse than no page.
+
+    `good` decides whether an answer is worth returning. A schema keeps the
+    shape, not the substance: a posting once came back with zero requirements in
+    it, which is valid JSON and not an answer, and every later step ran against
+    an empty list without complaining. A false verdict buys one more attempt and
+    sets `notice`.
     """
     settings = get_settings()
+    notice.set("")
 
     if settings.demo:
         # A demo must not spend a rationed call, and must work with no network.
@@ -115,24 +129,39 @@ def generate_json(
 
     usable_local = local != "never" and bool(settings.ollama_model)
 
-    if local == "first" and usable_local:
+    def attempt() -> dict[str, Any]:
+        if local == "first" and usable_local:
+            try:
+                return run_local()
+            except HTTPException:
+                if not settings.gemini_api_key:
+                    raise
+
+        if not settings.gemini_api_key:
+            if usable_local:
+                return run_local()
+            raise HTTPException(503, "No model is configured on this instance.")
+
         try:
-            return run_local()
+            return gemini()
         except HTTPException:
-            if not settings.gemini_api_key:
-                raise
+            if local == "fallback" and usable_local:
+                return run_local()
+            raise
 
-    if not settings.gemini_api_key:
-        if usable_local:
-            return run_local()
-        raise HTTPException(503, "No model is configured on this instance.")
+    answer = attempt()
+    if good is None or good(answer):
+        return answer
 
-    try:
-        return gemini()
-    except HTTPException:
-        if local == "fallback" and usable_local:
-            return run_local()
-        raise
+    # ponytail: one retry, not a loop. A model that empties twice on the same
+    # prompt is not going to fill it on the third ask, and the wait is a minute.
+    notice.set("The model came back with nothing usable, so it was asked again.")
+    answer = attempt()
+    if good(answer):
+        return answer
+    raise HTTPException(
+        502, f"{served.get()} returned an empty answer twice. Try again in a moment."
+    )
 
 
 def _turns(turns: list[tuple[str, str]] | None, assistant: str) -> list[dict[str, str]]:
@@ -165,6 +194,9 @@ def _ollama(
         # Reasoning tokens cost the same as useful ones, and generation is the
         # whole expense locally. Extraction is reading, not reasoning.
         "think": False,
+        # Without this ollama uses 4096 and truncates from the front, so a long
+        # prompt loses its briefing and keeps its tail. See settings.ollama_ctx.
+        "options": {"num_ctx": settings.ollama_ctx},
         "messages": [{"role": "user", "content": prompt}]
         + [
             {"role": turn["role"], "content": turn["text"]}
