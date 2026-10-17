@@ -283,9 +283,9 @@ def _assemble(
         if project is None:
             flags.append(
                 Flag(
-                    type="block",
-                    message=f'The selector pointed at project "{entry.get("project_id")}", '
-                    "which does not exist. Nothing was invented, but nothing was found either.",
+                    type="warn",
+                    message=f'The selector named a project that does not exist, '
+                    f'"{entry.get("project_id")}". Nothing was printed for it.',
                 )
             )
             continue
@@ -331,6 +331,8 @@ def _assemble(
         coverage=_coverage(jd, answer, sections, profile),
     )
     if not sections:
+        # A real block: there is no page to export, rather than a page with
+        # something wrong on it.
         flags.append(Flag(type="block", message="Nothing was selected, so there is no CV."))
     return cv, flags
 
@@ -343,9 +345,9 @@ def _bullets(project: Project, ids: list, rules, flags: list[Flag]) -> list[Sele
         if bullet is None:
             flags.append(
                 Flag(
-                    type="block",
-                    message=f'The selector pointed at bullet "{raw}", which is not in '
-                    f'"{project.name}". A CV cannot print a claim that does not exist.',
+                    type="warn",
+                    message=f'The selector named a bullet that is not in "{project.name}", '
+                    f'"{raw}". It was dropped, so nothing invented reached the page.',
                 )
             )
             continue
@@ -353,8 +355,8 @@ def _bullets(project: Project, ids: list, rules, flags: list[Flag]) -> list[Sele
             # Never in the pool, so this id came from somewhere else. Refuse it.
             flags.append(
                 Flag(
-                    type="block",
-                    message=f'Bullet "{bullet.id}" is blocked and was selected anyway. '
+                    type="warn",
+                    message=f'Blocked bullet "{bullet.id}" was selected anyway and refused. '
                     f"{bullet.blocked_reason or 'No reason was recorded.'}",
                 )
             )
@@ -757,7 +759,7 @@ def export(body: ExportRequest, session: SessionDep) -> ExportResponse:
     pdf, pages = to_pdf(render_html(profile, body.cv))
 
     row.pdf = pdf
-    row.filename = filename(profile.identity.name, row.company, row.role)
+    row.filename = filename(profile.identity.name, row.company)
     # Snapshot of what was sent, as printed.
     row.title_variant = body.cv.title
     row.summary_text = body.cv.summary
@@ -837,7 +839,7 @@ def reexport(body: ReexportRequest, session: SessionDep) -> ExportResponse:
 
     # Only the bytes and the name. A re-render must not rewrite what was sent.
     row.pdf = pdf
-    row.filename = filename(profile.identity.name, row.company, row.role)
+    row.filename = filename(profile.identity.name, row.company)
     session.add(row)
     session.commit()
     session.refresh(row)

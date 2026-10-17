@@ -1051,7 +1051,7 @@
                             <span class="text-fg-subtle w-20 shrink-0">{{ field }}</span>
                             @if (CHOICES[field]) {
                               <select
-                                class="border-line-strong bg-raised focus:border-ink min-w-0 flex-1 rounded border px-1.5 py-1 text-[12px] outline-none"
+                                class="select min-w-0 flex-1 !px-2 !py-1 !pr-7 !text-[12px]"
                                 [value]="valueOf(change, field)"
                                 (change)="setField($index, field, $any($event.target).value)"
                               >
@@ -1063,7 +1063,7 @@
                             } @else {
                               <input
                                 type="text"
-                                class="border-line-strong bg-raised focus:border-ink min-w-0 flex-1 rounded border px-1.5 py-1 text-[12px] outline-none"
+                                class="select min-w-0 flex-1 !px-2 !py-1 !pr-7 !text-[12px]"
                                 [value]="valueOf(change, field)"
                                 (change)="setField($index, field, $any($event.target).value)"
                               />

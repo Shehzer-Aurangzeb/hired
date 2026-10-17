@@ -169,7 +169,7 @@ def _attach_cv(session, row, profile) -> None:
     pdf, _pages = to_pdf(render_html(profile, cv))
 
     row.pdf = pdf
-    row.filename = filename(profile.identity.name, row.company, row.role)
+    row.filename = filename(profile.identity.name, row.company)
     row.title_variant = cv.title
     row.summary_text = cv.summary
     row.selected_bullet_ids = [b.id for s in cv.sections for b in s.bullets]

@@ -395,10 +395,11 @@
     <!-- PDF preview, loaded only when opened. -->
     <dialog
       #pdfDialog
-      class="rounded-card border-line bg-raised m-auto h-[92dvh] w-[min(60rem,94vw)] border p-0 backdrop:bg-black/50"
+      class="rounded-card border-line bg-raised m-auto flex h-[92dvh] w-[min(60rem,94vw)]
+             flex-col overflow-hidden border p-0 backdrop:bg-black/50"
       (close)="viewing.set(false)"
     >
-      <div class="card-head sticky top-0">
+      <div class="card-head shrink-0">
         <h2 class="section-title truncate">{{ application.filename ?? 'CV' }}</h2>
         <button
           type="button"
@@ -410,9 +411,12 @@
         </button>
       </div>
       @if (viewing()) {
+        <!-- Sized by the flex column, not by subtracting a guessed header
+             height: the header is 50px, the guess was 40, and the iframe hung
+             11px past the dialog at every window size. -->
         <iframe
           [src]="safePdfUrl(application.id)"
-          class="h-[calc(92dvh-2.5rem)] w-full border-0"
+          class="min-h-0 w-full flex-1 border-0"
           [title]="'PDF preview of ' + (application.filename ?? 'the CV')"
         ></iframe>
       }

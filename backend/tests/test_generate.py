@@ -158,25 +158,27 @@ def test_the_chosen_framing_wins_over_the_model(client, monkeypatch):
 # ---------- the guard ----------
 
 
-def test_an_id_that_does_not_exist_is_blocked(client, monkeypatch):
+def test_an_id_that_does_not_exist_is_dropped_and_said_so(client, monkeypatch):
     save_profile(client)
     body = run(
         client,
         monkeypatch,
         {"title_id": "frontend", "sections": [{"project_id": "project-name", "bullet_ids": ["invented"]}]},
     )
-    assert any(f["type"] == "block" and "invented" in f["message"] for f in body["flags"])
+    # A warning, not a block: it never printed, so the page is safe to export.
+    assert any(f["type"] == "warn" and "invented" in f["message"] for f in body["flags"])
+    assert not any(f["type"] == "block" and "invented" in f["message"] for f in body["flags"])
     assert body["cv"]["sections"] == []
 
 
-def test_a_project_that_does_not_exist_is_blocked(client, monkeypatch):
+def test_a_project_that_does_not_exist_is_dropped_and_said_so(client, monkeypatch):
     save_profile(client)
     body = run(
         client,
         monkeypatch,
         {"title_id": "frontend", "sections": [{"project_id": "ghost", "bullet_ids": ["x"]}]},
     )
-    assert any(f["type"] == "block" and "ghost" in f["message"] for f in body["flags"])
+    assert any(f["type"] == "warn" and "ghost" in f["message"] for f in body["flags"])
 
 
 def test_a_blocked_bullet_selected_anyway_never_prints(client, monkeypatch):
@@ -191,7 +193,7 @@ def test_a_blocked_bullet_selected_anyway_never_prints(client, monkeypatch):
             ],
         },
     )
-    assert any(f["type"] == "block" and "blocked" in f["message"] for f in body["flags"])
+    assert any(f["type"] == "warn" and "refused" in f["message"] for f in body["flags"])
     assert body["cv"]["sections"] == []
 
 
@@ -409,8 +411,7 @@ def test_export_attaches_the_pdf_and_records_what_was_sent(client, monkeypatch):
 
     body = client.post("/api/export", json={"application_id": application_id, "cv": CV}).json()
     assert body["page_count"] == 1
-    assert body["filename"].startswith("YourName_AirCanada_FrontEndDeveloper_")
-    assert body["filename"].endswith(".pdf")
+    assert body["filename"] == "YourName_AirCanada.pdf"
 
     row = client.get(f"/api/applications/{application_id}").json()
     assert row["has_pdf"] is True
@@ -499,14 +500,14 @@ def test_certifications_never_reach_the_page():
     assert "A Course You Are Halfway Through" not in html
 
 
-def test_the_filename_says_who_where_and_when():
+def test_the_filename_says_who_and_where_and_nothing_else():
+    """Role and date pushed it past eighty characters and told nobody anything."""
     from app.render import filename
-    from datetime import date
 
-    assert (
-        filename("Maya Adaeze Okafor", "Air Canada", "Front-End Developer", date(2026, 8, 23))
-        == "MayaAdaezeOkafor_AirCanada_FrontEndDeveloper_2026-08-23.pdf"
-    )
+    assert filename("Maya Adaeze Okafor", "Air Canada") == "MayaAdaezeOkafor_AirCanada.pdf"
+    # Punctuation and spacing in a company name must not reach the filesystem.
+    assert filename("Jane Doe", "Shopify Inc.") == "JaneDoe_ShopifyInc.pdf"
+    assert filename("Jane Doe", "") == "JaneDoe.pdf"
 
 
 # ---------- re-export ----------
@@ -1145,3 +1146,45 @@ def test_a_standalone_project_is_already_marked_personal_by_its_heading():
     _check_qualifiers([section], {"side": side}, set(), under_nothing)
 
     assert under_projects == [] and len(under_nothing) == 1
+
+
+def test_only_what_printed_can_stop_an_export():
+    """
+    A claim the guard caught and dropped is not a claim on the page. Blocking
+    the export for one punishes the user for a hallucination already thrown
+    away, and leaves them on a clean page they cannot use.
+    """
+    from app.generate import _assemble
+    from app.models import Bullet, ParsedJd, Project, Rules
+    from app.profile_parser import parse_text
+    from app.profile_template import DEFAULT_TEMPLATE
+
+    profile = parse_text(DEFAULT_TEMPLATE)
+    real = next(
+        b for p in profile.all_projects() for b in p.bullets if b.status != "blocked"
+    )
+    owner = next(p for p in profile.all_projects() if real in p.bullets)
+
+    cv, flags = _assemble(
+        profile,
+        {
+            "title_id": "frontend",
+            "sections": [{"project_id": owner.id, "bullet_ids": [real.id, f"{real.id}#React"]}],
+        },
+        None,
+        ParsedJd(),
+    )
+
+    assert [f.type for f in flags if "#React" in f.message] == ["warn"]
+    assert not [f for f in flags if f.type == "block"]
+    assert cv.sections and all(b.id != f"{real.id}#React" for b in cv.sections[0].bullets)
+
+
+def test_a_banned_word_still_stops_the_export():
+    """That one is on the page, which is the whole difference."""
+    from app.generate import _check_banned
+    from app.models import Rules
+
+    flags = []
+    _check_banned(Rules(banned_words=["synergy"]), "we drove synergy", flags)
+    assert [f.type for f in flags] == ["block"]

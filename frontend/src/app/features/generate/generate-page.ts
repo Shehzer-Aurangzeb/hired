@@ -52,7 +52,6 @@ export class GeneratePage {
 
   readonly form = this.fb.nonNullable.group({
     jd_text: ['', [Validators.required, Validators.minLength(80)]],
-    title_variant: [''],
   });
 
   /** Resets on a new result, but stays editable. */
@@ -149,14 +148,6 @@ export class GeneratePage {
   );
 
   readonly jdLength = computed(() => this.form.controls.jd_text.value.length);
-
-  private readonly variantId = toSignal(this.form.controls.title_variant.valueChanges, {
-    initialValue: '',
-  });
-
-  readonly variantText = computed(
-    () => this.profile.value()?.titles.find((t) => t.id === this.variantId())?.text ?? '',
-  );
 
   readonly showForm = computed(() => this.editing() || !this.gen.fit());
 
@@ -265,7 +256,6 @@ export class GeneratePage {
           this.gen.generate({
             jd_text: this.gen.jdText(),
             parsed_jd: fit.parsed_jd,
-            title_variant: this.form.getRawValue().title_variant || undefined,
           }),
         ),
       )
@@ -357,7 +347,6 @@ export class GeneratePage {
       .generate({
         jd_text: this.gen.jdText(),
         parsed_jd: fit.parsed_jd,
-        title_variant: this.form.getRawValue().title_variant || undefined,
       })
       // The exported PDF is now older than what is on screen.
       .subscribe({ next: () => this.exported.set(false), error: () => {} });
@@ -367,7 +356,6 @@ export class GeneratePage {
 
   /** Named on the page when it is not the model you configured. */
   readonly servedBy = computed(() => this.gen.result()?.model ?? this.gen.fit()?.model ?? '');
-  readonly fellBack = computed(() => !this.servedBy().startsWith('gemini'));
 
   readonly canRegenerate = computed(
     () => !!this.gen.result() && !this.gen.generating() && !this.gen.exporting() && !this.applied(),

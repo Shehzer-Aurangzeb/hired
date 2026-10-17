@@ -195,11 +195,15 @@ export class ApplicationsPage {
             a.company.toLowerCase().includes(query) ||
             a.role.toLowerCase().includes(query)),
       )
-      // Items waiting on a reply sort first.
-      .sort((a, b) => {
-        const chase = Number(this.inSegment(b, 'ghosted')) - Number(this.inSegment(a, 'ghosted'));
-        return chase || b.created_at.localeCompare(a.created_at);
-      });
+      // Newest first. Floating everything unanswered to the top buried the
+      // posting you sent an hour ago under thirty-four you can do nothing
+      // about, and the "waiting on a reply" card already filters to those.
+      // Inside that filter, the longest wait leads: that list is a chase list.
+      .sort((a, b) =>
+        filter === 'ghosted'
+          ? waitingDays(b) - waitingDays(a)
+          : b.created_at.localeCompare(a.created_at),
+      );
   });
 
   readonly inSegment = inSegment;

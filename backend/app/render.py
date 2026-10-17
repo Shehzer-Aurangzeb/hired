@@ -4,7 +4,6 @@ import base64
 import math
 import re
 from contextlib import contextmanager
-from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
@@ -194,10 +193,14 @@ def to_pdf(html: str) -> tuple[bytes, int]:
     return pdf, max(1, math.ceil(height / PAGE_HEIGHT))
 
 
-def filename(name: str, company: str, role: str, when: date | None = None) -> str:
-    """e.g. Jane_Doe_Acme_FrontEndDeveloper_2026-08-23.pdf"""
-    stamp = (when or date.today()).isoformat()
-    parts = [_squash(name), _squash(company), _squash(role), stamp]
+def filename(name: str, company: str) -> str:
+    """e.g. Jane_Doe_Acme.pdf
+
+    Whose CV and which company, nothing else. The role and the date pushed it
+    past eighty characters, and neither tells the recruiter opening it anything
+    the CV does not already say.
+    """
+    parts = [_squash(name), _squash(company)]
     return "_".join(part for part in parts if part) + ".pdf"
 
 

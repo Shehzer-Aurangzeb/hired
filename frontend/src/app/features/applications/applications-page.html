@@ -299,7 +299,7 @@
                      you mostly read look like a form you have to fill in. -->
                 @if (editing() === application.id) {
                   <select
-                    class="field !w-auto cursor-pointer !py-1 !text-[12px] capitalize"
+                    class="select !w-auto !py-1 !text-[12px] capitalize"
                     [class]="statusClass(application.status)"
                     [disabled]="saving() === application.id"
                     (change)="setStatus(application, $any($event.target).value); editing.set(null)"
@@ -378,7 +378,7 @@
 
           <div class="mt-2.5 flex items-center gap-2">
             <select
-              class="field !w-auto cursor-pointer !py-1 !text-[12px] capitalize"
+              class="select !w-auto !py-1 !text-[12px] capitalize"
               [class]="statusClass(application.status)"
               [disabled]="saving() === application.id"
               (change)="setStatus(application, $any($event.target).value)"

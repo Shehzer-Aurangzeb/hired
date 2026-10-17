@@ -1,13 +1,13 @@
 <!-- Step 1: paste the posting -->
 @if (showForm()) {
-  <div class="mx-auto max-w-2xl px-4 py-10">
+  <div class="mx-auto flex h-full max-w-2xl flex-col gap-4 px-4 py-6">
     @if (editing()) {
       <button type="button" class="btn btn-ghost mb-3 !px-2" (click)="cancelEdit()">
         <app-icon name="arrow-left" [size]="15" />
         Back to the result
       </button>
     } @else {
-      <div class="mb-6">
+      <div>
         <h1 class="text-lg font-semibold">Tailor a CV to a posting</h1>
         <p class="text-fg-muted mt-1 text-[13px]">
           Paste the posting. The selector picks bullets from your existing pool and tells you what
@@ -16,13 +16,36 @@
       </div>
     }
 
-    <form class="card p-4" [formGroup]="form" (ngSubmit)="checkFit()">
-      <label class="label" for="jd">Posting text <span class="text-danger">*</span></label>
+    <form
+      class="card flex min-h-0 flex-1 flex-col p-4"
+      [formGroup]="form"
+      (ngSubmit)="checkFit()"
+    >
+      <div class="mb-1.5 flex shrink-0 items-center gap-2">
+        <label class="label !mb-0 flex-1" for="jd">
+          Posting text <span class="text-danger">*</span>
+        </label>
+        @if (gen.models().length > 1) {
+          <select
+            id="model"
+            class="select mono !w-auto !py-1 text-[11px]"
+            [value]="gen.model()"
+            (change)="gen.useModel($any($event.target).value)"
+            aria-label="Model"
+            title="Reads the posting, scores it and chooses the bullets, Regenerate
+                   included. Binding: if it fails you get an error rather than a quiet
+                   answer from a different model."
+          >
+            @for (name of gen.models(); track name) {
+              <option [value]="name">{{ name }}</option>
+            }
+          </select>
+        }
+      </div>
       <textarea
         id="jd"
         formControlName="jd_text"
-        rows="14"
-        class="field resize-y font-normal"
+        class="field min-h-32 flex-1 resize-none font-normal"
         placeholder="Paste the full posting. The parser wants the responsibilities and requirements sections, not just the blurb."
         (keydown.meta.enter)="checkFit()"
         (keydown.control.enter)="checkFit()"
@@ -44,51 +67,7 @@
         <span class="tabular text-fg-subtle shrink-0">{{ jdLength() }}</span>
       </p>
 
-      <div class="mt-4">
-        <div>
-          <label class="label" for="variant">Title variant</label>
-          <select id="variant" formControlName="title_variant" class="field cursor-pointer">
-            <option value="">Let the selector choose</option>
-            @for (title of profile.value()?.titles ?? []; track title.id) {
-              <option [value]="title.id">{{ title.id }}</option>
-            }
-          </select>
-        </div>
-      </div>
-
-      <p class="text-fg-subtle mt-1.5 text-[11px]">
-        @if (variantText()) {
-          <span class="text-fg-muted">{{ variantText() }}</span>
-          <br />
-        }
-        The headline under your name, which also swaps the summary paragraph. Company and role are
-        read off the posting.
-      </p>
-      @if (profile.error()) {
-        <p class="text-warn mt-1 text-[11px]">
-          Profile did not load, so variants are unavailable. The selector will pick one.
-        </p>
-      }
-
-      @if (gen.models().length > 1) {
-        <label class="mt-4 flex items-center gap-2 text-[12px]">
-          <span class="text-fg-muted shrink-0">Model</span>
-          <select
-            class="input mono !min-h-8 flex-1 text-[12px]"
-            [value]="gen.model()"
-            (change)="gen.useModel($any($event.target).value)"
-            title="Reads the posting, scores it and chooses the bullets, Regenerate
-                   included. Binding: if it fails you get an error rather than a quiet
-                   answer from a different model."
-          >
-            @for (name of gen.models(); track name) {
-              <option [value]="name">{{ name }}</option>
-            }
-          </select>
-        </label>
-      }
-
-      <div class="mt-4 flex gap-2">
+      <div class="mt-4 flex shrink-0 gap-2">
         <button type="submit" class="btn btn-primary flex-1" [disabled]="gen.checking()">
           @if (gen.checking()) {
             <app-icon name="refresh" [size]="15" class="animate-spin" />
@@ -116,30 +95,6 @@
           </ul>
         </div>
       </div>
-    } @else if (!editing()) {
-      <section class="mt-8 grid gap-4 sm:grid-cols-3">
-        <div>
-          <p class="text-fg text-[13px] font-medium">Fit first, CV second</p>
-          <p class="text-fg-muted mt-0.5 text-[12px]">
-            Nothing is generated and nothing is saved until you have seen the score. Being told to
-            skip a posting is the most useful thing this does.
-          </p>
-        </div>
-        <div>
-          <p class="text-fg text-[13px] font-medium">Boundaries per project</p>
-          <p class="text-fg-muted mt-0.5 text-[12px]">
-            Each project lists what it can and cannot claim. Anything the posting wants outside that
-            comes back as a gap, not a stretched bullet.
-          </p>
-        </div>
-        <div>
-          <p class="text-fg text-[13px] font-medium">One page, measured</p>
-          <p class="text-fg-muted mt-0.5 text-[12px]">
-            The renderer prints, counts pages and drops the lowest-priority bullet until it fits.
-            No asking the model nicely.
-          </p>
-        </div>
-      </section>
     }
   </div>
 }
@@ -147,8 +102,8 @@
 <!-- Step 2: fit score, nothing saved yet -->
 @if (deciding() && !showForm()) {
   @if (gen.fit(); as scored) {
-    <div class="mx-auto max-w-3xl px-4 py-8">
-      <div class="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+    <div class="mx-auto flex max-h-full max-w-3xl flex-col px-4">
+      <div class="flex shrink-0 flex-wrap items-baseline gap-x-3 gap-y-1 pt-6 pb-4">
         <h1 class="text-lg font-semibold">{{ scored.parsed_jd.company }}</h1>
         <span class="text-fg-muted text-[13px]">{{ scored.parsed_jd.role }}</span>
         @if (scored.parsed_jd.seniority) {
@@ -166,6 +121,9 @@
         </button>
       </div>
 
+      <!-- Only the verdict scrolls. Two side-by-side panes each scrolling on
+           their own is fine; a page that scrolls under a pinned bar is not. -->
+      <div class="-mx-1 min-h-0 shrink space-y-4 overflow-y-auto px-1 pb-4">
       <section class="card overflow-hidden">
         <div class="flex items-start gap-4 p-4">
           <div class="shrink-0 text-center">
@@ -241,7 +199,7 @@
           <label class="label" for="src">Found on</label>
           <select
             id="src"
-            class="field cursor-pointer !w-auto"
+            class="select !w-auto"
             [value]="source()"
             (change)="setSource($any($event.target).value)"
           >
@@ -263,7 +221,12 @@
         </div>
       </div>
 
-      <div class="mt-3 flex flex-wrap items-center gap-2">
+      </div>
+
+      <!-- Pinned: the decision this screen exists for stays reachable without
+           scrolling back down past the gaps. -->
+      <div class="border-line shrink-0 border-t pt-3 pb-4">
+      <div class="flex flex-wrap items-center gap-2">
         <button
           type="button"
           class="btn btn-primary"
@@ -297,6 +260,7 @@
         Nothing has been saved yet. Discard writes nothing at all; keeping it records the posting
         and these gaps, which is worth having even when you do not apply.
       </p>
+      </div>
     </div>
   }
 }
@@ -304,8 +268,8 @@
 <!-- Step 3: the CV -->
 @if (gen.result(); as result) {
   @if (gen.fit(); as scored) {
-  <div [class.hidden]="showForm()">
-    <div class="border-line bg-raised border-b px-4 py-2.5">
+  <div [class.hidden]="showForm()" class="flex h-full flex-col">
+    <div class="border-line bg-raised shrink-0 border-b px-4 py-2.5">
       <div class="mx-auto flex max-w-[86rem] flex-wrap items-center gap-x-3 gap-y-1">
         <h1 class="text-[15px] font-semibold">{{ scored.parsed_jd.company }}</h1>
         <span class="text-fg-muted text-[13px]">{{ scored.parsed_jd.role }}</span>
@@ -332,7 +296,7 @@
       </div>
     </div>
 
-    <div class="border-line bg-surface sticky top-12 z-20 border-b px-4 py-2">
+    <div class="border-line bg-surface z-20 shrink-0 border-b px-4 py-2">
       <div class="mx-auto flex max-w-[86rem] flex-wrap items-center gap-x-5 gap-y-2">
         <div class="flex flex-wrap gap-2">
           <div class="stat" title="How well the posting matches your profile, judged by the selector.">
@@ -378,17 +342,26 @@
               Blocked by the claim guard
             </span>
           }
-          @if (servedBy()) {
+          <!-- Beside Regenerate, because the reason to change model is to pick
+               again. On the paste screen it was a round trip through the fit. -->
+          @if (gen.models().length > 1) {
+            <select
+              class="select mono !w-auto !py-1 text-[11px]"
+              [value]="gen.model()"
+              (change)="gen.useModel($any($event.target).value)"
+              [disabled]="gen.generating()"
+              aria-label="Model for the next regenerate"
+              title="Regenerate picks again with this model."
+            >
+              @for (name of gen.models(); track name) {
+                <option [value]="name">{{ name }}</option>
+              }
+            </select>
+          }
+          @if (servedBy() && servedBy() !== gen.model()) {
             <span
-              class="stat-chip"
-              [class]="fellBack() ? 'bg-warn-soft text-warn' : 'text-fg-subtle'"
-              [title]="
-                fellBack()
-                  ? 'Gemini was busy, so a model on this machine answered. It reads
-                     postings well and judges them less well: check the score and the
-                     reasoning, and re-run later for a second opinion.'
-                  : 'The model that read the posting and chose these bullets.'
-              "
+              class="stat-chip text-warn bg-warn-soft"
+              title="The model that actually answered, which is not the one selected."
             >
               {{ servedBy() }}
             </span>
@@ -442,9 +415,12 @@
       </div>
     </div>
 
-    <div class="mx-auto grid max-w-[86rem] gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_34rem] xl:items-start">
-      <div class="flex min-w-0 flex-col gap-3">
-        <section class="card overflow-hidden">
+    <div
+      class="mx-auto grid min-h-0 w-full max-w-[86rem] flex-1 gap-4 overflow-y-auto p-4
+             xl:grid-cols-[minmax(0,1fr)_34rem] xl:items-stretch xl:overflow-hidden"
+    >
+      <div class="-mx-1 flex min-h-0 min-w-0 flex-col gap-3 px-1 xl:overflow-y-auto xl:pb-1">
+        <section class="card shrink-0 overflow-hidden">
           <header class="card-head">
             <h2 class="section-title">Why this score</h2>
           </header>
@@ -569,7 +545,7 @@
         <app-bullet-selector [(sections)]="sections" [(excluded)]="excluded" />
       </div>
 
-      <aside class="sticky top-24 flex min-w-0 flex-col gap-2">
+      <aside class="flex min-h-0 min-w-0 flex-col gap-2">
         <div class="flex items-center gap-2">
           <h2 class="section-title">Preview</h2>
           <span class="text-fg-subtle text-[11px]">Letter, 8.5 × 11 in</span>
@@ -605,7 +581,7 @@
 
         @if (finalCv()) {
           <!-- The PDF's own HTML via srcdoc, so there is no second layout to maintain. -->
-          <div class="rounded-card border-line max-h-[calc(100dvh-11rem)] overflow-auto border">
+          <div class="rounded-card border-line min-h-0 flex-1 overflow-auto border">
             <div
               class="relative min-h-[1056px] w-[816px] bg-white"
               [style.zoom]="sheetScale()"
