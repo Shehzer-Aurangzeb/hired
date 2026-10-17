@@ -31,15 +31,15 @@ const steps = [
   },
   {
     title: 'Get a verdict first',
-    body: 'A local model reads the posting, Gemini scores it: out of ten, with reasons and gaps. Being told to skip a posting is the most useful answer it gives.',
+    body: 'A local model reads the posting; the score and gaps are counted from your profile in code. Being told to skip a posting is the most useful answer it gives.',
     shot: fit,
-    alt: 'Fit result: 8 out of 10, marked Apply, with the reasoning and one gap.',
+    alt: 'Fit result: 9 out of 10, marked Apply, with the reasoning and one gap.',
   },
   {
     title: 'Review the page',
-    body: 'Bullets picked from your pool, coverage per requirement, and a live preview of the exact PDF. Point at a bullet that isn\'t in your file and the claim guard blocks the export.',
+    body: 'Bullets picked from your pool, coverage per requirement, and a live preview of the exact PDF. Regenerate for another pick, or swap any bullet by hand.',
     shot: generate,
-    alt: 'Generated CV with requirement coverage and a Letter-size preview. The claim guard has blocked the export because the selector named a bullet that is not in the profile.',
+    alt: 'Generated CV: fit 9 of 10, requirement coverage, selected bullets with their ids, Regenerate and Export buttons, and a Letter-size preview.',
   },
   {
     title: 'Track what you sent',
@@ -51,10 +51,10 @@ const steps = [
 
 // The same funnel the applications screen draws.
 const pipeline = [
-  { label: 'Saved', n: 11, bg: '#e2dac8', fg: '#57503f' },
-  { label: 'Sent', n: 7, bg: '#cfe0f5', fg: '#2c5a8f' },
-  { label: 'Heard back', n: 3, bg: '#f6dfb0', fg: '#7e5210' },
-  { label: 'Interview', n: 1, bg: '#c6ead5', fg: '#1f6a45' },
+  { label: 'Saved', n: 11, bg: '#e9e2d2', fg: '#57503f' },
+  { label: 'Sent', n: 7, bg: '#c4dcfa', fg: '#1b58ad' },
+  { label: 'Heard back', n: 3, bg: '#fbe2b0', fg: '#8f5102' },
+  { label: 'Interview', n: 1, bg: '#b9e8cd', fg: '#076b3c' },
 ];
 
 const profileViews = [
@@ -238,32 +238,39 @@ const profileViews = [
       <section class="models">
         <div class="wrap">
           <div class="head" data-reveal>
-            <p class="label">Two models, two jobs</p>
-            <h2>Read slowly on your machine. Decide fast in the cloud.</h2>
+            <p class="label">Models point, code decides</p>
+            <h2>The score is counted, not guessed.</h2>
             <p class="sub">
-              A fit check that misses a third of the requirements writes a confident CV for the wrong job. So
-              reading the posting has its own call, on a local model, with nothing else in front of it.
+              Anything your profile can answer is worked out in code: the score, the gaps, which projects make
+              the page, what each bullet covers. Models get the small jobs code cannot do, so one posting gives
+              the same answer every time.
             </p>
           </div>
 
           <div class="model-grid">
             <article class="model" data-reveal style="--i:1">
-              <p class="model-tag">Reads the posting · on your machine</p>
+              <p class="model-tag">On your machine</p>
               <h3 class="mono">granite3.3:8b</h3>
-              <p>Pulls out every technology and requirement, then hands the list on. About 40 seconds a posting, through ollama.</p>
+              <p>Reads the posting, then picks a title and the bullets for each project, one small question at a time. Falls back to Gemini when it can't.</p>
             </article>
             <article class="model" data-reveal style="--i:2">
-              <p class="model-tag">Scores and selects · Gemini</p>
+              <p class="model-tag">In code</p>
+              <h3 class="mono">plain Python</h3>
+              <p>Matches every requirement against your profile, counts the score from what is met, ranks projects by what they add, and reads coverage off the printed page.</p>
+            </article>
+            <article class="model" data-reveal style="--i:3">
+              <p class="model-tag">In the cloud</p>
               <h3 class="mono">gemini</h3>
-              <p>Gets the list, not the raw text. Scores the fit and picks bullet ids in seconds. When it is rate limited, the local model answers instead.</p>
+              <p>Writes the two or three sentences behind a score it is handed, never the score itself. When it is busy, the local model writes them.</p>
             </article>
           </div>
 
           <div class="recall" data-reveal style="--i:3">
-            <p class="recall-head">Technologies found, across 8 real postings</p>
+            <p class="recall-head">Why the reading is local: technologies found, across 8 real postings</p>
             <div class="recall-row"><span>granite3.3:8b</span><div class="recall-track"><span style="--w:90%"></span></div><strong>90%</strong></div>
             <div class="recall-row"><span>Gemini</span><div class="recall-track"><span style="--w:49%"></span></div><strong>49%</strong></div>
             <p class="recall-note">
+              Want to compare? A picker on the Generate screen pins any model you have pulled for every call.
               Before each local call it checks the machine, and declines when the battery is under 30% and
               unplugged, macOS is throttling, or less than 15% of memory is free.
             </p>
@@ -305,16 +312,13 @@ const profileViews = [
             </div>
 
             <div class="code">
-              <p class="code-head mono">Gemini's answer <span>all it can say</span></p>
-              <pre class="mono"><code>{'{'}
-  <span class="k">"title_id"</span>: "frontend",
-  <span class="k">"sections"</span>: [{'{'}
-    <span class="k">"project_id"</span>: "ledgerline-app",
-    <span class="k">"bullet_ids"</span>: [
-      <span class="ref" data-id="ledgerline-virtual" tabindex="0">"ledgerline-virtual"</span>,
-      <span class="ref" data-id="ledgerline-cache" tabindex="0">"ledgerline-cache"</span>
-    ]
-  {'}'}]
+              <p class="code-head mono">The model's answer <span>all it can say</span></p>
+              <pre class="mono"><code><span class="k"># Which bullets from Ledgerline App?</span>
+{'{'}
+  <span class="k">"bullet_ids"</span>: [
+    <span class="ref" data-id="ledgerline-virtual" tabindex="0">"ledgerline-virtual"</span>,
+    <span class="ref" data-id="ledgerline-cache" tabindex="0">"ledgerline-cache"</span>
+  ]
 {'}'}</code></pre>
             </div>
           </div>
@@ -323,7 +327,7 @@ const profileViews = [
             <li data-reveal style="--i:0">
               <span class="num mono">01</span>
               <h3>Ids, not prose</h3>
-              <p>A model that can only point at sentences can't write a new one. An id that isn't in your file blocks the export.</p>
+              <p>A model that can only point at sentences can't write a new one. An id that isn't in your file is dropped and flagged, never printed.</p>
             </li>
             <li data-reveal style="--i:1">
               <span class="num mono">02</span>
@@ -931,7 +935,7 @@ const profileViews = [
       .vs-good {
         background: #fff;
         border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
-        box-shadow: 0 30px 60px -40px rgb(47 107 79 / 0.45);
+        box-shadow: 0 30px 60px -40px rgb(7 107 60 / 0.4);
       }
       .vs-tag {
         font-size: 12px;
@@ -1120,9 +1124,9 @@ const profileViews = [
         gap: 16px;
         margin-top: 48px;
       }
-      @media (min-width: 800px) {
+      @media (min-width: 900px) {
         .model-grid {
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: repeat(3, 1fr);
         }
       }
       .model {

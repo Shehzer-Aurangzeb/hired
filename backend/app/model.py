@@ -154,7 +154,7 @@ def generate_json(
         from . import demo
 
         served.set("demo")
-        return demo.answer(schema)
+        return demo.answer(schema, prompt)
 
     def gemini() -> dict[str, Any]:
         served.set(settings.gemini_model)

@@ -6,16 +6,20 @@ posting it was made for.
 The app never invents a claim. Your experience lives in one master profile: a
 fixed pool of bullets, each project with an explicit list of what can and
 cannot be claimed. The model picks bullet ids, not prose, and the page is built
-from your own sentences after the call. A guard checks that numbers and
-qualifiers survive any rewording.
+from your own sentences after the call. The score, the gaps and which projects
+make the page are worked out in code from your profile, so one posting gives
+the same answer every time. A guard checks that numbers and qualifiers survive
+any rewording.
 
 ## What it does
 
-- **Fit check.** Scores a posting against your profile, lists which
-  requirements you cover and which you don't, and flags postings you have
-  already applied to.
+- **Fit check.** Reads the posting, matches every requirement against your
+  profile and counts the score from what is met, lists the gaps, and flags
+  postings you have already applied to. A model writes only the two or three
+  sentences explaining the score.
 - **Generate.** Picks the title, summary and bullets that fit the posting, lets
-  you swap any of them, previews the page and exports a PDF.
+  you swap any of them or regenerate, previews the page and exports a PDF. A
+  picker names the model that answers, for comparing two.
 - **Applications.** Every CV you send is saved with its posting. Track status,
   follow-ups, notes and a daily target, and re-download any PDF.
 - **Profile.** Edit the master profile as a form, as raw source, or by
@@ -29,7 +33,7 @@ qualifiers survive any rewording.
 | `backend/` | FastAPI, SQLModel on SQLite, Jinja + Playwright (Chromium) for the PDF |
 | `frontend/` | Angular 20, standalone components, signals, Tailwind 4 |
 | `landing/` | Astro, deployed separately on Vercel |
-| Models | Gemini for scoring and selection, granite3.3:8b on your own machine for reading the posting |
+| Models | granite3.3:8b on your own machine reads the posting and picks title and bullets; Gemini writes the reasons; score, gaps and project ranking are code |
 | Run | `bin/hired` launcher, locally or in Docker |
 
 The profile is Markdown headings around YAML, parsed with `yaml.safe_load`, no
@@ -57,9 +61,9 @@ Get a Gemini key from [Google AI Studio](https://aistudio.google.com).
 
 ### The local model
 
-Reading a posting is done by a model on your own machine, through
-[ollama](https://ollama.com). It is also what scores the fit when Gemini is rate
-limited, so there is no quota wall and no third party choosing the model.
+Reading a posting and picking bullets are done by a model on your own machine,
+through [ollama](https://ollama.com), so there is no quota wall and no third
+party choosing the model.
 
 ```bash
 ollama pull granite3.3:8b      # once, 4.9GB
@@ -72,8 +76,8 @@ use Gemini for everything.
 Every call sends an explicit context window, `HIRED_OLLAMA_CTX`, 12288 by
 default. Ollama otherwise uses 4096 whatever the model was trained for and drops
 the front of anything longer, which cost us a week of believing the model could
-not reason: scoring sends about 7.9k tokens and selection 9.3k, so both arrived
-with the profile cut off and the posting intact. Raising it costs memory —
+not reason: the old one-call prompts ran to 8-9k tokens and arrived with the
+profile cut off and the posting intact. Raising it costs memory —
 granite3.3:8b is 5.7GB at 4096, 7.1GB at 12288 and 7.8GB at 16384 — so keep it
 just above your longest prompt rather than at the model's maximum.
 
@@ -88,16 +92,25 @@ names: Gemini found 49% of them, granite3.3:8b found most of the rest, at about
 requirements produces a confident CV for the wrong job, so the forty seconds
 buys something.
 
-The local model is used three ways, by how much a wrong answer costs:
+Anything the profile can answer is not asked of a model at all:
 
-| Step | Local model | Why |
+| Step | Who | Why |
 | --- | --- | --- |
-| Reading the posting | first | it reads better, and the wait is worth it |
-| Scoring the fit | fallback | about a minute against four seconds, and plainer, but it names real gaps and invents nothing. A daily quota that runs out at noon is not an answer |
-| Choosing bullets | never | it picks only real ids, but across three runs of one posting it chose a different title each time, and a page assembled from a shuffle is worse than no page |
+| Reading the posting | local first, Gemini fallback | it finds most of the named requirements, and the wait is worth it |
+| Score and gaps | code | every requirement is matched against the profile, synonyms and "A or B" included, and the score is counted from what is met. Asked to judge, models reported React missing from a React developer |
+| The sentences under the score | Gemini first, local fallback | handed the met and unmet lists, it explains; it cannot move the number |
+| Which projects | code | ranked by what each adds to the ones already chosen |
+| Title, then bullets per project | local first, Gemini fallback | four small questions instead of one big one. As one call it picked one project of sixteen; asked separately it was right nine times of nine |
+| Coverage | code | read off the printed page |
 
-When a local model answers, its name is shown beside the CV and on the saved
-application, so a weaker answer is visible rather than silent.
+Local calls run at temperature 0, so one posting gives the same score, gaps,
+title and bullets every time. The model that read and the model that chose are
+stored on the saved application and shown beside the CV.
+
+To compare models, the picker on the Generate screen names one for the fit
+check, the CV and Regenerate alike. A named model is binding: it answers or the
+call fails, rather than a third model quietly answering. Only models ollama has
+pulled, or the configured Gemini, can be named.
 
 Before each local call `hired` checks the machine: it declines when the battery
 is under 30% and unplugged, when macOS reports thermal throttling, or when less

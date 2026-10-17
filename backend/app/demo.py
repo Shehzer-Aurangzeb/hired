@@ -51,8 +51,8 @@ FIT = {
         "required_skills": [
             {"name": "React", "importance": 3},
             {"name": "TypeScript", "importance": 3},
-            {"name": "Large data tables", "importance": 3},
-            {"name": "Data fetching and caching", "importance": 2},
+            {"name": "Large table virtualisation", "importance": 3},
+            {"name": "React Query or SWR", "importance": 2},
             {"name": "Design systems", "importance": 2},
             {"name": "Accessibility", "importance": 2},
         ],
@@ -92,17 +92,6 @@ SELECTION = {
         {"project_id": "ledgerline-reports", "bullet_ids": ["reports-graphql", "reports-export"]},
         {"project_id": "tidepool", "bullet_ids": ["tidepool-app", "tidepool-offline"]},
     ],
-    "coverage": [
-        {"skill": "React", "bullet_ids": ["ledgerline-rebuild", "northwind-ds"]},
-        {"skill": "TypeScript", "bullet_ids": ["ledgerline-rebuild"]},
-        {"skill": "Large data tables", "bullet_ids": ["ledgerline-virtual"]},
-        {"skill": "Data fetching and caching", "bullet_ids": ["ledgerline-cache"]},
-        {"skill": "Design systems", "bullet_ids": ["northwind-ds"]},
-        {"skill": "Accessibility", "bullet_ids": ["ledgerline-a11y"]},
-        {"skill": "GraphQL", "bullet_ids": ["reports-graphql"]},
-        {"skill": "Playwright", "bullet_ids": ["northwind-tests"]},
-        {"skill": "React Native", "bullet_ids": []},
-    ],
 }
 
 ASK = {
@@ -113,7 +102,6 @@ ASK = {
             "op": "add_skill_evidence",
             "target": "Redux",
             "level": "working",
-            "last_used": "2026-06",
             "context": "professional",
             "evidence": ["ledgerline-app", "tidepool"],
         }
@@ -140,14 +128,26 @@ HISTORY = [
 ]
 
 
-def answer(schema: dict) -> dict:
+def answer(schema: dict, prompt: str = "") -> dict:
     """
     Which canned reply this call wants, told apart by the schema it was given.
     Each caller owns its own schema, so no flag has to be threaded through.
     """
     properties = schema.get("properties", {})
+    if "required_skills" in properties:  # reading the posting
+        return FIT["parsed_jd"]
+    if set(properties) == {"reasoning"}:  # the sentences under a counted score
+        return {"reasoning": FIT["reasoning"]}
     if "title_id" in properties:
-        return SELECTION
+        return {"title_id": SELECTION["title_id"]}
+    if "bullet_ids" in properties:
+        # Asked one project at a time, and the prompt lists that project's ids.
+        return {
+            "bullet_ids": next(
+                (s["bullet_ids"] for s in SELECTION["sections"] if s["bullet_ids"][0] in prompt),
+                [],
+            )
+        }
     if "op" in properties:
         return {"op": ASK["changes"][0]["op"], "reply": ASK["reply"], "questions": []}
     if "changes" in properties:

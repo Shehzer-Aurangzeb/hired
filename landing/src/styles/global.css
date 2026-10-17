@@ -1,9 +1,9 @@
 /* Copied from frontend/src/styles.css. */
 :root {
-  --bg: #f0eadc;
-  --surface: #e6dfcd;
-  --raised: #faf7f0;
-  --line: #dad1bd;
+  --bg: #f2ece0;
+  --surface: #e9e2d2;
+  --raised: #fcfaf5;
+  --line: #dcd3bf;
   --line-strong: #9c8c68;
   --fg: #14110c;
   --fg-muted: #57503f;
@@ -11,11 +11,11 @@
   --ink: #1a1712;
   --ink-fg: #faf7f0;
   --ink-muted: #b8ae98;
-  --accent: #2f6b4f;
-  --accent-soft: #dce7dd;
-  --warn: #7e5210;
-  --warn-soft: #f2e6ca;
-  --danger: #9b2c21;
+  --accent: #076b3c;
+  --accent-soft: #b9e8cd;
+  --warn: #8f5102;
+  --warn-soft: #fbe2b0;
+  --danger: #b52314;
 
   --display: 'Bricolage Grotesque', 'Inter', ui-sans-serif, system-ui, sans-serif;
   --sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;

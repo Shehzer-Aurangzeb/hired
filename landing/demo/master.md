@@ -33,7 +33,7 @@ authorization: Canadian citizen, no sponsorship required
 
 # Skills
 - line: Frontend
-  items: [React, TypeScript, Next.js, TanStack Query, Tailwind CSS, Storybook]
+  items: [React, TypeScript, Next.js, TanStack Query, Tailwind CSS, Storybook, Accessibility, Table virtualisation]
 - line: Backend
   items: [Node.js, PostgreSQL, GraphQL, REST]
 - line: Tooling

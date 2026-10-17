@@ -40,7 +40,7 @@ from app.main import app  # noqa: E402
 # One source for the demo data. This file used to carry its own copy, and the
 # two drifted the first time either was edited.
 JD = demo.JD
-fake = lambda _prompt, schema: demo.answer(schema)  # noqa: E731
+fake = lambda prompt, schema, *_, **__: demo.answer(schema, prompt)  # noqa: E731
 fit.generate_json = fake
 generate.generate_json = fake
 ask.generate_json = fake
