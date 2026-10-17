@@ -40,6 +40,11 @@ export class GeneratePage {
   readonly gen = inject(GenerateService);
   readonly profile = inject(ProfileService).profile;
 
+  constructor() {
+    // What this machine can answer with, so the picker offers only pulled models.
+    this.gen.loadModels();
+  }
+
   readonly editing = signal(false);
   private readonly sanitizer = inject(DomSanitizer);
 
@@ -297,6 +302,9 @@ export class GeneratePage {
         fit_score: fit?.fit.score ?? 0,
         fit_reasoning: fit?.fit.reasoning ?? '',
         gaps: fit?.fit.gaps ?? [],
+        // Saved beside the score, so a number can be read against the model
+        // that produced it rather than guessed at months later.
+        fit_model: fit?.model ?? '',
         status,
       })
       .pipe(finalize(() => this.gen.saving.set(false)));

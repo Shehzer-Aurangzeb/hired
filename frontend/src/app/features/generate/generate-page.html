@@ -70,6 +70,24 @@
         </p>
       }
 
+      @if (gen.models().length > 1) {
+        <label class="mt-4 flex items-center gap-2 text-[12px]">
+          <span class="text-fg-muted shrink-0">Model</span>
+          <select
+            class="input mono !min-h-8 flex-1 text-[12px]"
+            [value]="gen.model()"
+            (change)="gen.useModel($any($event.target).value)"
+            title="Reads the posting, scores it and chooses the bullets, Regenerate
+                   included. Binding: if it fails you get an error rather than a quiet
+                   answer from a different model."
+          >
+            @for (name of gen.models(); track name) {
+              <option [value]="name">{{ name }}</option>
+            }
+          </select>
+        </label>
+      }
+
       <div class="mt-4 flex gap-2">
         <button type="submit" class="btn btn-primary flex-1" [disabled]="gen.checking()">
           @if (gen.checking()) {

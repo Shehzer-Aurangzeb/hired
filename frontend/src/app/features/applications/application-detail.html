@@ -29,13 +29,19 @@
           @if (application.title_variant) {
             · <span class="mono">{{ application.title_variant }}</span> variant
           }
+          @if (application.fit_model) {
+            ·
+            <span class="mono text-fg-subtle" title="The model that read the posting and scored it."
+              >scored by {{ application.fit_model }}</span
+            >
+          }
           @if (application.model) {
             ·
             <span
               class="mono"
               [class]="application.model.startsWith('gemini') ? 'text-fg-subtle' : 'text-warn'"
               title="The model that chose these bullets."
-              >{{ application.model }}</span
+              >CV by {{ application.model }}</span
             >
           }
         </p>

@@ -26,6 +26,7 @@ class ApplicationIn(BaseModel):
     fit_score: int
     fit_reasoning: str = ""
     gaps: list[str] = []
+    fit_model: str = ""
 
     title_variant: str | None = None
     summary_text: str | None = None
@@ -51,6 +52,8 @@ class ApplicationOut(BaseModel):
     fit_score: int
     fit_reasoning: str
     gaps: list[str]
+    # Which model read the posting and scored it.
+    fit_model: str = ""
 
     title_variant: str | None
     summary_text: str | None

@@ -260,3 +260,24 @@ class TestBundle:
         for attempt in ("../../backend/.env", "../../../etc/passwd", "..%2f..%2f.env"):
             response = client.get(f"/{attempt}")
             assert "HIRED_" not in response.text and "root:" not in response.text
+
+
+def test_a_row_remembers_both_models(client):
+    """
+    The score and the CV can come from different models, and a number is worth
+    nothing months later without knowing which one produced it.
+    """
+    made = client.post(
+        "/api/applications",
+        json={
+            "company": "Acme",
+            "role": "Dev",
+            "jd_text": "x" * 100,
+            "fit_score": 8,
+            "fit_model": "granite3.3:8b",
+        },
+    ).json()
+
+    row = client.get(f"/api/applications/{made['id']}").json()
+    assert row["fit_model"] == "granite3.3:8b"
+    assert row["model"] == ""  # stamped separately, at export

@@ -25,6 +25,35 @@ served: contextvars.ContextVar[str] = contextvars.ContextVar("served", default="
 # again, so the screen can say so instead of the retry being invisible.
 notice: contextvars.ContextVar[str] = contextvars.ContextVar("notice", default="")
 
+# The model the screen asked for, or "" for the configured routing. A request
+# scoped variable rather than a parameter because six call sites across three
+# modules would otherwise have to thread it through, and none of them choose it.
+pick: contextvars.ContextVar[str] = contextvars.ContextVar("pick", default="")
+
+
+def available(settings: Settings) -> list[str]:
+    """The models this machine can answer with, pulled ones first."""
+    local: list[str] = []
+    if settings.ollama_model:
+        try:
+            tags = _LOCAL.get(f"{settings.ollama_url}/api/tags", timeout=5).json()
+            local = sorted(m["name"] for m in tags.get("models") or [])
+        except Exception:  # noqa: BLE001 — ollama being down is not an error here
+            local = [settings.ollama_model]
+    return local + ([settings.gemini_model] if settings.gemini_api_key else [])
+
+
+def choose(name: str) -> None:
+    """Honour a named model for this request, or fall back to the routing.
+
+    Checked rather than trusted: the name is handed to ollama, and a request
+    body is not the place to decide what this machine runs.
+    """
+    name = (name or "").strip()
+    if name and name not in available(get_settings()):
+        raise HTTPException(422, f"No model called {name} is available here.")
+    pick.set(name)
+
 TIMEOUT = 60.0
 # A local call generates at about 10 tokens a second, and a long posting can
 # want 1,500 of them.
@@ -98,6 +127,8 @@ def generate_json(
                   plainer, but given the whole profile it names real gaps and
                   invents nothing, and a daily quota that runs out at noon is
                   not an answer. The answer carries the model's name.
+      "only"      that model or an error. Set when the screen names one, so a
+                  comparison between models is not quietly answered by a third.
       "never"     Gemini or an error. Choosing bullets: the local model picks
                   only real ids, but across three runs of one posting it chose
                   a different title each time, and a page assembled from a
@@ -111,6 +142,12 @@ def generate_json(
     """
     settings = get_settings()
     notice.set("")
+    # A chosen model is binding: no silent failover, because an answer from a
+    # model you did not choose makes the comparison you chose it for worthless.
+    chosen = pick.get()
+    if chosen and chosen != settings.gemini_model:
+        settings = settings.model_copy(update={"ollama_model": chosen})
+        local = "only"
 
     if settings.demo:
         # A demo must not spend a rationed call, and must work with no network.
@@ -130,6 +167,10 @@ def generate_json(
     usable_local = local != "never" and bool(settings.ollama_model)
 
     def attempt() -> dict[str, Any]:
+        if local == "only":
+            return run_local()
+        if chosen:  # the configured Gemini model, chosen by name
+            return gemini()
         if local == "first" and usable_local:
             try:
                 return run_local()
@@ -194,9 +235,13 @@ def _ollama(
         # Reasoning tokens cost the same as useful ones, and generation is the
         # whole expense locally. Extraction is reading, not reasoning.
         "think": False,
-        # Without this ollama uses 4096 and truncates from the front, so a long
-        # prompt loses its briefing and keeps its tail. See settings.ollama_ctx.
-        "options": {"num_ctx": settings.ollama_ctx},
+        # num_ctx: without it ollama uses 4096 and truncates from the front, so
+        # a long prompt loses its briefing and keeps its tail.
+        # temperature: ollama defaults to 0.8. Reading one posting three times
+        # gave 15, 18 and 23 requirements, and the gaps moved with them. At 0 it
+        # gave 20 three times. A seed and top_k on top changed nothing measured,
+        # because decoding at 0 is already greedy.
+        "options": {"num_ctx": settings.ollama_ctx, "temperature": 0},
         "messages": [{"role": "user", "content": prompt}]
         + [
             {"role": turn["role"], "content": turn["text"]}
@@ -249,6 +294,9 @@ def _gemini(
                 "generationConfig": {
                     "responseMimeType": "application/json",
                     "responseSchema": schema,
+                    # Same reason as the local call: the same posting read twice
+                    # should give the same requirements.
+                    "temperature": 0,
                 },
             },
         )

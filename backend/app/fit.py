@@ -1,23 +1,36 @@
 """Fit check: one model call parses a job posting and scores it against the profile."""
 
 import json
+import re
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import select
 
+from . import taxonomy
 from .db import SessionDep
-from .model import generate_json, notice, served
+from .generate import _non_bullet, _terms, _wants
+from .model import available, choose, generate_json, notice, served
 from .models import Fit, ParsedJd, Profile
 from .profile_parser import parse_text
+from .settings import get_settings
 from .tables import Application, current_profile, stamp
 
 router = APIRouter(tags=["fit"])
 
 
+@router.get("/models")
+def models() -> dict:
+    """What the screen may choose between, and what it gets if it chooses nothing."""
+    settings = get_settings()
+    return {"models": available(settings), "configured": settings.ollama_model}
+
+
 class FitRequest(BaseModel):
     jd_text: str
+    # Name a model to answer with, or leave empty for the configured routing.
+    model: str = ""
 
 
 class PriorApplication(BaseModel):
@@ -46,8 +59,9 @@ _SKILLS = {
         "properties": {
             "name": {"type": "string"},
             "importance": {"type": "integer", "minimum": 1, "maximum": 3},
+            "kind": {"type": "string", "enum": ["skill", "trait"]},
         },
-        "required": ["name", "importance"],
+        "required": ["name", "importance", "kind"],
     },
 }
 
@@ -68,15 +82,12 @@ EXTRACT_SCHEMA = {
     "required": ["company", "role", "required_skills", "preferred_skills"],
 }
 
-# The verdict, given that list and the profile.
+# Prose only. The score and the gaps are worked out in code and handed over,
+# because a model asked to decide them reported the person was missing React.
 SCORE_SCHEMA = {
     "type": "object",
-    "properties": {
-        "score": {"type": "integer", "minimum": 1, "maximum": 10},
-        "reasoning": {"type": "string"},
-        "gaps": {"type": "array", "items": {"type": "string"}},
-    },
-    "required": ["score", "reasoning", "gaps"],
+    "properties": {"reasoning": {"type": "string"}},
+    "required": ["reasoning"],
 }
 
 EXTRACT = """Extract what this job posting asks for. You are reading one document
@@ -92,6 +103,11 @@ and filling in a form about it. You are not judging anyone against it.
   bonus or "it would be great if". Both lists matter; preferred is rarely empty.
 - importance is 1 to 3: 3 the posting leads with it or calls it required, 2 a
   real expectation, 1 a passing mention.
+- kind is "skill" or "trait". A skill is something a CV can show: a technology,
+  a tool, a named practice like code review or CI/CD. A trait is a disposition
+  or soft competency: communication, curiosity, working independently, coaching
+  others, keeping up with industry trends, judgement under pressure. If a CV
+  could not prove it, it is a trait. When torn, choose skill.
 - Miss nothing. A requirement you leave out is one the reader never sees."""
 
 # ponytail: entries come back at the granularity of the posting's own bullets,
@@ -99,60 +115,148 @@ and filling in a form about it. You are not judging anyone against it.
 # _relevance tokenises, so matching survives it; only the coverage chips read
 # long. Split them in code if that ever matters more than it does now.
 
-INSTRUCTIONS = """You are scoring one job posting against one candidate's profile.
+INSTRUCTIONS = """Write the two or three sentences a person reads before deciding
+whether to apply for this job.
 
-The profile is the only thing you know about this person. It is deliberately
-honest: it records what they cannot claim as carefully as what they can.
+The work is already done. You are given what the posting asks for, which of
+those the profile covers, which it does not, and a score. All of it was worked
+out from the profile itself, so all of it is true.
 
-What the posting asks for has already been read out of it for you. Score the
-fit from 1 to 10.
+Your only job is to say it in plain prose, addressed to the person.
 
-  1-3   out of their league, or a different discipline entirely
-  4-6   real overlap but a gap they cannot close before applying
-  7-8   a good fit with something worth knowing about
-  9-10  they are what the posting describes
+- Never add a gap. The list you are given is the complete list. If something is
+  not on it, they have it, however it looks to you.
+- Never remove a gap or soften one into a strength.
+- Never change the score or quote a different one.
+- Name the strongest thing they have for this posting and the gap that matters
+  most. Those two facts are the whole message.
+- Two or three sentences. Not a cover letter, not a study plan, nothing written
+  in their voice, no advice about what to go and learn, no flattery."""
 
-Rules:
 
-- Never credit them with anything the profile does not evidence. A skill absent
-  from skills and skill_evidence is a skill they do not have.
-- The gaps section is the person's own list of what they cannot do. Treat it as
-  fact. If the posting needs something listed there, that is a gap, whatever
-  else the profile suggests. If the posting does not ask for it, it is not a gap
-  for this posting, however honestly it is listed.
-- cannot_claim is binding. Never let a project count as evidence for something
-  its cannot_claim excludes.
-- A gated skill counts only when a project evidencing it exists.
-- A skill_evidence entry with an empty evidence list is a tool they have used
-  but cannot tie to a listed project. Credit it as familiarity: enough that they
-  are not starting from nothing, never as depth, and never as the thing that
-  makes them a fit. Do not report it as a gap.
-- A skill listed under skills with no skill_evidence entry is claimed but not
-  detailed. They have used it. Credit it as present, never as depth, and do not
-  report it as a gap. The gap is depth, if the posting asks for depth.
-- A gap is something the profile does not have. Eligibility, clearances and work
-  authorisation are facts about the person, not skills; name one as a gap only
-  when the profile itself says they lack it. Dispositions cut both ways: no
-  profile evidences communication, curiosity or attention to detail, so never
-  name one as a gap and never count one as met. Leave them out of the verdict.
-- Compare years honestly. skill_evidence carries years and last_used; a posting
-  asking for more than the profile shows is a gap even if the skill is listed.
-- Every gap must be one specific thing the posting requires and the profile does
-  not evidence. Not advice, not a list of what they should learn.
-- Where the posting offers a choice, meeting either half meets it. "TypeScript
-  with React, or C# with .NET" is satisfied by React alone; the other half is
-  worth knowing about, not a gap.
-- The reasoning is two or three sentences, addressed to the person, naming the
-  evidence you scored on. Say what the profile shows and what it does not. It
-  is not a cover letter, not a study plan and not a summary of the posting: no
-  flattery, no advice about what to go and learn, nothing written in their
-  voice. Three sentences they could read before deciding whether to apply.
-- Say plainly when the answer is that they should not apply. Being told to skip
-  a posting is the most useful thing this can do."""
+def _alternatives(name: str) -> list[str]:
+    """
+    A requirement split on the choices it offers.
+
+    "TypeScript or JavaScript with React, or C# with .NET" is met by React
+    alone. Read whole it matches nothing, and the model called it a gap for a
+    React developer.
+    """
+    parts = re.split(r",?\s+\bor\b\s+|\s*/\s*", name)
+    return [part for part in (p.strip(" .,:;") for p in parts) if part]
+
+
+def requirements(profile: Profile, jd: ParsedJd) -> tuple[list[str], list[str], int]:
+    """
+    Which of the posting's requirements the profile covers, which it does not,
+    and the score that follows. No model involved: every answer is a lookup.
+
+    A model asked the same question said the person lacked React, lacked a
+    degree they hold, and lacked French the posting never mentioned.
+    """
+    backs = _backs(profile)
+    # Per gap, not one flat pile: flattened, a gap for "React Native" lent its
+    # "react" to the pile and reported React as a gap for a React developer.
+    cannot = [(_terms(gap.skill), gap.skill) for gap in profile.gaps]
+
+    met: list[str] = []
+    unmet: list[str] = []
+    points = possible = 0
+    for name, weight, _words, kind in _wants(jd):
+        schooling = _non_bullet(name, profile)
+        if kind == "trait" or schooling == "not something a CV evidences":
+            continue  # a disposition: no profile evidences it either way
+        possible += weight
+
+        if schooling:  # a degree, answered by the education section
+            met.append(f"{name} — {schooling}")
+            points += weight
+            continue
+
+        # Any one of the choices on offer is enough.
+        choices = _alternatives(name)
+        blocked = next(
+            (
+                said
+                for terms, said in cannot
+                if terms
+                and (terms <= _terms(name) or any(terms <= _terms(c) for c in choices))
+            ),
+            "",
+        )
+        backing = sorted(
+            {backs[word] for choice in choices for word in _terms(choice) & backs.keys()}
+        )
+        if not blocked and backing:
+            # Named, because the requirement's own words are not proof of
+            # anything: handed "exposure to Azure or another cloud platform"
+            # as met, the model wrote that the candidate has used Azure.
+            met.append(f"{name} — {', '.join(backing[:3])}")
+            points += weight
+            continue
+
+        unmet.append(
+            f"{name} (your own gaps list says {blocked})" if blocked
+            else _near_miss(name, set(backs))
+        )
+
+    # Clamped off both ends: this counts requirements, and a posting asking for
+    # "AI capability" names nothing a skills list holds however good the fit.
+    score = round(2 + 7 * points / possible) if possible else 5
+    return met, _once(unmet), max(2, min(9, score))
+
+
+def _once(names: list[str]) -> list[str]:
+    """In order, without repeats: one posting was read as wanting monitoring twice."""
+    return list(dict.fromkeys(names))
+
+
+def _backs(profile: Profile) -> dict[str, str]:
+    """
+    Every word the profile can answer to, mapped to the skill that answers it.
+
+    The mapping is the point. Knowing a requirement is met is not enough to say
+    it in a sentence without inventing something.
+    """
+    # The line names too: a "Backend" row of nine tools answers "back-end
+    # development", which otherwise read as a gap for a full-stack developer.
+    named = [row.line for row in profile.skills]
+    named += [item for row in profile.skills for item in row.items]
+    named += [entry.name for entry in profile.skill_evidence]
+    named += [word for project in profile.all_projects() for word in project.stack]
+
+    backs: dict[str, str] = {}
+    for name in named:
+        for word in taxonomy.implied(_terms(name), [name]):
+            backs.setdefault(word, name)
+    return backs
+
+
+def _near_miss(name: str, have: set[str]) -> str:
+    """Say what they have in the same category, which is not the same as having it."""
+    found = taxonomy.category_of(name)
+    if found:
+        _category, members = found
+        close = sorted(m for m in members if _terms(m) <= have and _terms(m) != _terms(name))
+        if close:
+            return f"{name} (you have {close[0]}, which is close but not the same)"
+    return name
+
+
+def _three_sentences(text: str) -> str:
+    """
+    The prompt asks for three; measured output ran to eleven.
+
+    The lookbehind keeps "M.S. in Applied Computer Science" as one sentence,
+    which it is: without it the degree ate one of the three.
+    """
+    parts = re.split(r"(?<![A-Z]\.)(?<=[.!?])\s+(?=[A-Z])", " ".join(text.split()))
+    return " ".join(parts[:3]).strip()
 
 
 @router.post("/fit")
 def check_fit(body: FitRequest, session: SessionDep) -> FitResponse:
+    choose(body.model)
     text = (body.jd_text or "").strip()
     if len(text) < 80:
         raise HTTPException(
@@ -179,12 +283,17 @@ def check_fit(body: FitRequest, session: SessionDep) -> FitResponse:
     said = notice.get()
 
     profile = parse_text(row.text)
+    met, unmet, score = requirements(profile, parsed_jd)
+
     # Busy is not an answer on the day you are applying. The local model takes
     # about a minute and reads plainer, and its name travels with the score.
     answer = generate_json(
-        f"{INSTRUCTIONS}\n\nPROFILE:\n{json.dumps(context(profile))}"
-        f"\n\nWHAT THE POSTING ASKS FOR:\n{parsed_jd.model_dump_json()}"
-        f"\n\nPOSTING:\n{text}",
+        f"{INSTRUCTIONS}\n\nWHAT THE POSTING ASKS FOR:\n{parsed_jd.model_dump_json()}"
+        f"\n\nWHAT THEY HAVE, FROM THEIR PROFILE:\n"
+        + ("\n".join(f"- {name}" for name in met) or "- nothing the posting names")
+        + "\n\nWHAT THEY DO NOT HAVE. THIS LIST IS COMPLETE:\n"
+        + ("\n".join(f"- {name}" for name in unmet) or "- nothing; they cover all of it")
+        + f"\n\nSCORE: {score} out of 10",
         SCORE_SCHEMA,
         local="fallback",
         good=lambda answer: bool(str(answer.get("reasoning") or "").strip()),
@@ -198,10 +307,10 @@ def check_fit(body: FitRequest, session: SessionDep) -> FitResponse:
         notice=said,
         seen=_seen(session, parsed_jd.company),
         fit=Fit(
-            # Clamp: the model sometimes returns scores outside 1-10.
-            score=max(1, min(10, int(answer.get("score", 0)))),
-            reasoning=str(answer.get("reasoning", "")),
-            gaps=[str(gap) for gap in answer.get("gaps") or []],
+            # Both worked out in code. The model only wrote the sentences.
+            score=score,
+            reasoning=_three_sentences(str(answer.get("reasoning", ""))),
+            gaps=unmet,
         ),
     )
 

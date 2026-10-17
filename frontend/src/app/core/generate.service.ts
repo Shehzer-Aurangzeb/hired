@@ -12,6 +12,14 @@ import {
   GeneratedCv,
 } from './models';
 
+function remembered(): string {
+  try {
+    return localStorage.getItem('hired.model') ?? '';
+  } catch {
+    return '';
+  }
+}
+
 // Holds the current draft here, not in the page, so it survives navigating away.
 @Injectable({ providedIn: 'root' })
 export class GenerateService {
@@ -23,6 +31,36 @@ export class GenerateService {
   readonly applicationId = signal<number | null>(null);
   readonly jdText = signal('');
 
+  /** Which model to answer with, or "" for whatever the backend is configured to use.
+   *  Remembered, because comparing models means running several postings through
+   *  the same one. */
+  readonly model = signal(remembered());
+  readonly models = signal<string[]>([]);
+
+  useModel(name: string): void {
+    this.model.set(name);
+    try {
+      localStorage.setItem('hired.model', name);
+    } catch {
+      // Ignore storage errors.
+    }
+  }
+
+  loadModels(): void {
+    this.http.get<{ models: string[]; configured: string }>(`${API}/api/models`).subscribe({
+      next: (res) => {
+        this.models.set(res.models);
+        // Always a real name, never "whatever is configured": the point of the
+        // picker is knowing which model answered. Falls back to the configured
+        // one on a first visit, or when the selected one is no longer pulled.
+        if (!res.models.includes(this.model())) {
+          this.useModel(res.models.includes(res.configured) ? res.configured : res.models[0] ?? '');
+        }
+      },
+      error: () => this.models.set([]),
+    });
+  }
+
   readonly checking = signal(false);
   readonly generating = signal(false);
   readonly exporting = signal(false);
@@ -30,7 +68,9 @@ export class GenerateService {
 
   checkFit(jdText: string): Observable<FitResponse> {
     this.checking.set(true);
-    return this.http.post<FitResponse>(`${API}/api/fit`, { jd_text: jdText }).pipe(
+    return this.http
+      .post<FitResponse>(`${API}/api/fit`, { jd_text: jdText, model: this.model() })
+      .pipe(
       tap((res) => {
         this.fit.set(res);
         this.jdText.set(jdText);
@@ -44,7 +84,9 @@ export class GenerateService {
 
   generate(body: GenerateRequest): Observable<GenerateResponse> {
     this.generating.set(true);
-    return this.http.post<GenerateResponse>(`${API}/api/generate`, body).pipe(
+    return this.http
+      .post<GenerateResponse>(`${API}/api/generate`, { ...body, model: this.model() })
+      .pipe(
       tap((res) => {
         this.result.set(res);
         this.say(res.notice);

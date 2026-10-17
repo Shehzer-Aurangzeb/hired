@@ -1047,3 +1047,101 @@ def test_a_selection_that_overruns_the_page_is_trimmed_to_one_page(monkeypatch):
         f.message for f in flags
     ]
     assert sum(len(s.bullets) for s in cv.sections) < asked
+
+
+def test_a_caveat_about_a_figure_is_silent_when_the_figure_is_not_printed():
+    """
+    "The 50% figure is estimated" qualifies the bullet carrying 50%, and says
+    nothing about a page that does not print it. Every qualifier firing on
+    every printed project made the real ones easy to scroll past.
+    """
+    from app.generate import _about_one_bullet, _check_qualifiers
+    from app.models import Bullet, ClaimBoundary, Project
+
+    project = Project(
+        id="p",
+        name="P",
+        bullets=[
+            Bullet(id="with-figure", text="Cut repeat calls by an estimated 50%."),
+            Bullet(id="plain", text="Built the data layer."),
+        ],
+        claim_boundary=ClaimBoundary(
+            required_qualifiers=[
+                "The 50% figure is estimated, not measured",
+                "Prototype only, never shipped",
+            ]
+        ),
+    )
+    assert _about_one_bullet("The 50% figure is estimated, not measured", project) == "with-figure"
+    assert _about_one_bullet("Prototype only, never shipped", project) == ""
+
+    def warnings(printed_id):
+        flags = []
+        section = CvSection(
+            project_id="p",
+            project_name="P",
+            bullets=[SelectedBullet(id=printed_id, source_id=printed_id, text="x")],
+        )
+        _check_qualifiers([section], {"p": project}, set(), flags)
+        return [f.message for f in flags]
+
+    # The project-wide caveat always fires; the figure one only with its bullet.
+    assert len(warnings("plain")) == 1
+    assert len(warnings("with-figure")) == 2
+
+
+def test_one_project_does_not_answer_another_projects_caveat():
+    """"Solo build" was answered by "native rebuilds" in a different project."""
+    from app.generate import _check_qualifiers
+    from app.models import Bullet, ClaimBoundary, Project
+
+    solo = Project(
+        id="solo",
+        name="Solo",
+        bullets=[Bullet(id="s1", text="Designed the schema.")],
+        claim_boundary=ClaimBoundary(required_qualifiers=["Solo build, so it proves ownership"]),
+    )
+    other = Project(id="other", name="Other", bullets=[Bullet(id="o1", text="x")])
+    sections = [
+        CvSection(
+            project_id="solo",
+            project_name="Solo",
+            bullets=[SelectedBullet(id="s1", source_id="s1", text="Designed the schema.")],
+        ),
+        CvSection(
+            project_id="other",
+            project_name="Other",
+            bullets=[
+                SelectedBullet(
+                    id="o1", source_id="o1", text="Cut 30 minute native rebuilds to 3."
+                )
+            ],
+        ),
+    ]
+    flags = []
+    _check_qualifiers(sections, {"solo": solo, "other": other}, set(), flags)
+
+    assert len(flags) == 1 and "Solo build" in flags[0].message
+
+
+def test_a_standalone_project_is_already_marked_personal_by_its_heading():
+    """It prints under PROJECTS, beside WORK EXPERIENCE. That is what it means."""
+    from app.generate import _check_qualifiers
+    from app.models import Bullet, ClaimBoundary, Project
+
+    side = Project(
+        id="side",
+        name="Side",
+        bullets=[Bullet(id="b", text="Built it.")],
+        claim_boundary=ClaimBoundary(required_qualifiers=["Personal project, single user"]),
+    )
+    section = CvSection(
+        project_id="side",
+        project_name="Side",
+        bullets=[SelectedBullet(id="b", source_id="b", text="Built it.")],
+    )
+    under_projects, under_nothing = [], []
+    _check_qualifiers([section], {"side": side}, {"project", "personal"}, under_projects)
+    _check_qualifiers([section], {"side": side}, set(), under_nothing)
+
+    assert under_projects == [] and len(under_nothing) == 1

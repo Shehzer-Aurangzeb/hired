@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from .db import SessionDep
-from .model import generate_json, notice, served
+from .model import choose, generate_json, notice, served
 from .models import (
     Bullet,
     CvSection,
@@ -31,6 +31,8 @@ router = APIRouter(tags=["generate"])
 
 
 class GenerateRequest(BaseModel):
+    # Name a model to answer with, or leave empty for the configured routing.
+    model: str = ""
     jd_text: str
     parsed_jd: ParsedJd = ParsedJd()
     title_variant: str | None = None
@@ -137,15 +139,26 @@ def _select(profile: Profile, jd_text: str, body: "GenerateRequest") -> dict:
     return {"title_id": title_id, "sections": sections}
 
 
-def _wants(jd: ParsedJd) -> list[tuple[str, int, set[str]]]:
-    """Everything the posting asks for, with what it weighs and the words it uses."""
-    return [
-        (skill.name, weight, _terms(skill.name))
-        for skill, weight in [
-            *((s, s.importance) for s in jd.required_skills),
-            *((s, 1) for s in jd.preferred_skills),
-        ]
-    ]
+def _wants(jd: ParsedJd) -> list[tuple[str, int, set[str], str]]:
+    """
+    Everything the posting asks for: name, weight, its words, and its kind.
+
+    Once per thing. One reading listed monitoring twice, and "React" beside
+    "React.js" is one requirement counted twice, which moves the score.
+    """
+    seen: set[frozenset[str]] = set()
+    out: list[tuple[str, int, set[str], str]] = []
+    for skill, weight in [
+        *((s, s.importance) for s in jd.required_skills),
+        *((s, 1) for s in jd.preferred_skills),
+    ]:
+        words = _terms(skill.name)
+        key = frozenset(words)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append((skill.name, weight, words, skill.kind))
+    return out
 
 
 def _rank(profile: Profile, jd: ParsedJd, limit: int) -> list[Project]:
@@ -167,7 +180,7 @@ def _rank(profile: Profile, jd: ParsedJd, limit: int) -> list[Project]:
     covers = {
         project.id: {
             name: weight
-            for name, weight, words in wants
+            for name, weight, words, _kind in wants
             if words
             & _terms(
                 " ".join(
@@ -203,6 +216,7 @@ def _rank(profile: Profile, jd: ParsedJd, limit: int) -> list[Project]:
 
 @router.post("/generate")
 def generate(body: GenerateRequest, session: SessionDep) -> GenerateResponse:
+    choose(body.model)
     text = (body.jd_text or "").strip()
     if len(text) < 80:
         raise HTTPException(422, "That is too short to select against.")
@@ -292,9 +306,21 @@ def _assemble(
 
     printed = " ".join(
         [summary.text if summary else ""]
+        + [
+            part
+            for section in sections
+            for part in [section.project_name, section.label, " ".join(section.stack)]
+        ]
         + [bullet.text for section in sections for bullet in section.bullets]
     )
-    _check_qualifiers(sections, projects, printed, flags)
+    # What the page says before any one project speaks: the summary, and the
+    # headings it prints under. A standalone project sits beneath PROJECTS,
+    # which is what "personal project" means next to WORK EXPERIENCE.
+    standalone = {project.id for project in profile.projects}
+    context = _terms(summary.text if summary else "") | {"experience", "work"}
+    if standalone & {section.project_id for section in sections}:
+        context |= {"project", "personal"}
+    _check_qualifiers(sections, projects, context, flags)
     _check_banned(rules, printed, flags)
 
     cv = GeneratedCv(
@@ -344,8 +370,23 @@ def _bullets(project: Project, ids: list, rules, flags: list[Flag]) -> list[Sele
 _SCHOOLING = re.compile(r"\b(degree|diploma|bachelor|master|b\.?sc|m\.?sc|post-secondary|graduate)\b", re.I)
 _DISPOSITION = re.compile(
     r"\b(communication|communicate|problem.solving|critical thinking|curiosity|curious"
-    r"|patience|patient|attention to detail|self.starter|self.motivated|motivated"
-    r"|willingness|eagerness|interest in|passion|team player|interpersonal|collaborat)",
+    r"|patience|patient|attention to detail|detail.oriented|self.starter|self.motivated"
+    r"|motivated|willingness|eagerness|interest in|passion|team player|interpersonal"
+    r"|collaborat|work(ing)? independently|independently and|multiple projects|multitask"
+    r"|desire to learn|eager to learn|keen to learn|fast learner|quick learner"
+    r"|self.learning|learning ability|time management|organisational|organizational"
+    r"|adaptab|flexib|work ethic|proactive|positive attitude|strong work)\b",
+    re.I,
+)
+# ponytail: a named list, not a blanket "ability to" or "strong desire", which
+# would swallow "ability to design REST APIs". Add names as postings show them.
+
+# Facts about the person, not skills. A posting naming one is not describing
+# something a CV can evidence, so it counts neither for nor against.
+_NOT_A_SKILL = re.compile(
+    r"\b(non.disclosure|non.compete|agreement|clearance|security check|background check"
+    r"|work authorisation|work authorization|eligib|citizen|permanent resident|visa"
+    r"|driver.s licen|references|willing to travel|relocat|overtime|on.call)\b",
     re.I,
 )
 
@@ -355,7 +396,7 @@ def _non_bullet(skill: str, profile: Profile) -> str:
     if _SCHOOLING.search(skill) and profile.education:
         top = profile.education[0]
         return f"{top.degree} {top.field}".strip() or top.school
-    if _DISPOSITION.search(skill):
+    if _DISPOSITION.search(skill) or _NOT_A_SKILL.search(skill):
         return "not something a CV evidences"
     return ""
 
@@ -382,19 +423,57 @@ def _coverage(
             ],
             backed_by=_non_bullet(name, profile),
         )
-        for name, _weight, words in _wants(jd)
+        for name, _weight, words, _kind in _wants(jd)
     ]
 
 
-def _check_qualifiers(sections, projects, printed: str, flags: list[Flag]) -> None:
-    """Warn when a project's required qualifier is missing from the printed page."""
-    lowered = printed.lower()
+_FIGURE = re.compile(r"\d+(?:\.\d+)?\s*%?")
+
+
+def _about_one_bullet(qualifier: str, project: Project) -> str:
+    """
+    The bullet a qualifier is about, when it is about one in particular.
+
+    "The 50% figure is estimated, not measured" qualifies the bullet carrying
+    50%, and says nothing about a page that does not print it. "Prototype only,
+    never shipped" qualifies the project itself and returns nothing here.
+    """
+    figures = set(_FIGURE.findall(qualifier))
+    if not figures:
+        return ""
+    for bullet in project.bullets:
+        carried = set(_FIGURE.findall(bullet.text))
+        if figures & carried:
+            return bullet.id
+    return ""
+
+
+def _check_qualifiers(sections, projects, context: set[str], flags: list[Flag]) -> None:
+    """
+    Warn when a project's required qualifier is missing from the printed page.
+
+    Checked against that project's own words plus what the page says as a whole,
+    never against another project's. Matched against the whole page by
+    substring, "Solo build" on one project was answered by "native rebuilds" in
+    another project's bullet, and the caveat went unsaid.
+    """
     for section in sections:
         project = projects[section.project_id]
+        on_page = {bullet.source_id or bullet.id for bullet in section.bullets}
+        says = context | _terms(
+            " ".join(
+                [section.project_name, section.label, " ".join(section.stack)]
+                + [bullet.text for bullet in section.bullets]
+            )
+        )
         for qualifier in project.claim_boundary.required_qualifiers:
+            # A caveat about a figure is not owed when the figure is not printed.
+            tied = _about_one_bullet(qualifier, project)
+            if tied and tied not in on_page:
+                continue
             # Keyword overlap, since the qualifier rarely appears word for word.
-            words = [w for w in _words(qualifier) if len(w) > 4]
-            if words and not any(word in lowered for word in words):
+            words = {w for w in _terms(qualifier) if len(w) > 4}
+            if words and not words & says:
                 flags.append(
                     Flag(
                         type="warn",
@@ -433,14 +512,37 @@ _FILLER = frozenset(
 )
 
 
+# "React.js" and "React" are the same thing; so are "Node.js", "NodeJS" and
+# "Node". Only a trailing js, so a bare "JS" survives as a word of its own.
+_DOT_JS = re.compile(r"(?<=[A-Za-z])[.\s]?js\b", re.I)
+
+
 def _terms(text: str) -> set[str]:
     """
     The meaningful words in a requirement or a bullet. Hyphens and slashes split,
     because a posting writes "pull-request workflows" and a bullet writes
     "reviewing pull requests", and those are the same thing.
+
+    Dots split too, so ".NET" and "ASP.NET Core" meet on "net". The js suffix
+    goes first: stripping plurals turned "React.js" into "react.j", which met
+    nothing, so a posting spelling it that way reported React as a gap for a
+    React developer.
     """
     plain = re.sub(r"[-\u2010-\u2015/]", " ", text)
-    return {w.rstrip("s") for w in _words(plain) if len(w) > 1} - _FILLER
+    plain = _DOT_JS.sub("", plain)
+    plain = plain.replace(".", " ")
+    return {_singular(w) for w in _words(plain) if len(w) > 1} - _FILLER
+
+
+def _singular(word: str) -> str:
+    """One trailing s, off words long enough to have a plural.
+
+    rstrip("s") took every trailing s, so CSS became "c" and collided with the
+    C language, and JS became "j".
+    """
+    if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]
+    return word
 
 
 def _relevance(text: str, jd: ParsedJd) -> int:

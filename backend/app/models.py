@@ -310,6 +310,10 @@ class ValidationResult(BaseModel):
 class RequiredSkill(BaseModel):
     name: str
     importance: int = 2
+    # "skill" is anything a CV can show: a technology, a tool, a concrete
+    # practice. "trait" is a disposition or soft competency, which no profile
+    # evidences and which therefore counts neither for nor against a score.
+    kind: str = "skill"
 
     @field_validator("importance")
     @classmethod

@@ -403,6 +403,8 @@ export interface FitResponse {
 
 /** POST /api/generate */
 export interface GenerateRequest {
+  /** Which model to answer with. Empty means the backend's configured routing. */
+  model?: string;
   jd_text: string;
   parsed_jd: ParsedJd;
   title_variant?: string;
@@ -465,6 +467,8 @@ export interface Application {
   coverage: SkillCoverage[];
   /** Which model chose the bullets on the saved PDF. Empty on older rows. */
   model: string;
+  /** Which model read the posting and scored it. Empty on older rows. */
+  fit_model: string;
   /** The PDF itself is at /api/applications/{id}/pdf. */
   has_pdf: boolean;
   filename: string | null;

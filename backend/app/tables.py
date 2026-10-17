@@ -67,6 +67,9 @@ class Application(SQLModel, table=True):
     # Snapshot as printed, not linked to the current profile.
     selected_bullets: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
     coverage: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
+    # Which model read the posting and scored it. Saved with the row, so a
+    # score can be compared against the model that produced it later.
+    fit_model: str = ""
     # Which model chose these bullets. Stamped at export, so the page you kept
     # says what made it rather than what is configured today.
     model: str = ""
