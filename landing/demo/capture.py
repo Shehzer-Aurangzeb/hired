@@ -33,14 +33,24 @@ os.environ["HIRED_PASSWORD_HASH"] = hash_password(PASSWORD)
 import uvicorn  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
 
-from app import ask, demo, fit, generate  # noqa: E402
+from app import ask, demo, fit, generate, model  # noqa: E402
 from app.db import engine, init_db  # noqa: E402
 from app.main import app  # noqa: E402
 
 # One source for the demo data. This file used to carry its own copy, and the
 # two drifted the first time either was edited.
 JD = demo.JD
-fake = lambda prompt, schema, *_, **__: demo.answer(schema, prompt)  # noqa: E731
+# The picker only renders with two or more models, so offer the measured set.
+MODELS = ["granite3.3:8b", "qwen2.5:14b", "qwen3:8b", "gemini-3.6-flash"]
+model.available = fit.available = lambda _settings: MODELS
+
+
+def fake(prompt, schema, *_, **__):
+    # Named as the picked model, so the screens show which one answered.
+    model.served.set(model.pick.get() or MODELS[0])
+    return demo.answer(schema, prompt)
+
+
 fit.generate_json = fake
 generate.generate_json = fake
 ask.generate_json = fake
@@ -107,6 +117,13 @@ def main() -> None:
 
         page.goto(f"{URL}/applications")
         shot("applications")
+
+        # A saved application with its PDF, the screen a sent CV lives on.
+        rows = page.request.get(f"{URL}/api/applications").json()
+        sent = next(r for r in rows if r["has_pdf"] and r["status"] != "saved")
+        page.goto(f"{URL}/applications/{sent['id']}")
+        page.wait_for_timeout(1500)  # the PDF preview renders after the page
+        shot("detail")
 
         page.goto(f"{URL}/profile")
         shot("profile")

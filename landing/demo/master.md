@@ -111,7 +111,7 @@ bullets:
   - id: ledgerline-a11y
     priority: 2
     tags: [accessibility, frontend]
-    text: Brought the invoice editor to WCAG 2.2 AA, fixing 63 audit findings across keyboard and screen-reader paths.
+    text: Brought the invoice editor to WCAG 2.2 AA, fixing 63 accessibility audit findings across keyboard and screen-reader paths.
     metric:
       value: '63'
       source: measured

@@ -12,6 +12,7 @@ import profile from '../assets/shots/profile.png';
 import cv from '../assets/shots/cv.png';
 import ask from '../assets/shots/ask.png';
 import history from '../assets/shots/history.png';
+import detail from '../assets/shots/detail.png';
 
 const REPO = 'https://github.com/Shehzer-Aurangzeb/hired';
 
@@ -25,13 +26,13 @@ const steps = [
   },
   {
     title: 'Paste a posting',
-    body: 'The whole job description, requirements and all. Nothing is saved until you decide to keep it.',
+    body: 'The whole job description, requirements and all, and pick the model that answers. Nothing is saved until you decide to keep it.',
     shot: paste,
-    alt: 'Generate screen with a pasted job description and a Check fit button.',
+    alt: 'Generate screen with a pasted job description, a model picker set to granite3.3:8b, and a Check fit button.',
   },
   {
     title: 'Get a verdict first',
-    body: 'A local model reads the posting; the score and gaps are counted from your profile in code. Being told to skip a posting is the most useful answer it gives.',
+    body: 'The model you picked reads the posting; the score and gaps are counted from your profile in code. Being told to skip a posting is the most useful answer it gives.',
     shot: fit,
     alt: 'Fit result: 9 out of 10, marked Apply, with the reasoning and one gap.',
   },
@@ -39,13 +40,19 @@ const steps = [
     title: 'Review the page',
     body: 'Bullets picked from your pool, coverage per requirement, and a live preview of the exact PDF. Regenerate for another pick, or swap any bullet by hand.',
     shot: generate,
-    alt: 'Generated CV: fit 9 of 10, requirement coverage, selected bullets with their ids, Regenerate and Export buttons, and a Letter-size preview.',
+    alt: 'Generated CV: fit 9 of 10, 6 of 6 requirements covered, selected bullets with their ids, a model picker beside Regenerate, and a Letter-size preview.',
   },
   {
     title: 'Track what you sent',
     body: 'Every posting you kept, applied to or not, with the CV that went out, what came back, and a daily target to keep you sending.',
     shot: applications,
     alt: 'Applications: a daily target of three, reply rate, two postings waiting on a reply, a pipeline from saved to offer, and a table of companies with fit and status.',
+  },
+  {
+    title: 'Open what you sent',
+    body: 'The CV exactly as it went out, which bullet backed each requirement, why it scored what it did, and where it stands. Re-export or download the PDF any time.',
+    shot: detail,
+    alt: 'Application detail for Vantage Point: fit 9 of 10, 6 of 6 requirements backed, status Applied, the bullets that were sent, and View PDF and Re-export buttons.',
   },
 ];
 
@@ -55,6 +62,22 @@ const pipeline = [
   { label: 'Sent', n: 7, bg: '#c4dcfa', fg: '#1b58ad' },
   { label: 'Heard back', n: 3, bg: '#fbe2b0', fg: '#8f5102' },
   { label: 'Interview', n: 1, bg: '#b9e8cd', fg: '#076b3c' },
+];
+
+// What the picker can offer: whatever ollama has pulled, plus Gemini.
+const pickable = [
+  { name: 'granite3.3:8b', where: 'local · default' },
+  { name: 'qwen2.5:14b', where: 'local' },
+  { name: 'qwen3:8b', where: 'local' },
+  { name: 'gemini-3.6-flash', where: 'cloud' },
+];
+
+// Measured in f9284c3 on eight real postings.
+const recall = [
+  { name: 'granite3.3:8b', pct: 90, top: true },
+  { name: 'qwen2.5:14b', pct: 82 },
+  { name: 'qwen3:8b', pct: 78 },
+  { name: 'Gemini', pct: 49 },
 ];
 
 const profileViews = [
@@ -123,7 +146,7 @@ const profileViews = [
           <div class="hero-copy">
             <p class="eyebrow" data-reveal>
               <span class="pulse" aria-hidden="true"></span>
-              Open source · runs on your laptop · Gemini + a local model
+              Open source · runs on your laptop · any local model, or Gemini
             </p>
             <h1 data-reveal style="--i:1">
               A tailored CV you can{' '}
@@ -189,7 +212,7 @@ const profileViews = [
         <div class="wrap">
           <div class="head" data-reveal>
             <p class="label">How it works</p>
-            <h2>Five screens. One evening per posting.</h2>
+            <h2>Six screens. One evening per posting.</h2>
           </div>
 
           <div class="tour" data-tour>
@@ -248,31 +271,51 @@ const profileViews = [
           </div>
 
           <div class="model-grid">
-            <article class="model" data-reveal style="--i:1">
-              <p class="model-tag">On your machine</p>
-              <h3 class="mono">granite3.3:8b</h3>
-              <p>Reads the posting, then picks a title and the bullets for each project, one small question at a time. Falls back to Gemini when it can't.</p>
+            <article class="model picker" data-reveal style="--i:1">
+              <p class="model-tag">You pick the model</p>
+              <ul class="picker-list" aria-label="Example models">
+                {
+                  pickable.map((m) => (
+                    <li class:list={{ on: m.name === 'granite3.3:8b' }}>
+                      <span class="mono">{m.name}</span>
+                      <em>{m.where}</em>
+                    </li>
+                  ))
+                }
+              </ul>
+              <p>
+                Any model ollama has pulled, or Gemini. The one you pick answers every call for that posting:
+                reading it, the title, the bullets, the sentences. If it can't, the call fails rather than a
+                different model quietly answering, so comparing two means something. Each saved CV records the
+                model that made it.
+              </p>
             </article>
             <article class="model" data-reveal style="--i:2">
-              <p class="model-tag">In code</p>
+              <p class="model-tag">Code decides</p>
               <h3 class="mono">plain Python</h3>
-              <p>Matches every requirement against your profile, counts the score from what is met, ranks projects by what they add, and reads coverage off the printed page.</p>
-            </article>
-            <article class="model" data-reveal style="--i:3">
-              <p class="model-tag">In the cloud</p>
-              <h3 class="mono">gemini</h3>
-              <p>Writes the two or three sentences behind a score it is handed, never the score itself. When it is busy, the local model writes them.</p>
+              <p>
+                Matches every requirement against your profile, counts the score from what is met, lists the
+                gaps, ranks projects by what they add, and reads coverage off the printed page. Swap the model
+                and none of that moves.
+              </p>
             </article>
           </div>
 
           <div class="recall" data-reveal style="--i:3">
-            <p class="recall-head">Why the reading is local: technologies found, across 8 real postings</p>
-            <div class="recall-row"><span>granite3.3:8b</span><div class="recall-track"><span style="--w:90%"></span></div><strong>90%</strong></div>
-            <div class="recall-row"><span>Gemini</span><div class="recall-track"><span style="--w:49%"></span></div><strong>49%</strong></div>
+            <p class="recall-head">Why granite is the default: technologies found, across 8 real postings</p>
+            {
+              recall.map((r) => (
+                <div class="recall-row">
+                  <span>{r.name}</span>
+                  <div class="recall-track"><span style={`--w:${r.pct}%`} class:list={{ top: r.top }} /></div>
+                  <strong>{r.pct}%</strong>
+                </div>
+              ))
+            }
             <p class="recall-note">
-              Want to compare? A picker on the Generate screen pins any model you have pulled for every call.
-              Before each local call it checks the machine, and declines when the battery is under 30% and
-              unplugged, macOS is throttling, or less than 15% of memory is free.
+              Local models run at temperature 0, so one posting gives the same answer every time. Before each
+              local call it checks the machine, and declines when the battery is under 30% and unplugged, macOS
+              is throttling, or less than 15% of memory is free.
             </p>
           </div>
         </div>
@@ -1126,8 +1169,38 @@ const profileViews = [
       }
       @media (min-width: 900px) {
         .model-grid {
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns: 1.3fr 1fr;
         }
+      }
+      .picker-list {
+        list-style: none;
+        margin: 14px 0 4px;
+        padding: 6px;
+        display: grid;
+        gap: 2px;
+        background: var(--bg);
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        font-size: 13px;
+      }
+      .picker-list li {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 6px 10px;
+        border-radius: 5px;
+      }
+      .picker-list li.on {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      .picker-list em {
+        font-style: normal;
+        font-size: 12px;
+        color: var(--fg-subtle);
+      }
+      .picker-list li.on em {
+        color: var(--accent);
       }
       .model {
         padding: 24px;
@@ -1189,7 +1262,7 @@ const profileViews = [
         transform-origin: left;
         transition: transform 1100ms cubic-bezier(0.2, 0.8, 0.2, 1) 400ms;
       }
-      .recall-row:last-of-type .recall-track span {
+      .recall-track span:not(.top) {
         background: var(--line-strong);
       }
       :global(.js) .recall:not(.in) .recall-track span {
