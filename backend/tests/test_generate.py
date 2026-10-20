@@ -1188,3 +1188,36 @@ def test_a_banned_word_still_stops_the_export():
     flags = []
     _check_banned(Rules(banned_words=["synergy"]), "we drove synergy", flags)
     assert [f.type for f in flags] == ["block"]
+
+
+def test_generating_records_the_selection_without_an_export(client, monkeypatch):
+    """
+    The bullets were written to the row only when the PDF rendered, so an email
+    could not be written for a posting you apply to in a text box — and the
+    email flow silently required exporting first.
+    """
+    from sqlmodel import Session
+
+    from app.tables import Application
+
+    save_profile(client)
+    answers(monkeypatch, PICKED)
+    row_id = make_application(client)
+
+    client.post(
+        "/api/generate",
+        json={"jd_text": JD, "parsed_jd": {}, "application_id": row_id},
+    )
+
+    with Session(client.engine) as session:
+        saved = session.get(Application, row_id)
+        assert saved.selected_bullets, "nothing to write an email from"
+        assert saved.summary_text and saved.pdf is None  # selected, not sent
+
+
+def test_generating_without_a_row_still_works(client, monkeypatch):
+    """The fit screen generates before anything is saved."""
+    save_profile(client)
+    answers(monkeypatch, PICKED)
+    body = client.post("/api/generate", json={"jd_text": JD, "parsed_jd": {}}).json()
+    assert body["cv"]["sections"]

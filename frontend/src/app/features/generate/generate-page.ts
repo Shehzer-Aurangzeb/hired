@@ -7,7 +7,7 @@ import {
   signal,
 } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { of, switchMap, tap, finalize, catchError, debounceTime } from 'rxjs';
+import { of, switchMap, tap, finalize, catchError, debounceTime, map } from 'rxjs';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
@@ -243,16 +243,32 @@ export class GeneratePage {
   }
 
   /** Applying, but the form wants text rather than a file: Wellfound and the
-   *  like. Saves as "saved" and opens the row, where the email and the answer
-   *  are written. */
+   *  like. Still picks the bullets, because they are what the email and the
+   *  answer are written from — it just never renders a page. */
   saveWithoutCv(): void {
-    this.save('saved').subscribe({
-      next: (row) => {
-        this.reset();
-        this.router.navigate(['/applications', row.id]);
-      },
-      error: () => {},
-    });
+    const fit = this.gen.fit();
+    if (!fit) {
+      return;
+    }
+    this.save('saved')
+      .pipe(
+        switchMap((row) =>
+          this.gen
+            .generate({
+              jd_text: this.gen.jdText(),
+              parsed_jd: fit.parsed_jd,
+              application_id: row.id,
+            })
+            .pipe(map(() => row)),
+        ),
+      )
+      .subscribe({
+        next: (row) => {
+          this.reset();
+          this.router.navigate(['/applications', row.id]);
+        },
+        error: () => {},
+      });
   }
 
   /** Saves the row first so export has something to attach the PDF to. */
@@ -266,10 +282,11 @@ export class GeneratePage {
     row
       .pipe(
         tap((created) => this.gen.applicationId.set(created.id)),
-        switchMap(() =>
+        switchMap((created) =>
           this.gen.generate({
             jd_text: this.gen.jdText(),
             parsed_jd: fit.parsed_jd,
+            application_id: created.id,
           }),
         ),
       )

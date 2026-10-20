@@ -29,7 +29,14 @@ export class ApplicationsService {
   /** Writes an email or a form answer from the application and keeps it on the row. */
   writeArtifact(
     id: number,
-    body: { kind: 'email' | 'answer'; question?: string; model?: string },
+    body: {
+      kind: 'email' | 'answer';
+      question?: string;
+      model?: string;
+      /** A draft to rewrite, and what to change about it. */
+      draft?: string;
+      change?: string;
+    },
   ): Observable<Artifact> {
     return this.http.post<Artifact>(`${API}/api/applications/${id}/artifacts`, body);
   }

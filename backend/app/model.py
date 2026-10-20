@@ -104,6 +104,15 @@ def unhealthy() -> str | None:
     return None
 
 
+def loaded(settings: Settings) -> bool:
+    """Whether the model we are about to use is already in memory."""
+    try:
+        running = _LOCAL.get(f"{settings.ollama_url}/api/ps", timeout=3).json()
+        return any(m.get("name") == settings.ollama_model for m in running.get("models") or [])
+    except Exception:  # noqa: BLE001 — ollama being unreachable is not "loaded"
+        return False
+
+
 def generate_json(
     prompt: str,
     schema: dict[str, Any],
@@ -225,7 +234,11 @@ def _ollama(
     turns: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """The model on this machine. No key, no quota, no third party."""
-    if reason := unhealthy():
+    # The memory floor is about whether to load a model, not whether to use one.
+    # Already resident, a second call allocates nothing, and refusing it made a
+    # back and forth impossible: the first answer left 12% free and the rewrite
+    # was turned away for memory the first call had already spent.
+    if (reason := unhealthy()) and not loaded(settings):
         raise HTTPException(503, f"Not running a local model right now: {reason}")
 
     body = {

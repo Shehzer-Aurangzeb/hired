@@ -832,3 +832,36 @@ def test_choosing_nothing_keeps_the_configured_routing(monkeypatch):
     model.generate_json("p", {})
 
     assert order == ["local", "gemini"]
+
+
+def test_a_model_already_in_memory_is_not_refused_for_memory(monkeypatch):
+    """
+    The floor is about whether to load a model, not whether to use one. Resident,
+    a second call allocates nothing — and refusing it made the rewrite loop
+    impossible, since the first call was what used the memory.
+    """
+    settings = Settings(secret_key="t", ollama_model="mistral-nemo:12b")
+    monkeypatch.setattr(model, "get_settings", lambda: settings)
+    monkeypatch.setattr(model, "unhealthy", lambda: "only 12% of memory is free")
+    monkeypatch.setattr(model._LOCAL, "post", lambda url, **kw: _reply(200, OLLAMA_OK))
+
+    monkeypatch.setattr(model, "loaded", lambda s: True)
+    assert model.generate_json("p", {}, local="first") == {"score": 7}
+
+    # Not loaded, the floor still applies: that call would allocate 8GB.
+    monkeypatch.setattr(model, "loaded", lambda s: False)
+    with pytest.raises(HTTPException) as refused:
+        model.generate_json("p", {}, local="first")
+    assert refused.value.status_code == 503
+
+
+def test_loaded_reads_what_ollama_has_resident(monkeypatch):
+    settings = Settings(secret_key="t", ollama_model="granite3.3:8b")
+
+    def ps(url, **kwargs):
+        assert url.endswith("/api/ps")
+        return _reply(200, {"models": [{"name": "granite3.3:8b"}]})
+
+    monkeypatch.setattr(model._LOCAL, "get", ps)
+    assert model.loaded(settings) is True
+    assert model.loaded(Settings(secret_key="t", ollama_model="qwen2.5:7b")) is False

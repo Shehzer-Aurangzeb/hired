@@ -33,6 +33,11 @@ router = APIRouter(tags=["generate"])
 class GenerateRequest(BaseModel):
     # Name a model to answer with, or leave empty for the configured routing.
     model: str = ""
+    # The row this selection belongs to, if it has been saved. Given it, the
+    # chosen bullets are recorded now rather than only at export: an email is
+    # written from them, and requiring a PDF first made a posting you apply to
+    # in a text box impossible to write for.
+    application_id: int | None = None
     jd_text: str
     parsed_jd: ParsedJd = ParsedJd()
     title_variant: str | None = None
@@ -234,7 +239,28 @@ def generate(body: GenerateRequest, session: SessionDep) -> GenerateResponse:
 
     answer = _select(profile, text, body)
     cv, flags = _assemble(profile, answer, body.title_variant, body.parsed_jd)
+
+    if body.application_id is not None:
+        row = session.get(Application, body.application_id)
+        if row is not None:
+            _remember(row, cv)
+            session.add(row)
+            session.commit()
+
     return GenerateResponse(cv=cv, flags=flags, model=served.get(), notice=notice.get())
+
+
+def _remember(row: Application, cv: GeneratedCv) -> None:
+    """The selection, on the row. Export overwrites it with what actually printed."""
+    row.title_variant = cv.title
+    row.summary_text = cv.summary
+    row.selected_bullet_ids = [b.id for s in cv.sections for b in s.bullets]
+    row.selected_bullets = [
+        {"id": bullet.id, "text": bullet.text, "project_name": section.project_name}
+        for section in cv.sections
+        for bullet in section.bullets
+    ]
+    row.coverage = [item.model_dump() for item in cv.coverage]
 
 
 def _pool(profile: Profile) -> list[Bullet]:
@@ -760,16 +786,9 @@ def export(body: ExportRequest, session: SessionDep) -> ExportResponse:
 
     row.pdf = pdf
     row.filename = filename(profile.identity.name, row.company)
-    # Snapshot of what was sent, as printed.
-    row.title_variant = body.cv.title
-    row.summary_text = body.cv.summary
-    row.selected_bullet_ids = [b.id for s in body.cv.sections for b in s.bullets]
-    row.selected_bullets = [
-        {"id": bullet.id, "text": bullet.text, "project_name": section.project_name}
-        for section in body.cv.sections
-        for bullet in section.bullets
-    ]
-    row.coverage = [item.model_dump() for item in body.cv.coverage]
+    # Snapshot of what was sent, as printed: it can differ from what was
+    # selected, since bullets can be deselected between the two.
+    _remember(row, body.cv)
     row.model = body.model or row.model
     session.add(row)
     session.commit()

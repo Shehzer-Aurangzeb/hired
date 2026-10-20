@@ -405,6 +405,9 @@ export interface FitResponse {
 export interface GenerateRequest {
   /** Which model to answer with. Empty means the backend's configured routing. */
   model?: string;
+  /** The row to record the selection on, so an email can be written from it
+   *  without exporting a PDF first. */
+  application_id?: number;
   jd_text: string;
   parsed_jd: ParsedJd;
   title_variant?: string;

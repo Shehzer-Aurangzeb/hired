@@ -417,6 +417,22 @@
               Answer it
             }
           </button>
+          @if (gen.models().length > 1) {
+            <select
+              class="select mono !w-auto !py-1 text-[11px]"
+              [value]="gen.model()"
+              (change)="gen.useModel($any($event.target).value)"
+              [disabled]="!!writing()"
+              aria-label="Model"
+              title="Which model writes it. They differ more here than anywhere
+                     else in the app: the same prompt gave one model five plain
+                     sentences and another a cover letter twice the length."
+            >
+              @for (name of gen.models(); track name) {
+                <option [value]="name">{{ name }}</option>
+              }
+            </select>
+          }
         </div>
 
         @if (draft(); as made) {
@@ -441,6 +457,31 @@
               (input)="edited.set($any($event.target).value)"
               aria-label="The text, editable before you copy it"
             ></textarea>
+            <div class="mt-2 flex gap-2">
+              <input
+                class="field !min-h-8 min-w-0 flex-1 !py-1 text-[12px]"
+                placeholder="Shorter. Drop the last line. Lead with the schema work."
+                [value]="change()"
+                (input)="change.set($any($event.target).value)"
+                (keydown.enter)="rewrite(application.id)"
+                [disabled]="!!writing()"
+                aria-label="What to change about this draft"
+              />
+              <button
+                type="button"
+                class="btn btn-outline !min-h-8"
+                [disabled]="!!writing() || !change().trim()"
+                (click)="rewrite(application.id)"
+              >
+                @if (writing()) {
+                  <app-icon name="refresh" [size]="14" class="animate-spin" />
+                  Rewriting
+                } @else {
+                  <app-icon name="refresh" [size]="14" />
+                  Rewrite
+                }
+              </button>
+            </div>
             <div class="mt-2 flex flex-wrap items-center gap-2">
               <button type="button" class="btn btn-primary !min-h-8" (click)="copy(edited())">
                 <app-icon name="copy" [size]="14" />

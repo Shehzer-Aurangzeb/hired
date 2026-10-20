@@ -5,6 +5,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, map, of, switchMap } from 'rxjs';
 
 import { ApplicationsService } from '../../core/applications.service';
+import { GenerateService } from '../../core/generate.service';
 import { Coverage, computeCoverage } from '../../core/coverage';
 import { ago, daysSince } from '../../core/dates';
 import {
@@ -33,6 +34,12 @@ export class ApplicationDetail {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly sanitizer = inject(DomSanitizer);
+  /** Holds the model list and the chosen one, shared with the Generate screen. */
+  readonly gen = inject(GenerateService);
+
+  constructor() {
+    this.gen.loadModels();
+  }
 
   readonly statuses = APPLICATION_STATUSES;
   readonly track = TRACK;
@@ -58,6 +65,8 @@ export class ApplicationDetail {
   readonly draft = signal<Artifact | null>(null);
   readonly edited = signal('');
   readonly copied = signal(false);
+  /** What to change about the draft. Cleared once it has been asked for. */
+  readonly change = signal('');
 
   private readonly loaded = toSignal<Application | null | undefined>(
     this.route.paramMap.pipe(
@@ -151,12 +160,33 @@ export class ApplicationDetail {
       this.toast.error('Paste the question the form is asking first.');
       return;
     }
+    this.ask(id, kind, question, '', '');
+  }
+
+  /** The back and forth: the draft on screen goes back with what to change. */
+  rewrite(id: number): void {
+    const draft = this.draft();
+    const change = this.change().trim();
+    if (!draft || !change) {
+      return;
+    }
+    this.ask(id, draft.kind, draft.question, this.edited(), change);
+  }
+
+  private ask(
+    id: number,
+    kind: 'email' | 'answer',
+    question: string,
+    draft: string,
+    change: string,
+  ): void {
     this.writing.set(kind);
     this.copied.set(false);
-    this.api.writeArtifact(id, { kind, question }).subscribe({
+    this.api.writeArtifact(id, { kind, question, draft, change }).subscribe({
       next: (made) => {
         this.draft.set(made);
         this.edited.set(made.body);
+        this.change.set('');
         this.writing.set(null);
         // Keep the row in step without a refetch, as saving does.
         const current = this.record();
