@@ -62,6 +62,8 @@ class ApplicationOut(BaseModel):
     coverage: list[dict]
     # Which model chose the bullets on the saved PDF.
     model: str = ""
+    # Emails and form answers written for this posting, newest last.
+    artifacts: list[dict] = []
 
     has_pdf: bool
     filename: str | None

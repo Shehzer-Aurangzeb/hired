@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { API } from './api';
-import { Application } from './models';
+import { Application, Artifact } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class ApplicationsService {
@@ -24,6 +24,14 @@ export class ApplicationsService {
 
   patch(id: number, changes: Partial<Application>): Observable<Application> {
     return this.http.patch<Application>(`${API}/api/applications/${id}`, changes);
+  }
+
+  /** Writes an email or a form answer from the application and keeps it on the row. */
+  writeArtifact(
+    id: number,
+    body: { kind: 'email' | 'answer'; question?: string; model?: string },
+  ): Observable<Artifact> {
+    return this.http.post<Artifact>(`${API}/api/applications/${id}/artifacts`, body);
   }
 
   /** Temporary: rebuilds the stored PDF. Remove with POST /api/reexport and its button. */

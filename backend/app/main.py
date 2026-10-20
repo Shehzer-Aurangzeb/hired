@@ -14,7 +14,7 @@ from datetime import timedelta
 from sqlmodel import select
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import applications, ask, auth, fit, generate
+from . import applications, artifacts, ask, auth, fit, generate
 from .db import SessionDep, init_db
 from .models import Profile, ValidationResult
 from .profile_parser import ProfileError, parse_text, replace_bullet_text, validate_text
@@ -279,6 +279,7 @@ def restore_version(version: int, body: RestoreBody, session: SessionDep):
 
 
 api.include_router(applications.router)
+api.include_router(artifacts.router)
 api.include_router(ask.router)
 api.include_router(fit.router)
 api.include_router(generate.router)

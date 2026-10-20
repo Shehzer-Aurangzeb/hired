@@ -94,6 +94,21 @@ SELECTION = {
     ],
 }
 
+# What an email looks like when the facts arrive already decided: the posting's
+# own role, two bullets from the CV, and the gap, with none of the register.
+ARTIFACT = {
+    "subject": "Senior Front-End Engineer, React and TypeScript",
+    "body": (
+        "I saw the Senior Front-End Engineer role at Fernhill and have attached my CV.\n\n"
+        "Most of my five years has been on data-heavy React and TypeScript interfaces: "
+        "I virtualised a transactions table so 50,000-row ledgers scroll smoothly, "
+        "cutting p75 load time by 40%, and built a 40-component library in Storybook "
+        "that six client projects now use.\n\n"
+        "React Native is on my list rather than behind me, so the mobile work would be "
+        "a first. Happy to talk through any of it."
+    ),
+}
+
 ASK = {
     "reply": "Recorded Redux at working level on Ledgerline and Tidepool.",
     "questions": [],
@@ -148,6 +163,8 @@ def answer(schema: dict, prompt: str = "") -> dict:
                 [],
             )
         }
+    if set(properties) == {"subject", "body"}:  # an email or a form answer
+        return ARTIFACT
     if "op" in properties:
         return {"op": ASK["changes"][0]["op"], "reply": ASK["reply"], "questions": []}
     if "changes" in properties:

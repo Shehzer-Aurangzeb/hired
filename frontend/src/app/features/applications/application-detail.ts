@@ -7,7 +7,13 @@ import { catchError, map, of, switchMap } from 'rxjs';
 import { ApplicationsService } from '../../core/applications.service';
 import { Coverage, computeCoverage } from '../../core/coverage';
 import { ago, daysSince } from '../../core/dates';
-import { APPLICATION_STATUSES, Application, ApplicationStatus, SentBullet } from '../../core/models';
+import {
+  APPLICATION_STATUSES,
+  Application,
+  ApplicationStatus,
+  Artifact,
+  SentBullet,
+} from '../../core/models';
 import { SEGMENTS, inSegment, scoreTone, statusClass, waitingDays } from '../../core/pipeline';
 import { ToastService } from '../../core/toast.service';
 import { Icon } from '../../shared/icon';
@@ -43,6 +49,15 @@ export class ApplicationDetail {
   readonly rebuilding = signal(false);
   readonly stamp = signal<number | null>(null);
   readonly local = signal<Application | null>(null);
+
+  /** Which kind is being written, or null. One at a time: each is a model call. */
+  readonly writing = signal<'email' | 'answer' | null>(null);
+  readonly question = signal('');
+  /** The one just written, editable before you copy it. Edits are for the copy;
+   *  what is kept on the row is what the model actually wrote. */
+  readonly draft = signal<Artifact | null>(null);
+  readonly edited = signal('');
+  readonly copied = signal(false);
 
   private readonly loaded = toSignal<Application | null | undefined>(
     this.route.paramMap.pipe(
@@ -127,6 +142,48 @@ export class ApplicationDetail {
   }
 
   /** Saves on blur. */
+  /** Newest first, and never the one still open as a draft. */
+  readonly written = computed(() => [...(this.record()?.artifacts ?? [])].reverse());
+
+  write(id: number, kind: 'email' | 'answer'): void {
+    const question = this.question().trim();
+    if (kind === 'answer' && !question) {
+      this.toast.error('Paste the question the form is asking first.');
+      return;
+    }
+    this.writing.set(kind);
+    this.copied.set(false);
+    this.api.writeArtifact(id, { kind, question }).subscribe({
+      next: (made) => {
+        this.draft.set(made);
+        this.edited.set(made.body);
+        this.writing.set(null);
+        // Keep the row in step without a refetch, as saving does.
+        const current = this.record();
+        if (current) {
+          this.local.set({ ...current, artifacts: [...current.artifacts, made] });
+        }
+      },
+      error: () => this.writing.set(null),
+    });
+  }
+
+  copy(text: string): void {
+    navigator.clipboard.writeText(text).then(
+      () => {
+        this.copied.set(true);
+        setTimeout(() => this.copied.set(false), 2000);
+      },
+      () => this.toast.error('Could not reach the clipboard.'),
+    );
+  }
+
+  reopen(made: Artifact): void {
+    this.draft.set(made);
+    this.edited.set(made.body);
+    this.copied.set(false);
+  }
+
   saveNotes(current: Application, notes: string): void {
     const next = notes.trim() || null;
     if (next === (current.notes ?? null)) {

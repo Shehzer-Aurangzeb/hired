@@ -177,4 +177,5 @@ cd backend && .venv/bin/python -m pytest
 - [docs/master_interview_prompt.md](docs/master_interview_prompt.md): a prompt that interviews you and writes your profile
 - [docs/parser_contract.md](docs/parser_contract.md): the profile grammar
 - [docs/profile-editing.md](docs/profile-editing.md): how editing by sentence works
+- [docs/artifacts.md](docs/artifacts.md): the email and the answer, and why a model writes them
 - [docs/PROGRESS.md](docs/PROGRESS.md): build log

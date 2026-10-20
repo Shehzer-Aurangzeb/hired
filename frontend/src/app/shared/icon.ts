@@ -25,6 +25,7 @@ export type IconName =
   | 'globe'
   | 'upload'
   | 'more'
+  | 'copy'
   | 'claude';
 
 // Inline Lucide SVGs. Inlining avoids an icon dependency and DomSanitizer.
@@ -113,6 +114,10 @@ export type IconName =
           <path d="M21 3v5h-5" />
           <path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-6.7-3L3 16" />
           <path d="M3 21v-5h5" />
+        }
+        @case ('copy') {
+          <rect x="9" y="9" width="12" height="12" rx="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
         }
         @case ('mail') {
           <rect x="2" y="4" width="20" height="16" rx="2" />

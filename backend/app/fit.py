@@ -191,7 +191,8 @@ def requirements(profile: Profile, jd: ParsedJd) -> tuple[list[str], list[str], 
             # Named, because the requirement's own words are not proof of
             # anything: handed "exposure to Azure or another cloud platform"
             # as met, the model wrote that the candidate has used Azure.
-            met.append(f"{name} — {', '.join(backing[:3])}")
+            named = ", ".join(b for b in backing[:3] if _terms(b) != _terms(name))
+            met.append(f"{name} — {named}" if named else name)
             points += weight
             continue
 

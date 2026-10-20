@@ -366,6 +366,116 @@
       </div>
     </div>
 
+    <!-- What the form wants, when it wants text rather than a file. -->
+    <section class="card mt-3 overflow-hidden">
+      <header class="card-head">
+        <h2 class="section-title">Email and answers</h2>
+        <span class="text-fg-subtle ml-auto text-[11px]">
+          Written from the bullets on this CV. Read it before you send it.
+        </span>
+      </header>
+
+      @if (!application.selected_bullets.length) {
+        <p class="text-fg-muted p-3.5 text-[13px]">
+          No CV was generated for this posting, so there is no evidence to write
+          from. Generate one first.
+        </p>
+      } @else {
+        <div class="border-line flex flex-wrap items-center gap-2 border-b p-3.5">
+          <button
+            type="button"
+            class="btn btn-outline !min-h-8"
+            [disabled]="!!writing()"
+            (click)="write(application.id, 'email')"
+          >
+            @if (writing() === 'email') {
+              <app-icon name="refresh" [size]="14" class="animate-spin" />
+              Writing
+            } @else {
+              <app-icon name="mail" [size]="14" />
+              Write an email
+            }
+          </button>
+          <input
+            class="field !min-h-8 min-w-0 flex-1 !py-1 text-[12px]"
+            placeholder="Paste the question the form is asking, then answer it"
+            [value]="question()"
+            (input)="question.set($any($event.target).value)"
+            (keydown.enter)="write(application.id, 'answer')"
+            aria-label="The question to answer"
+          />
+          <button
+            type="button"
+            class="btn btn-outline !min-h-8"
+            [disabled]="!!writing() || !question().trim()"
+            (click)="write(application.id, 'answer')"
+          >
+            @if (writing() === 'answer') {
+              <app-icon name="refresh" [size]="14" class="animate-spin" />
+              Writing
+            } @else {
+              Answer it
+            }
+          </button>
+        </div>
+
+        @if (draft(); as made) {
+          <div class="p-3.5">
+            @if (made.subject) {
+              <p class="mb-2 flex items-baseline gap-2 text-[13px]">
+                <span class="text-fg-muted shrink-0 text-[11px] font-medium uppercase">
+                  Subject
+                </span>
+                <span class="font-medium">{{ made.subject }}</span>
+              </p>
+            }
+            @for (flag of made.flags ?? []; track flag.message) {
+              <p class="bg-warn-soft text-warn mb-2 rounded-md px-2.5 py-1.5 text-[12px]">
+                <app-icon name="alert" [size]="13" class="mr-1 inline" />{{ flag.message }}
+              </p>
+            }
+            <textarea
+              rows="8"
+              class="field resize-y font-normal"
+              [value]="edited()"
+              (input)="edited.set($any($event.target).value)"
+              aria-label="The text, editable before you copy it"
+            ></textarea>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <button type="button" class="btn btn-primary !min-h-8" (click)="copy(edited())">
+                <app-icon name="copy" [size]="14" />
+                {{ copied() ? 'Copied' : 'Copy' }}
+              </button>
+              <span class="mono text-fg-subtle text-[11px]">{{ made.model }}</span>
+              <span class="text-fg-subtle ml-auto text-[11px]">
+                Edits here are for the copy. The row keeps what the model wrote.
+              </span>
+            </div>
+          </div>
+        }
+
+        @if (written().length) {
+          <ul class="border-line divide-line divide-y border-t">
+            @for (made of written(); track made.created_at) {
+              <li>
+                <button
+                  type="button"
+                  class="hover:bg-surface flex w-full items-baseline gap-2 px-3.5 py-2 text-left transition-colors duration-150"
+                  (click)="reopen(made)"
+                >
+                  <span class="chip shrink-0">{{ made.kind }}</span>
+                  <span class="text-fg-muted min-w-0 flex-1 truncate text-[12px]">
+                    {{ made.question || made.subject || made.body }}
+                  </span>
+                  <span class="text-fg-subtle shrink-0 text-[11px]">{{ ago(made.created_at) }}</span>
+                </button>
+              </li>
+            }
+          </ul>
+        }
+      }
+    </section>
+
     <section class="card mt-3 overflow-hidden">
       <header class="card-head">
         <h2 class="section-title">Job description</h2>

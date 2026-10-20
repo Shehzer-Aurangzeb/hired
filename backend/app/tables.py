@@ -74,6 +74,11 @@ class Application(SQLModel, table=True):
     # says what made it rather than what is configured today.
     model: str = ""
 
+    # Emails and form answers written for this posting, newest last. On the row
+    # rather than in a table of their own: they are read with their application
+    # and never queried across. {kind, question, subject, body, model, created_at}
+    artifacts: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
+
     # Stored as bytes so the database is the only file to back up.
     pdf: bytes | None = Field(default=None, sa_column=Column(LargeBinary, nullable=True))
     filename: str | None = None

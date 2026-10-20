@@ -230,12 +230,26 @@ export class GeneratePage {
     });
   }
 
-  /** Save the posting without generating a CV. */
-  keep(): void {
+  /** Decided against it. "skipped" is its own pipeline segment and is left
+   *  out of the sent count, so it must not be used for one you are pursuing. */
+  skip(): void {
     this.save('skipped').subscribe({
       next: (row) => {
-        this.toast.ok(`Kept ${row.company}. No CV was made for it.`);
+        this.toast.ok(`Skipped ${row.company}. No CV was made for it.`);
         this.reset();
+      },
+      error: () => {},
+    });
+  }
+
+  /** Applying, but the form wants text rather than a file: Wellfound and the
+   *  like. Saves as "saved" and opens the row, where the email and the answer
+   *  are written. */
+  saveWithoutCv(): void {
+    this.save('saved').subscribe({
+      next: (row) => {
+        this.reset();
+        this.router.navigate(['/applications', row.id]);
       },
       error: () => {},
     });

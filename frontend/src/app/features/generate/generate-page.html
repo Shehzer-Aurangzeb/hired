@@ -245,11 +245,21 @@
           type="button"
           class="btn btn-outline"
           [disabled]="gen.saving() || gen.generating()"
-          (click)="keep()"
-          title="Save the posting and its gaps without making a CV for it."
+          (click)="saveWithoutCv()"
+          title="For a form that wants text rather than a file. Saves the posting
+                 and opens it, where the email and the answer are written."
         >
           <app-icon name="file-text" [size]="15" />
-          Keep, not applying
+          Save without a CV
+        </button>
+        <button
+          type="button"
+          class="btn btn-ghost"
+          [disabled]="gen.saving() || gen.generating()"
+          (click)="skip()"
+          title="Decided against this one. Kept with its gaps, counted as skipped."
+        >
+          Skip this one
         </button>
         <button type="button" class="btn btn-ghost ml-auto" (click)="reset()">
           <app-icon name="x" [size]="15" />

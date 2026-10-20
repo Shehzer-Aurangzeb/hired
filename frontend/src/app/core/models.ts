@@ -469,6 +469,8 @@ export interface Application {
   model: string;
   /** Which model read the posting and scored it. Empty on older rows. */
   fit_model: string;
+  /** Emails and form answers written for this posting, newest last. */
+  artifacts: Artifact[];
   /** The PDF itself is at /api/applications/{id}/pdf. */
   has_pdf: boolean;
   filename: string | null;
@@ -476,4 +478,19 @@ export interface Application {
   applied_at: string | null;
   created_at: string;
   notes: string | null;
+}
+
+/** An email or a form answer, written from the application and kept on it. */
+export interface Artifact {
+  kind: 'email' | 'answer';
+  /** The question, for an answer. Empty for an email. */
+  question: string;
+  /** The subject line, for an email. Empty for an answer. */
+  subject: string;
+  body: string;
+  model: string;
+  created_at: string;
+  /** Banned phrases found in the text. Only on a freshly written one: it is a
+   *  verdict on today's rules, not a fact about the artifact. */
+  flags?: Flag[];
 }
