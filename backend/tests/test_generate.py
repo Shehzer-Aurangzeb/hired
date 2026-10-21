@@ -1338,3 +1338,21 @@ def test_a_project_covering_most_of_the_posting_beats_one_adding_a_single_prefer
         preferred_skills=[RequiredSkill(name="exposure to a cloud platform", importance=1)],
     )
     assert [p.id for p in _rank(profile, jd, 7, title="fullstack")] == ["first", "product", "hosting"]
+
+
+def test_the_skills_block_leads_with_what_the_posting_asks_and_stays_one_line_a_row():
+    from app.models import SkillLine
+
+    profile = parse_text(DEFAULT_TEMPLATE)
+    profile.skills = [
+        SkillLine(line="Frontend", items=["React Hook Form", "Storybook", "TypeScript", "React"] + [f"Lib{i}" for i in range(20)]),
+        SkillLine(line="CMS", items=["WordPress", "Sanity"]),
+        SkillLine(line="Backend", items=["Express"]),
+        SkillLine(line="Data", items=["MongoDB"]),
+    ]
+    jd = _jd("Experience with React", "Knowledge of JavaScript")
+    rows = generate._skills(profile, set(), jd)
+    assert rows[0].items[:2] == ["TypeScript", "React"]
+    assert all(len(f"{r.line}: " + " · ".join(r.items)) <= generate._SKILLS_ROW_CHARS for r in rows)
+    # Nothing asked for or printed: dropped, but three rows always remain, in written order.
+    assert [r.line for r in rows] == ["Frontend", "CMS", "Backend"]

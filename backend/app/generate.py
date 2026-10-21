@@ -393,7 +393,7 @@ def _assemble(
     cv = GeneratedCv(
         title=title.text if title else "",
         summary=summary.text if summary else "",
-        skills_lines=_skills(profile, {section.project_id for section in sections}),
+        skills_lines=_skills(profile, {section.project_id for section in sections}, jd),
         sections=sections,
         coverage=_coverage(jd, answer, sections, profile),
     )
@@ -489,7 +489,7 @@ def _coverage(
     were read.
     """
     printed = [item for section in sections for item in section.stack[:4]] + [
-        item for row in _skills(profile, {s.project_id for s in sections}) for item in row.items
+        item for row in _skills(profile, {s.project_id for s in sections}, jd) for item in row.items
     ]
 
     def on_page(words: set[str]) -> str:
@@ -659,7 +659,7 @@ def _fill_page(profile, title, summary, sections, projects, rules, flags, jd) ->
         return GeneratedCv(
             title=title.text if title else "",
             summary=summary.text if summary else "",
-            skills_lines=_skills(profile, {s.project_id for s in sections}),
+            skills_lines=_skills(profile, {s.project_id for s in sections}, jd),
             sections=sections,
         )
 
@@ -768,35 +768,70 @@ def _target(rules) -> str:
     return f"{max(6, most // 2)} to {max(8, int(most * 0.7))}"
 
 
-def _skills(profile: Profile, selected: set[str]) -> list[SkillsLine]:
-    """Gated skills print only when a project evidencing them is on the page."""
-    tags = {
-        tag.lower()
-        for project in profile.all_projects()
-        if project.id in selected
-        for tag in project.tags
-    }
+# ponytail: characters, not measured width. "Label: a · b · c" at 10pt Inter
+# fills the content box at about this many; measure in Chromium if rows wrap.
+_SKILLS_ROW_CHARS = 100
+
+
+def _skills(profile: Profile, selected: set[str], jd: ParsedJd | None = None) -> list[SkillsLine]:
+    """
+    The skills block, one printed line per row, tailored to the posting.
+
+    Printed whole, it ran to five rows of up to seventeen items, wrapping to
+    seven or eight lines, and put Sanity and WordPress on a C++ posting. Within
+    a row, what the posting names comes first, then what a printed project
+    uses, then the rest, until the line is full. A row with neither is dropped,
+    keeping at least three. Row order stays as written.
+
+    Gated skills print only when a project evidencing them is on the page.
+    """
+    printed = [project for project in profile.all_projects() if project.id in selected]
+    tags = {tag.lower() for project in printed for tag in project.tags}
+    used = {item.lower() for project in printed for item in project.stack}
     evidenced = {
         skill.name.lower()
         for skill in profile.skill_evidence
         if any(project in selected for project in skill.evidence)
     }
-    lines: list[SkillsLine] = []
+    wants = [words for _name, _w, words, kind in _wants(jd) if kind != "trait"] if jd else []
+
+    def score(item: str) -> int:
+        # The item whole, or what it implies. Word by word, "React Hook Form"
+        # answered a posting asking for React and led the row.
+        own = _terms(item)
+        have = {" ".join(sorted(own))} | (taxonomy.implied(own, [item]) - own)
+        if any(taxonomy.backs(words, have) for words in wants):
+            return 2
+        return 1 if item.lower() in used | evidenced else 0
+
+    rows: list[tuple[int, SkillsLine]] = []
     for row in profile.skills:
         # A whole row that belongs to one kind of work: no Mobile row on a web page.
         if row.only_with and not {tag.lower() for tag in row.only_with} & tags:
             continue
         gated = {item.lower() for item in row.gated}
-        items = [
+        allowed = [
             item for item in row.items if item.lower() not in gated or item.lower() in evidenced
         ]
+        ranked = sorted(allowed, key=score, reverse=True) if jd else allowed
+        items: list[str] = []
+        for item in ranked:
+            if len(f"{row.line}: " + " · ".join(items + [item])) > _SKILLS_ROW_CHARS:
+                break
+            items.append(item)
         # never_standalone earns its place only next to something else.
         alone = {item.lower() for item in row.never_standalone}
         if len(items) == 1 and items[0].lower() in alone:
             items = []
         if items:
-            lines.append(SkillsLine(line=row.line, items=items))
-    return lines
+            rows.append((max(map(score, items)) if jd else 1, SkillsLine(line=row.line, items=items)))
+
+    keep = {id(line) for best, line in rows if best}
+    for _best, line in rows:
+        if len(keep) >= 3:
+            break
+        keep.add(id(line))
+    return [line for _best, line in rows if id(line) in keep]
 
 
 def _words(text: str) -> list[str]:
@@ -922,7 +957,11 @@ def reexport(body: ReexportRequest, session: SessionDep) -> ExportResponse:
     cv = GeneratedCv(
         title=row.title_variant or "",
         summary=row.summary_text or "",
-        skills_lines=_skills(profile, {section.project_id for section in sections}),
+        skills_lines=_skills(
+            profile,
+            {section.project_id for section in sections},
+            ParsedJd.model_validate(row.jd_parsed) if row.jd_parsed else None,
+        ),
         sections=sections,
     )
     pdf, pages = to_pdf(render_html(profile, cv))
