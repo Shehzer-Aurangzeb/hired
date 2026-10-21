@@ -88,6 +88,9 @@ authorization: Authorized to work in Canada, no sponsorship required
   # gated: reaches the page only when a project evidencing it is also selected.
   # Use this for anything you have done once, on a personal project, or in study.
   gated: [AWS]
+  # only_with: the whole row prints only when a selected project carries one of
+  # these tags. A Mobile row has no place on a web front-end page.
+  # only_with: [infra]
 
 ---
 

@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from .db import SessionDep
+from . import taxonomy
 from .model import choose, generate_json, notice, served
 from .models import (
     Bullet,
@@ -124,7 +125,7 @@ def _select(profile: Profile, jd_text: str, body: "GenerateRequest") -> dict:
 
     asks = jd.model_dump_json()
     sections = []
-    for project in _rank(profile, jd, rules.max_projects):
+    for project in _rank(profile, jd, rules.max_projects, title_id):
         pool = [b for b in project.bullets if b.status != "blocked"]
         answer = generate_json(
             BULLETS_ASK.format(
@@ -169,7 +170,15 @@ def _wants(jd: ParsedJd) -> list[tuple[str, int, set[str], str]]:
     return out
 
 
-def _rank(profile: Profile, jd: ParsedJd, limit: int) -> list[Project]:
+def _evidence(project: Project) -> set[str]:
+    """The words a project can answer to, with what its stack honestly implies."""
+    live = [bullet.text for bullet in project.bullets if bullet.status != "blocked"]
+    return taxonomy.implied(
+        _terms(" ".join(live + project.stack + project.tags)), project.stack + project.tags
+    )
+
+
+def _rank(profile: Profile, jd: ParsedJd, limit: int, title: str = "") -> list[Project]:
     """
     The projects that between them back the most of what the posting asks for.
 
@@ -178,47 +187,76 @@ def _rank(profile: Profile, jd: ParsedJd, limit: int) -> list[Project]:
     left the database work off, because every one of them scored well on the
     same words. Each pick here is worth what it adds to the ones already chosen,
     so the second database project is worth less than the first.
+
+    Divided by the project's own priority. Counting words alone, a single-user
+    personal tool and a live product with a team of ten scored the same, and a
+    crypto analysis platform topped a front-end posting on the strength of its
+    stack list. The priority is the one the person wrote, so it is theirs to
+    tune, and it is the only knob: status and scale are already in it.
+
+    The chosen title is a tag too. Ranked by words alone, a React Native chat
+    app led a web front-end posting on the strength of the word "React", three
+    mobile bullets deep. Counting it half still left it second. So mobile work
+    stays off the page entirely unless the title is mobile or the posting asks
+    for it: a reader who sees React Native files the CV under mobile.
+    # ponytail: one direction only. Mirror it for mobile postings if a web
+    # project ever tops one; it has not happened yet.
+
+    Three model-based rankers were measured first and all failed at temperature
+    0: a 66-bullet list came back in file order, a 16-project menu came back in
+    file order, and a 0-10 relevance score came back 7 or 8 for everything. A
+    local model picks well within one project and cannot rank across them.
     """
+    wants = _wants(jd)
+    asks_mobile = title == "mobile" or any(
+        {"mobile", "ios", "android"} & words or {"react", "native"} <= words
+        for _name, _weight, words, _kind in wants
+    )
     pool = [
         project
         for project in profile.all_projects()
         if any(bullet.status != "blocked" for bullet in project.bullets)
+        and (asks_mobile or "mobile" not in project.tags)
     ]
-    wants = _wants(jd)
+    # The reader's label and the code backstop both, as the fit and the
+    # coverage already do. Trusting the label alone let "desire to own code
+    # quality" count six points for a mobile app on a web posting.
+    scorable = [
+        (name, weight, words)
+        for name, weight, words, kind in wants
+        if kind != "trait" and _non_bullet(name, profile) != "not something a CV evidences"
+    ]
     covers = {
         project.id: {
             name: weight
-            for name, weight, words, _kind in wants
-            if words
-            & _terms(
-                " ".join(
-                    [bullet.text for bullet in project.bullets if bullet.status != "blocked"]
-                    + project.stack
-                    + project.tags
-                )
-            )
+            for name, weight, words in scorable
+            if taxonomy.backs(words, _evidence(project))
         }
         for project in pool
     }
 
     chosen: list[Project] = []
     covered: set[str] = set()
-    while pool and len(chosen) < limit:
-        def gain(project: Project) -> int:
-            return sum(w for name, w in covers[project.id].items() if name not in covered)
 
-        best = max(pool, key=lambda project: (gain(project), -project.priority))
-        if gain(best) == 0:
+    def fresh(project: Project) -> int:
+        return sum(w for name, w in covers[project.id].items() if name not in covered)
+
+    def gain(project: Project) -> tuple[float, int]:
+        # Overlap counts a little. Counting only what was new, an agency's
+        # WordPress hosting work outranked the React product on a React
+        # posting because it alone mentioned the cloud. Priority breaks ties,
+        # so a posting that names nothing a bullet mentions still gets a page.
+        total = sum(covers[project.id].values())
+        return (fresh(project) + total / 4) / max(project.priority, 1), -project.priority
+
+    while pool and len(chosen) < limit:
+        best = max(pool, key=gain)
+        # Four projects fill a page. Past that, only new coverage earns a place.
+        if len(chosen) >= min(limit, 4) and not fresh(best):
             break
         covered |= covers[best.id].keys()
         chosen.append(best)
         pool.remove(best)
-
-    # A posting that names nothing a bullet mentions still needs a page.
-    for project in sorted(pool, key=lambda project: project.priority):
-        if len(chosen) >= min(limit, 4):
-            break
-        chosen.append(project)
     return chosen
 
 
@@ -369,7 +407,8 @@ def _assemble(
 def _bullets(project: Project, ids: list, rules, flags: list[Flag]) -> list[SelectedBullet]:
     by_id = {bullet.id: bullet for bullet in project.bullets}
     chosen: list[SelectedBullet] = []
-    for raw in ids[: rules.max_bullets_per_project]:
+    # Once each: the model has returned the same id twice and it printed twice.
+    for raw in list(dict.fromkeys(ids))[: rules.max_bullets_per_project]:
         bullet = by_id.get(str(raw))
         if bullet is None:
             flags.append(
@@ -406,7 +445,8 @@ _DISPOSITION = re.compile(
     r"|collaborat|work(ing)? independently|independently and|multiple projects|multitask"
     r"|desire to learn|eager to learn|keen to learn|fast learner|quick learner"
     r"|self.learning|learning ability|time management|organisational|organizational"
-    r"|adaptab|flexib|work ethic|proactive|positive attitude|strong work)\b",
+    r"|adaptab|flexib|work ethic|proactive|positive attitude|strong work"
+    r"|desire to|ux principles?|design principles?)\b",
     re.I,
 )
 # ponytail: a named list, not a blanket "ability to" or "strong desire", which
@@ -442,7 +482,22 @@ def _coverage(
     entries for requirements that were not in the posting and left real ones
     empty. The bullets are known and the requirements are known, so nothing here
     needs a model: a bullet backs a requirement when it uses its words.
+
+    The page prints more than bullets: a stack line per project and the skills
+    block. JavaScript was reported unbacked with "JavaScript" sitting in the
+    skills block and TypeScript on three stack lines, because only the bullets
+    were read.
     """
+    printed = [item for section in sections for item in section.stack[:4]] + [
+        item for row in _skills(profile, {s.project_id for s in sections}) for item in row.items
+    ]
+
+    def on_page(words: set[str]) -> str:
+        return next(
+            (item for item in printed if taxonomy.backs(words, taxonomy.implied(_terms(item), [item]))),
+            "",
+        )
+
     return [
         SkillCoverage(
             skill=name,
@@ -450,9 +505,9 @@ def _coverage(
                 bullet.source_id or bullet.id
                 for section in sections
                 for bullet in section.bullets
-                if words & _terms(bullet.text)
+                if taxonomy.backs(words, taxonomy.implied(_terms(bullet.text), [bullet.text]))
             ],
-            backed_by=_non_bullet(name, profile),
+            backed_by=_non_bullet(name, profile) or on_page(words),
         )
         for name, _weight, words, _kind in _wants(jd)
     ]
@@ -503,7 +558,8 @@ def _check_qualifiers(sections, projects, context: set[str], flags: list[Flag]) 
             if tied and tied not in on_page:
                 continue
             # Keyword overlap, since the qualifier rarely appears word for word.
-            words = {w for w in _terms(qualifier) if len(w) > 4}
+            # "Solo build" is answered by a bullet saying "solo"; four letters count.
+            words = {w for w in _terms(qualifier) if len(w) > 3}
             if words and not words & says:
                 flags.append(
                     Flag(
@@ -539,7 +595,10 @@ MAX_FILL = 1.25
 _FILLER = frozenset(
     "a an and or the of in on for to with using strong clear basic solid good"
     " experience knowledge working familiarity understanding exposure ability"
-    " skills skill years proficiency demonstrated related least one".split()
+    " skills skill years proficiency demonstrated related least one"
+    # "open source contribution with code review" was answered by "opened a
+    # second checkout page" and by "code" in any bullet at all.
+    " code open source".split()
 )
 
 
@@ -711,6 +770,12 @@ def _target(rules) -> str:
 
 def _skills(profile: Profile, selected: set[str]) -> list[SkillsLine]:
     """Gated skills print only when a project evidencing them is on the page."""
+    tags = {
+        tag.lower()
+        for project in profile.all_projects()
+        if project.id in selected
+        for tag in project.tags
+    }
     evidenced = {
         skill.name.lower()
         for skill in profile.skill_evidence
@@ -718,6 +783,9 @@ def _skills(profile: Profile, selected: set[str]) -> list[SkillsLine]:
     }
     lines: list[SkillsLine] = []
     for row in profile.skills:
+        # A whole row that belongs to one kind of work: no Mobile row on a web page.
+        if row.only_with and not {tag.lower() for tag in row.only_with} & tags:
+            continue
         gated = {item.lower() for item in row.gated}
         items = [
             item for item in row.items if item.lower() not in gated or item.lower() in evidenced

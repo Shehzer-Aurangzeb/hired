@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from app import auth, fit, model
+from app import auth, fit, model, taxonomy
 from app.db import get_session
 from app.profile_parser import parse_text
 from app.profile_template import DEFAULT_TEMPLATE
@@ -280,6 +280,7 @@ def test_a_dead_local_model_still_lets_the_posting_be_read(monkeypatch):
     settings = Settings(secret_key="t", gemini_api_key="g", ollama_model="granite3.3:8b")
     monkeypatch.setattr(model, "get_settings", lambda: settings)
     monkeypatch.setattr(model, "unhealthy", lambda: "the Mac is thermally throttling")
+    monkeypatch.setattr(model, "loaded", lambda settings: False)
     monkeypatch.setattr(model, "_gemini", lambda *a, **k: {"score": 7})
 
     assert model.generate_json("anything", {}, local="first") == {"score": 7}
@@ -312,6 +313,7 @@ def test_a_tired_mac_is_not_asked_to_run_a_model(monkeypatch):
     settings = Settings(secret_key="t", ollama_model="granite3.3:8b")
     monkeypatch.setattr(model, "get_settings", lambda: settings)
     monkeypatch.setattr(model, "unhealthy", lambda: "only 4% of memory is free")
+    monkeypatch.setattr(model, "loaded", lambda settings: False)
 
     with pytest.raises(HTTPException) as error:
         model.generate_json("anything", {}, local="first")
@@ -865,3 +867,27 @@ def test_loaded_reads_what_ollama_has_resident(monkeypatch):
     monkeypatch.setattr(model._LOCAL, "get", ps)
     assert model.loaded(settings) is True
     assert model.loaded(Settings(secret_key="t", ollama_model="qwen2.5:7b")) is False
+
+
+def test_the_taxonomy_sees_through_punctuation():
+    """"Built it in TypeScript." implied nothing: the full stop broke the match."""
+    from app import taxonomy
+    from app.generate import _terms
+
+    for text in ("Built it in TypeScript.", "TypeScript, with React.", "(TypeScript)"):
+        assert "javascript" in taxonomy.implied(_terms(text), [text]), text
+    # A stray lowercase word inside another is still not a match.
+    assert "cloud" not in taxonomy.implied(_terms("Moved DNS to Cloudflare."), ["Moved DNS to Cloudflare."])
+
+
+def test_a_phrase_in_the_taxonomy_backs_only_the_whole_phrase():
+    """"cross-platform" answered "cloud platform" and "source control" answered "open source"."""
+    from app.generate import _terms
+
+    have = taxonomy.implied(set(), ["React Native", "Git"])
+    assert taxonomy.backs(_terms("cross-platform apps"), have)
+    assert taxonomy.backs(_terms("version control"), have)
+    assert not taxonomy.backs(_terms("exposure to Azure or another cloud platform"), have)
+    assert not taxonomy.backs(_terms("open source contribution"), have)
+    page = _terms("Reviewed code and opened a second checkout page.")
+    assert not taxonomy.backs(_terms("internship, co-op, or open source contribution with code review"), page)

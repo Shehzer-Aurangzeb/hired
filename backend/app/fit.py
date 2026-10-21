@@ -185,7 +185,12 @@ def requirements(profile: Profile, jd: ParsedJd) -> tuple[list[str], list[str], 
             "",
         )
         backing = sorted(
-            {backs[word] for choice in choices for word in _terms(choice) & backs.keys()}
+            {
+                skill
+                for item, skill in backs.items()
+                for choice in choices
+                if taxonomy.backs(_terms(choice), {item})
+            }
         )
         if not blocked and backing:
             # Named, because the requirement's own words are not proof of

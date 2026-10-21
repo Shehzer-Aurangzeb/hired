@@ -85,6 +85,8 @@ class SkillLine(Loose):
     items: list[str]
     never_standalone: list[str] = []
     gated: list[str] = []
+    # Project tags; the whole row prints only when a selected project carries one.
+    only_with: list[str] = []
 
 
 class SkillEvidence(Loose):

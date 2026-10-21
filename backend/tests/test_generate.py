@@ -197,23 +197,13 @@ def test_a_blocked_bullet_selected_anyway_never_prints(client, monkeypatch):
     assert body["cv"]["sections"] == []
 
 
-def test_the_rules_caps_are_enforced_after_the_answer(client, monkeypatch):
+def test_the_rules_caps_are_enforced_after_the_answer():
     """A model that ignores "at most 3" must not put four on the page."""
-    save_profile(client)
-    body = run(
-        client,
-        monkeypatch,
-        {
-            "title_id": "frontend",
-            "sections": [
-                {
-                    "project_id": "project-name",
-                    "bullet_ids": ["project-name-perf", "project-name-ci"] * 4,
-                }
-            ],
-        },
-    )
-    assert len(body["cv"]["sections"][0]["bullets"]) == 3
+    from app.models import Bullet, Project
+
+    project = Project(id="p", name="P", bullets=[Bullet(id=f"b{i}", text=f"Did {i}.") for i in range(4)])
+    chosen = generate._bullets(project, ["b0", "b1", "b2", "b3"], _PROFILE.rules, [])
+    assert [b.id for b in chosen] == ["b0", "b1", "b2"]
 
 
 BANNED = """# Identity
@@ -742,6 +732,14 @@ def test_coverage_reports_every_requirement_even_the_unbacked_ones():
     assert result[0].bullet_ids and result[1].bullet_ids == []
 
 
+def test_coverage_reads_the_stack_line_and_the_skills_block_too():
+    """"JavaScript" was reported unbacked with TypeScript printed on the stack line."""
+    page = [CvSection(project_id="sp", project_name="sp", stack=["TypeScript", "Vitest"],
+                      bullets=[SelectedBullet(id="b", text="Built the screens.", source_id="b")])]
+    result = generate._coverage(_jd("Proficient in JavaScript (ES6+)", "Vitest", "Fortran"), {}, page, _PROFILE)
+    assert [(c.bullet_ids, c.backed_by) for c in result] == [([], "TypeScript"), ([], "Vitest"), ([], "")]
+
+
 def test_coverage_reports_the_posting_requirements_and_nothing_else():
     result = generate._coverage(
         _jd("TypeScript"), {}, _sections(sp=["Fortran and TypeScript"]), _PROFILE
@@ -1096,9 +1094,10 @@ def test_one_project_does_not_answer_another_projects_caveat():
     from app.generate import _check_qualifiers
     from app.models import Bullet, ClaimBoundary, Project
 
+    # Named "Clinic", not "Solo": the project's own name is on the page and would answer it.
     solo = Project(
         id="solo",
-        name="Solo",
+        name="Clinic",
         bullets=[Bullet(id="s1", text="Designed the schema.")],
         claim_boundary=ClaimBoundary(required_qualifiers=["Solo build, so it proves ownership"]),
     )
@@ -1106,7 +1105,7 @@ def test_one_project_does_not_answer_another_projects_caveat():
     sections = [
         CvSection(
             project_id="solo",
-            project_name="Solo",
+            project_name="Clinic",
             bullets=[SelectedBullet(id="s1", source_id="s1", text="Designed the schema.")],
         ),
         CvSection(
@@ -1256,3 +1255,86 @@ def test_a_project_with_nothing_relevant_is_dropped_not_an_error(client, monkeyp
 
     assert len(asked) > 1, "it stopped at the empty one"
     assert all(section["bullet_ids"] for section in picked["sections"])
+
+
+def test_a_desire_is_a_trait_whatever_the_reader_called_it():
+    """"Desire to own code quality" came back labelled a skill and counted as a gap."""
+    from app.generate import _non_bullet
+    from app.profile_parser import parse_text
+    from app.profile_template import DEFAULT_TEMPLATE
+
+    profile = parse_text(DEFAULT_TEMPLATE)
+    for trait in ("Desire to own code quality and user experience",
+                  "Understanding of fundamental UX principles for the web"):
+        assert _non_bullet(trait, profile) == "not something a CV evidences", trait
+    # A technical "understanding of" is still a skill.
+    assert _non_bullet("Understanding of relational databases", profile) == ""
+
+
+def test_mobile_work_stays_off_a_web_posting_that_never_asks_for_it():
+    """
+    A React Native chat app led a web front-end posting on the word "React",
+    three mobile bullets deep. Halved, it came second. Off the page, unless the
+    title is mobile or the posting names mobile work.
+    """
+    from app.generate import _rank
+    from app.models import Bullet, ParsedJd, Project, RequiredSkill
+    from app.profile_parser import parse_text
+    from app.profile_template import DEFAULT_TEMPLATE
+
+    profile = parse_text(DEFAULT_TEMPLATE)
+    web = Project(id="web", name="Web", priority=1, tags=["frontend"],
+                  bullets=[Bullet(id="w1", text="Built React screens in TypeScript.")])
+    app = Project(id="app", name="App", priority=1, tags=["mobile", "frontend"],
+                  bullets=[Bullet(id="a1", text="Built React Native screens in TypeScript."),
+                           Bullet(id="a2", text="Shipped the React app to both stores.")])
+    profile.experience = []
+    profile.projects = [app, web]
+
+    def ids(title, *asks):
+        jd = ParsedJd(required_skills=[RequiredSkill(name=n, importance=3) for n in asks])
+        return [p.id for p in _rank(profile, jd, 7, title=title)]
+
+    assert ids("frontend", "React", "TypeScript") == ["web"]
+    assert ids("mobile", "React", "TypeScript") == ["app", "web"]
+    assert "app" in ids("frontend", "React Native")
+    assert "app" in ids("frontend", "iOS")
+
+
+def test_a_skills_row_with_only_with_needs_a_project_of_that_kind_on_the_page():
+    from app.models import SkillLine
+
+    profile = parse_text(DEFAULT_TEMPLATE)
+    profile.skills = [SkillLine(line="Infra", items=["Docker"], only_with=["infra"])]
+    infra = next(p for p in profile.all_projects() if "infra" in p.tags)
+    web = next(p for p in profile.all_projects() if "infra" not in p.tags)
+    assert generate._skills(profile, {web.id}) == []
+    assert [row.line for row in generate._skills(profile, {infra.id})] == ["Infra"]
+
+
+def test_a_bullet_id_returned_twice_prints_once():
+    project = _PROFILE.all_projects()[0]
+    bullet = project.bullets[0]
+    flags: list = []
+    chosen = generate._bullets(project, [bullet.id, bullet.id], _PROFILE.rules, flags)
+    assert [b.id for b in chosen] == [bullet.id] and flags == []
+
+
+def test_a_project_covering_most_of_the_posting_beats_one_adding_a_single_preferred_item():
+    from app.generate import _rank
+    from app.models import Bullet, ParsedJd, Project, RequiredSkill
+
+    profile = parse_text(DEFAULT_TEMPLATE)
+    first = Project(id="first", name="First", priority=1, tags=["fullstack"],
+                    bullets=[Bullet(id="f1", text="Built React and PostgreSQL work in TypeScript.")])
+    product = Project(id="product", name="Product", priority=1, tags=["frontend"],
+                      bullets=[Bullet(id="p1", text="Built React screens in TypeScript against PostgreSQL.")])
+    hosting = Project(id="hosting", name="Hosting", priority=2, tags=["infra"],
+                      bullets=[Bullet(id="h1", text="Moved client sites to cloud hosting.")])
+    profile.experience = []
+    profile.projects = [first, hosting, product]
+    jd = ParsedJd(
+        required_skills=[RequiredSkill(name=n, importance=3) for n in ("React", "TypeScript", "PostgreSQL")],
+        preferred_skills=[RequiredSkill(name="exposure to a cloud platform", importance=1)],
+    )
+    assert [p.id for p in _rank(profile, jd, 7, title="fullstack")] == ["first", "product", "hosting"]

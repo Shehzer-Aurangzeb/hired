@@ -45,8 +45,8 @@ IS_A: dict[str, set[str]] = {
     "cloudflare": {"cdn", "dns"},
     "docker": {"container", "containerisation", "containerization"},
     "kubernetes": {"container", "orchestration"},
-    "git": {"version", "control", "source"},
-    "github": {"version", "control", "git"},
+    "git": {"version control", "source control"},
+    "github": {"version control", "source control", "git"},
     "react native": {"mobile", "ios", "android", "cross-platform"},
     "expo": {"mobile", "ios", "android", "react native"},
     "swift": {"ios", "mobile"},
@@ -69,6 +69,15 @@ IS_A: dict[str, set[str]] = {
     "jwt": {"authentication", "auth"},
     "auth0": {"authentication", "auth", "oauth", "sso"},
     "figma": {"design"},
+    # A posting says "point of sale" or "ecommerce"; a bullet says "payment
+    # gateway" or "checkout". Same work, no shared word.
+    "payment": {"ecommerce", "e-commerce", "pos", "point of sale", "checkout", "billing", "commerce"},
+    "payments": {"ecommerce", "e-commerce", "pos", "point of sale", "checkout", "billing"},
+    "checkout": {"ecommerce", "payment", "pos", "point of sale"},
+    "invoice": {"billing", "payment", "ecommerce"},
+    "invoicing": {"billing", "payment", "ecommerce"},
+    "stripe": {"payment", "ecommerce", "checkout"},
+    "finix": {"payment", "ecommerce", "checkout"},
     # Written as one word in a skills list, as two in a posting.
     "frontend": {"front end", "ui", "client-side", "client"},
     "front-end": {"frontend", "ui", "client-side"},
@@ -125,17 +134,30 @@ def implied(terms: set[str], names: list[str]) -> set[str]:
     """
     extra: set[str] = set()
     for name in names:
-        lowered = name.strip().casefold()
+        # Punctuation to spaces first: "TypeScript." and "TypeScript," were
+        # not matching, which is every bullet, since every bullet ends in one.
+        lowered = re.sub(r"[.,;:()\"']", " ", name.casefold()).strip()
         for key, broader in IS_A.items():
             if key == lowered or key in lowered.split(" / ") or f" {key} " in f" {lowered} ":
                 extra |= broader
-    # Split the way _terms does, or "full-stack" never meets "full stack".
-    return terms | {
-        word.rstrip("s")
-        for phrase in extra
-        for word in re.split(r"[-\u2010-\u2015/\s]+", phrase)
-        if len(word) > 1
-    }
+    # Split the way _terms does, or "full-stack" never meets "full stack". A
+    # phrase stays one item though: split to words, "cross-platform" answered
+    # "cloud platform" and "source control" answered "open source".
+    out = set(terms)
+    for phrase in extra:
+        words = [_singular(w) for w in re.split(r"[-\u2010-\u2015/\s]+", phrase) if w]
+        out.add(words[0] if len(words) == 1 else " ".join(w for w in words if len(w) > 2))
+    return out
+
+
+def _singular(word: str) -> str:
+    """The same rule as generate._terms, so both sides of a match agree. rstrip("s") made "cross" into "cro"."""
+    return word[:-1] if len(word) > 3 and word.endswith("s") and not word.endswith("ss") else word
+
+
+def backs(wants: set[str], evidence: set[str]) -> bool:
+    """A word of evidence answers when it is among the wants; a phrase, only when all of it is."""
+    return any(set(item.split()) <= wants for item in evidence)
 
 
 def category_of(name: str) -> tuple[str, set[str]] | None:
