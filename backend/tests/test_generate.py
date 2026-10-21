@@ -1221,3 +1221,38 @@ def test_generating_without_a_row_still_works(client, monkeypatch):
     answers(monkeypatch, PICKED)
     body = client.post("/api/generate", json={"jd_text": JD, "parsed_jd": {}}).json()
     assert body["cv"]["sections"]
+
+
+def test_a_project_with_nothing_relevant_is_dropped_not_an_error(client, monkeypatch):
+    """
+    Asked which of a crypto analysis platform's bullets suit a front-end
+    posting, qwen2.5:14b answered none — correctly, and the prompt asks for
+    exactly that. A guard treated it as a failure and 502'd the whole CV.
+    """
+    from app import generate as module
+    from app.models import ParsedJd
+    from app.profile_parser import parse_text
+    from app.profile_template import DEFAULT_TEMPLATE
+
+    profile = parse_text(DEFAULT_TEMPLATE)
+    asked = []
+
+    def fake(prompt, schema, turns=None, local="never", good=None):
+        if "title_id" in schema.get("properties", {}):
+            return {"title_id": "frontend"}
+        asked.append(prompt)
+        # Nothing fits the first project; the second has something.
+        return {"bullet_ids": [] if len(asked) == 1 else ["project-name-perf"]}
+
+    monkeypatch.setattr(module, "generate_json", fake)
+
+    class Body:
+        jd_text = JD
+        title_variant = None
+        parsed_jd = ParsedJd()
+        model = ""
+
+    picked = module._select(profile, JD, Body)
+
+    assert len(asked) > 1, "it stopped at the empty one"
+    assert all(section["bullet_ids"] for section in picked["sections"])

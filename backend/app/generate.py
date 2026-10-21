@@ -135,7 +135,10 @@ def _select(profile: Profile, jd_text: str, body: "GenerateRequest") -> dict:
             ),
             BULLETS_SCHEMA,
             local="first",
-            good=lambda answer: bool(answer.get("bullet_ids")),
+            # No `good` here. Nothing is a real answer: asked which of a crypto
+            # analysis platform's bullets suit a front-end posting, the honest
+            # reply is none, and _select already drops the project. Guarding it
+            # turned that into a 502 and the whole CV failed.
         )
         ids = [str(i) for i in answer.get("bullet_ids") or []]
         if ids:
