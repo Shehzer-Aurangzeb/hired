@@ -390,10 +390,11 @@ def _assemble(
     _check_qualifiers(sections, projects, context, flags)
     _check_banned(rules, printed, flags)
 
+    lines = _skills(profile, {section.project_id for section in sections}, jd)
     cv = GeneratedCv(
-        title=title.text if title else "",
+        title=_headline(title.text, lines, jd) if title else "",
         summary=summary.text if summary else "",
-        skills_lines=_skills(profile, {section.project_id for section in sections}, jd),
+        skills_lines=lines,
         sections=sections,
         coverage=_coverage(jd, answer, sections, profile),
     )
@@ -656,10 +657,11 @@ def _relevance(text: str, jd: ParsedJd) -> int:
 def _fill_page(profile, title, summary, sections, projects, rules, flags, jd) -> None:
     """Add unused bullets in priority order until the page is full, measured in Chromium."""
     def build() -> GeneratedCv:
+        lines = _skills(profile, {s.project_id for s in sections}, jd)
         return GeneratedCv(
-            title=title.text if title else "",
+            title=_headline(title.text, lines, jd) if title else "",
             summary=summary.text if summary else "",
-            skills_lines=_skills(profile, {s.project_id for s in sections}, jd),
+            skills_lines=lines,
             sections=sections,
         )
 
@@ -768,6 +770,36 @@ def _target(rules) -> str:
     return f"{max(6, most // 2)} to {max(8, int(most * 0.7))}"
 
 
+def _asked(item: str, wants: list[set[str]]) -> int:
+    """2 when the posting names the item, 1 when it names what the item implies, else 0.
+
+    The item whole, never word by word: "React Hook Form" answered a posting
+    asking for React and led the row.
+    """
+    own = _terms(item)
+    if any(taxonomy.backs(words, {" ".join(sorted(own))}) for words in wants):
+        return 2
+    return int(any(taxonomy.backs(words, taxonomy.implied(own, [item]) - own) for words in wants))
+
+
+def _headline(text: str, lines: list[SkillsLine], jd: ParsedJd | None) -> str:
+    """
+    The written title's role, then the posting's own words for what it backs.
+
+    "Front-End Engineer | React · Next.js · TypeScript · Design Systems" went
+    to a posting asking for JavaScript, HTML and CSS. The role stays as
+    written, never the posting's: "Software Developer II" is vague and
+    "Senior" is a claim. Fewer than two matches keeps the written list.
+    """
+    role, _, written = text.partition("|")
+    if not jd or not written:
+        return text
+    wants = [words for _name, _w, words, kind in _wants(jd) if kind != "trait"]
+    items = [item for line in lines for item in line.items]
+    asked = sorted((i for i in items if _asked(i, wants)), key=lambda i: -_asked(i, wants))
+    return f"{role.strip()} | {' · '.join(asked[:4])}" if len(asked) >= 2 else text
+
+
 # ponytail: characters, not measured width. "Label: a · b · c" at 10pt Inter
 # fills the content box at about this many; measure in Chromium if rows wrap.
 _SKILLS_ROW_CHARS = 100
@@ -796,13 +828,8 @@ def _skills(profile: Profile, selected: set[str], jd: ParsedJd | None = None) ->
     wants = [words for _name, _w, words, kind in _wants(jd) if kind != "trait"] if jd else []
 
     def score(item: str) -> int:
-        # The item whole, or what it implies. Word by word, "React Hook Form"
-        # answered a posting asking for React and led the row.
-        own = _terms(item)
-        have = {" ".join(sorted(own))} | (taxonomy.implied(own, [item]) - own)
-        if any(taxonomy.backs(words, have) for words in wants):
-            return 2
-        return 1 if item.lower() in used | evidenced else 0
+        asked = _asked(item, wants)
+        return asked + 1 if asked else 1 if item.lower() in used | evidenced else 0
 
     rows: list[tuple[int, SkillsLine]] = []
     for row in profile.skills:

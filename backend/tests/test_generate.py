@@ -1352,7 +1352,19 @@ def test_the_skills_block_leads_with_what_the_posting_asks_and_stays_one_line_a_
     ]
     jd = _jd("Experience with React", "Knowledge of JavaScript")
     rows = generate._skills(profile, set(), jd)
-    assert rows[0].items[:2] == ["TypeScript", "React"]
+    # Named outranks implied: React was asked for, TypeScript only implies JavaScript.
+    assert rows[0].items[:2] == ["React", "TypeScript"]
     assert all(len(f"{r.line}: " + " · ".join(r.items)) <= generate._SKILLS_ROW_CHARS for r in rows)
     # Nothing asked for or printed: dropped, but three rows always remain, in written order.
     assert [r.line for r in rows] == ["Frontend", "CMS", "Backend"]
+
+
+def test_the_headline_keeps_the_written_role_and_takes_the_postings_words():
+    from app.models import SkillsLine
+
+    lines = [SkillsLine(line="Frontend", items=["React", "TypeScript", "JavaScript", "HTML", "CSS", "Storybook"])]
+    jd = _jd("Experience with React", "Knowledge of JavaScript, HTML/CSS")
+    written = "Front-End Engineer | React · Next.js · TypeScript · Design Systems"
+    assert generate._headline(written, lines, jd) == "Front-End Engineer | React · JavaScript · HTML · CSS"
+    # Nothing to reflect: the written line stands.
+    assert generate._headline(written, lines, _jd("Rust")) == written
