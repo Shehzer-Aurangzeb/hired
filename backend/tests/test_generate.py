@@ -626,7 +626,7 @@ def test_a_short_page_is_topped_up_until_it_is_full(client, monkeypatch):
 
 def test_a_page_that_is_already_full_is_left_alone(client, monkeypatch):
     save_profile(client)
-    fill_to(monkeypatch, [0.95])
+    fill_to(monkeypatch, [0.97])
     body = run(client, monkeypatch, PICKED)
     assert [b["id"] for s in body["cv"]["sections"] for b in s["bullets"]] == ["project-name-perf"]
     assert not any("fill the page" in f["message"] for f in body["flags"])
@@ -1384,3 +1384,38 @@ def test_years_of_experience_are_answered_from_the_employment_dates():
     assert generate._non_bullet("5+ years of experience", profile) == ""
     assert generate._non_bullet("2+ years with React", profile) == ""
     assert generate._non_bullet("1+ years with React", profile) == "1.5 years of React"
+
+
+def test_the_headline_follows_the_postings_weight_not_the_row_order():
+    from app.models import SkillsLine
+
+    lines = [SkillsLine(line="Frontend", items=["React", "TypeScript"]), SkillsLine(line="Mobile", items=["React Native"])]
+    jd = ParsedJd(
+        required_skills=[RequiredSkill(name="Development with React Native", importance=3)],
+        preferred_skills=[RequiredSkill(name="Typescript, React", importance=1)],
+    )
+    assert generate._headline("Mobile Engineer | X · Y", lines, jd) == "Mobile Engineer | React Native · React · TypeScript"
+
+
+def test_bullets_print_in_the_order_written_not_the_order_picked():
+    from app.models import Bullet, Project
+
+    project = Project(id="p", name="P", bullets=[Bullet(id="lead", text="Built a tool."), Bullet(id="how", text="Built it on X.")])
+    assert [b.id for b in generate._bullets(project, ["how", "lead"], _PROFILE.rules, [])] == ["lead", "how"]
+
+
+def test_one_of_your_own_projects_takes_a_free_slot_but_never_displaces_work():
+    from app.generate import _rank
+    from app.models import Bullet, Experience, Project, RequiredSkill
+
+    profile = parse_text(DEFAULT_TEMPLATE)
+    work = [Project(id=f"w{i}", name=f"W{i}", priority=1, bullets=[Bullet(id=f"w{i}b", text="Built React screens.")]) for i in range(5)]
+    mine = Project(id="mine", name="Mine", priority=2, bullets=[Bullet(id="m", text="Built a React tool.")])
+    profile.projects = [mine]
+    jd = ParsedJd(required_skills=[RequiredSkill(name="React", importance=3)])
+
+    profile.experience = [Experience(name="Co", projects=work[:3])]
+    assert [p.id for p in _rank(profile, jd, 7)][-1] == "mine"
+    profile.experience = [Experience(name="Co", projects=work)]
+    # max_projects of four: four employer projects fill it, so no slot is free.
+    assert "mine" not in [p.id for p in _rank(profile, jd, 4)]

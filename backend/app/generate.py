@@ -179,6 +179,16 @@ def _evidence(project: Project) -> set[str]:
     )
 
 
+def _belongs(project: Project, jd: ParsedJd | None, title: str) -> bool:
+    """Mobile work only on a mobile title or a posting that asks for mobile."""
+    if "mobile" not in project.tags or title == "mobile":
+        return True
+    return any(
+        {"mobile", "ios", "android"} & words or {"react", "native"} <= words
+        for _name, _weight, words, _kind in (_wants(jd) if jd else [])
+    )
+
+
 def _rank(profile: Profile, jd: ParsedJd, limit: int, title: str = "") -> list[Project]:
     """
     The projects that between them back the most of what the posting asks for.
@@ -209,15 +219,11 @@ def _rank(profile: Profile, jd: ParsedJd, limit: int, title: str = "") -> list[P
     local model picks well within one project and cannot rank across them.
     """
     wants = _wants(jd)
-    asks_mobile = title == "mobile" or any(
-        {"mobile", "ios", "android"} & words or {"react", "native"} <= words
-        for _name, _weight, words, _kind in wants
-    )
     pool = [
         project
         for project in profile.all_projects()
         if any(bullet.status != "blocked" for bullet in project.bullets)
-        and (asks_mobile or "mobile" not in project.tags)
+        and _belongs(project, jd, title)
     ]
     # The reader's label and the code backstop both, as the fit and the
     # coverage already do. Trusting the label alone let "desire to own code
@@ -250,14 +256,23 @@ def _rank(profile: Profile, jd: ParsedJd, limit: int, title: str = "") -> list[P
         total = sum(covers[project.id].values())
         return (fresh(project) + total / 4) / max(project.priority, 1), -project.priority
 
-    while pool and len(chosen) < limit:
+    # Four projects fill a page and five is the most it holds. Past four, only
+    # new coverage earns a place. Six came back once, trimmed to a bullet each.
+    cap = min(limit, 5)
+    while pool and len(chosen) < cap:
         best = max(pool, key=gain)
-        # Four projects fill a page. Past that, only new coverage earns a place.
-        if len(chosen) >= min(limit, 4) and not fresh(best):
+        if len(chosen) >= min(cap, 4) and not fresh(best):
             break
         covered |= covers[best.id].keys()
         chosen.append(best)
         pool.remove(best)
+
+    # One of your own projects in a free slot, when one answers the posting at
+    # all: four employer projects left room for one and printed none. It never
+    # displaces employer work the posting asked for.
+    own = [project for project in pool if project in profile.projects and covers[project.id]]
+    if own and not any(project in profile.projects for project in chosen) and len(chosen) < cap:
+        chosen.append(max(own, key=gain))
     return chosen
 
 
@@ -434,7 +449,11 @@ def _bullets(project: Project, ids: list, rules, flags: list[Flag]) -> list[Sele
         chosen.append(
             SelectedBullet(id=bullet.id, text=bullet.text, source_id=bullet.id, rephrased=False)
         )
-    return chosen
+    # In the order written, not the order picked: a project's second bullet
+    # opens "Built it on Next.js", and printed alone or first it reads as
+    # nonsense. Trimming takes from the tail, so the lead line survives.
+    order = {bullet.id: i for i, bullet in enumerate(project.bullets)}
+    return sorted(chosen, key=lambda bullet: order[bullet.id])
 
 
 # A requirement no bullet can answer. Matched here rather than asked of the model,
@@ -633,9 +652,9 @@ def _check_banned(rules, printed: str, flags: list[Flag]) -> None:
             )
 
 
-# Below MIN_FILL the page gets topped up; a bullet that pushes it past MAX_FILL is undone.
-MIN_FILL = 0.90
-MAX_FILL = 1.25
+# Below MIN_FILL the page gets topped up; a bullet that pushes it past one page
+# is undone. At 0.90 a page with room for a whole project stopped at 0.93.
+MIN_FILL = 0.96
 
 
 # Words that carry no signal in a requirement: "Experience with React" and
@@ -646,7 +665,9 @@ _FILLER = frozenset(
     " skills skill years proficiency demonstrated related least one"
     # "open source contribution with code review" was answered by "opened a
     # second checkout page" and by "code" in any bullet at all.
-    " code open source".split()
+    " code open source"
+    # "Figma handoff" is Figma; a posting says "based on Figma models".
+    " handoff".split()
 )
 
 
@@ -714,18 +735,23 @@ def _fill_page(profile, title, summary, sections, projects, rules, flags, jd) ->
 
     on_page = {b.source_id for s in sections for b in s.bullets}
     used = {s.project_id for s in sections}
-    # Projects already on the page first, then the rest. Within that, the most
-    # relevant bullet to this posting, then the person's own priority. Filling
-    # by priority alone put unrelated work on the page to make up the height.
+    own = {project.id for project in profile.projects}
+    # Projects already on the page first, then one of your own projects if none
+    # is printed, then the rest. Within that, the most relevant bullet to this
+    # posting, then the person's own priority. Filling by priority alone put
+    # unrelated work on the page to make up the height. The mobile rule holds
+    # here too, or a React Native app walks on through the back door.
     spare: list[tuple[Project, Bullet]] = sorted(
         (
             (project, bullet)
             for project in profile.all_projects()
+            if _belongs(project, jd, title.id if title else "")
             for bullet in project.bullets
             if bullet.id not in on_page and bullet.status != "blocked"
         ),
         key=lambda pair: (
             pair[0].id not in used,
+            not (pair[0].id in own and not own & used),
             -_relevance(f"{pair[1].text} {' '.join(pair[0].stack)}", jd),
             pair[1].priority,
         ),
@@ -741,10 +767,21 @@ def _fill_page(profile, title, summary, sections, projects, rules, flags, jd) ->
             # falls short: the first live run printed two pages. Trim from the
             # tail, which is the least relevant project's weakest bullet.
             while filled > 1.0 and sum(len(s.bullets) for s in sections) > 1:
-                last = sections[-1]
+                # Your own project is there for its one line, so it gives up
+                # the rest first. Then third bullets, lowest ranked project
+                # first: taking the tail section whole cut the only .NET work
+                # off a posting that asked for .NET. Then from the tail, your
+                # own project last, so a page is never five one-bullet projects.
+                most = max(len(s.bullets) for s in sections)
+                extra = next((s for s in sections if s.project_id in own and len(s.bullets) > 1), None)
+                last = extra or (
+                    next(s for s in reversed(sections) if len(s.bullets) == most)
+                    if most > 2
+                    else next((s for s in reversed(sections) if s.project_id not in own), sections[-1])
+                )
                 last.bullets.pop()
                 if not last.bullets:
-                    sections.pop()
+                    sections.remove(last)
                 filled = pages(render_html(profile, build()))
                 dropped += 1
             while filled < MIN_FILL and spare:
@@ -770,11 +807,12 @@ def _fill_page(profile, title, summary, sections, projects, rules, flags, jd) ->
                 )
                 grown = pages(render_html(profile, build()))
                 # A bullet that turns one page into two is worse than the gap.
-                if grown > MAX_FILL:
+                # A shorter one further down may still fit, so keep looking.
+                if grown > 1.0:
                     section.bullets.pop()
                     if fresh:
                         sections.remove(section)
-                    break
+                    continue
                 filled, added = grown, added + 1
 
             if dropped:
@@ -841,9 +879,19 @@ def _headline(text: str, lines: list[SkillsLine], jd: ParsedJd | None) -> str:
     role, _, written = text.partition("|")
     if not jd or not written:
         return text
-    wants = [words for _name, _w, words, kind in _wants(jd) if kind != "trait"]
+    # By the posting's own weight: React Native, required, came after
+    # TypeScript, an asset, because the Frontend row is written first.
+    wants = [(words, w) for _name, w, words, kind in _wants(jd) if kind != "trait"]
+
+    # Then the more specific name: "React" also answers "React Native".
+    def weight(item: str) -> tuple[int, int, int]:
+        return max(
+            ((w, _asked(item, [words]), len(_terms(item))) for words, w in wants if _asked(item, [words])),
+            default=(0, 0, 0),
+        )
+
     items = [item for line in lines for item in line.items]
-    asked = sorted((i for i in items if _asked(i, wants)), key=lambda i: -_asked(i, wants))
+    asked = sorted((i for i in items if weight(i)[0]), key=lambda i: weight(i), reverse=True)
     return f"{role.strip()} | {' · '.join(asked[:4])}" if len(asked) >= 2 else text
 
 

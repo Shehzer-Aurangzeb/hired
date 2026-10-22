@@ -69,6 +69,9 @@ IS_A: dict[str, set[str]] = {
     "jwt": {"authentication", "auth"},
     "auth0": {"authentication", "auth", "oauth", "sso"},
     "figma": {"design"},
+    "framer motion": {"animation"},
+    "reanimated": {"animation"},
+    "react hook form": {"form"},
     # A posting says "point of sale" or "ecommerce"; a bullet says "payment
     # gateway" or "checkout". Same work, no shared word.
     "payment": {"ecommerce", "e-commerce", "pos", "point of sale", "checkout", "billing", "commerce"},
