@@ -129,6 +129,12 @@ SIBLINGS: dict[str, set[str]] = {
 }
 
 
+# Zustand is a state management library: it answers "state management". It
+# still is not Redux, which is what SIBLINGS says.
+for _library in SIBLINGS["state management"]:
+    IS_A.setdefault(_library, set()).add("state management")
+
+
 def implied(terms: set[str], names: list[str]) -> set[str]:
     """`terms` plus everything the person's own skill names honestly imply.
 

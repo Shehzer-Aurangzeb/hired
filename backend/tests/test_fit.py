@@ -897,3 +897,12 @@ def test_agile_answers_estimating_the_work():
     from app.generate import _terms
 
     assert taxonomy.backs(_terms("Able to properly estimate the work time required"), taxonomy.implied(set(), ["Agile"]))
+
+
+def test_html5_css3_state_management_and_collaboration_are_read_right():
+    from app.generate import _non_bullet, _terms
+
+    profile = parse_text(DEFAULT_TEMPLATE)
+    assert _terms("HTML5, CSS3") == {"html", "css"}
+    assert taxonomy.backs(_terms("Experience with state management"), taxonomy.implied(set(), ["Zustand"]))
+    assert _non_bullet("Collaboration skills", profile) == "not something a CV evidences"

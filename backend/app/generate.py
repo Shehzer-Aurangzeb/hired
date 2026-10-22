@@ -463,7 +463,8 @@ _DISPOSITION = re.compile(
     r"\b(communication|communicate|problem.solving|critical thinking|curiosity|curious"
     r"|patience|patient|attention to detail|detail.oriented|self.starter|self.motivated"
     r"|motivated|willingness|eagerness|interest in|passion|team player|interpersonal"
-    r"|collaborat|work(ing)? independently|independently and|multiple projects|multitask"
+    # A stem needs \w*: the closing \b made "collaborat" miss "collaboration".
+    r"|collaborat\w*|work(ing)? independently|independently and|multiple projects|multitask\w*"
     r"|desire to learn|eager to learn|keen to learn|fast learner|quick learner"
     r"|self.learning|learning ability|time management|organisational|organizational"
     r"|adaptab|flexib|work ethic|proactive|positive attitude|strong work"
@@ -690,7 +691,12 @@ def _terms(text: str) -> set[str]:
     plain = re.sub(r"[-\u2010-\u2015/]", " ", text)
     plain = _DOT_JS.sub("", plain)
     plain = plain.replace(".", " ")
-    return {_singular(w) for w in _words(plain) if len(w) > 1} - _FILLER
+    words = {_singular(w) for w in _words(plain) if len(w) > 1} - _FILLER
+    return {_VERSIONED.get(w, w) for w in words}
+
+
+# "HTML5" and "CSS3" are HTML and CSS; a profile says the plain name.
+_VERSIONED = {"html5": "html", "css3": "css"}
 
 
 def _singular(word: str) -> str:
