@@ -3,6 +3,7 @@ the pick and fills the page, then preview and PDF export."""
 
 import json
 import re
+from datetime import date
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
@@ -463,8 +464,54 @@ _NOT_A_SKILL = re.compile(
 )
 
 
+_YEARS = re.compile(r"\b(\d+)\s*\+?\s*(?:(?:to|-|\u2013)\s*\d+\s*)?\+?\s*years?\b", re.I)
+
+
+def _months(start: str, end: str) -> set[tuple[int, int]]:
+    """Every calendar month from start to end, both "YYYY-MM"; no end or "present" is now."""
+    try:
+        y, m = map(int, start[:7].split("-"))
+        ey, em = map(int, end[:7].split("-")) if end[:4].isdigit() else (date.today().year, date.today().month)
+    except ValueError:
+        return set()
+    out = set()
+    while (y, m) <= (ey, em):
+        out.add((y, m))
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return out
+
+
+def _years(skill: str, profile: Profile) -> str:
+    """
+    "3 to 5 years of experience" answered from the employment dates.
+
+    No bullet can say how long you have worked, so every posting stating years
+    reported it as a gap. Months are counted once, so overlapping jobs do not
+    add up. A named skill with its own recorded years is judged on those.
+    """
+    found = _YEARS.search(skill)
+    if not found:
+        return ""
+    lowered = skill.casefold()
+    own = next(
+        (e for e in profile.skill_evidence if e.years and re.search(rf"\b{re.escape(e.name.casefold())}\b", lowered)),
+        None,
+    )
+    if own:
+        have, what = own.years, f"{own.years:g} years of {own.name}"
+    else:
+        months: set[tuple[int, int]] = set()
+        for job in profile.experience:
+            months |= _months(job.start, job.end)
+        have = int(len(months) / 12 * 10) / 10
+        what = f"{have:g} years of experience"
+    return what if have >= int(found.group(1)) else ""
+
+
 def _non_bullet(skill: str, profile: Profile) -> str:
     """What backs this requirement if no bullet ever could."""
+    if years := _years(skill, profile):
+        return years
     if _SCHOOLING.search(skill) and profile.education:
         top = profile.education[0]
         return f"{top.degree} {top.field}".strip() or top.school

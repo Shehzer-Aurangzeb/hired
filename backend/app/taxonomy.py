@@ -88,8 +88,8 @@ IS_A: dict[str, set[str]] = {
     "claude api": {"ai", "llm", "genai", "artificial", "intelligence"},
     "openai": {"ai", "llm", "genai", "artificial", "intelligence"},
     "langchain": {"ai", "llm", "genai"},
-    "agile": {"scrum", "backlog", "sprint", "planning", "estimation", "standup"},
-    "scrum": {"agile", "backlog", "sprint", "planning"},
+    "agile": {"scrum", "backlog", "sprint", "planning", "estimation", "estimate", "standup"},
+    "scrum": {"agile", "backlog", "sprint", "planning", "estimation", "estimate"},
     "storybook": {"design system", "component library", "documentation"},
 }
 

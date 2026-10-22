@@ -1368,3 +1368,19 @@ def test_the_headline_keeps_the_written_role_and_takes_the_postings_words():
     assert generate._headline(written, lines, jd) == "Front-End Engineer | React · JavaScript · HTML · CSS"
     # Nothing to reflect: the written line stands.
     assert generate._headline(written, lines, _jd("Rust")) == written
+
+
+def test_years_of_experience_are_answered_from_the_employment_dates():
+    from app.models import Experience, SkillEvidence
+
+    profile = parse_text(DEFAULT_TEMPLATE)
+    profile.experience = [
+        Experience(name="A", start="2020-01", end="2021-12"),
+        Experience(name="B", start="2021-07", end="2022-12"),  # overlap counted once
+    ]
+    profile.skill_evidence = [SkillEvidence(name="React", years=1.5)]
+    assert generate._non_bullet("3 to 5 years of experience in a similar position", profile) == "3 years of experience"
+    assert generate._non_bullet("0 to 5 years of relevant experience", profile)
+    assert generate._non_bullet("5+ years of experience", profile) == ""
+    assert generate._non_bullet("2+ years with React", profile) == ""
+    assert generate._non_bullet("1+ years with React", profile) == "1.5 years of React"

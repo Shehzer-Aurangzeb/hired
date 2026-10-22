@@ -891,3 +891,9 @@ def test_a_phrase_in_the_taxonomy_backs_only_the_whole_phrase():
     assert not taxonomy.backs(_terms("open source contribution"), have)
     page = _terms("Reviewed code and opened a second checkout page.")
     assert not taxonomy.backs(_terms("internship, co-op, or open source contribution with code review"), page)
+
+
+def test_agile_answers_estimating_the_work():
+    from app.generate import _terms
+
+    assert taxonomy.backs(_terms("Able to properly estimate the work time required"), taxonomy.implied(set(), ["Agile"]))
