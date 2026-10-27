@@ -47,7 +47,8 @@ IS_A: dict[str, set[str]] = {
     "kubernetes": {"container", "orchestration"},
     "git": {"version control", "source control"},
     "github": {"version control", "source control", "git"},
-    "react native": {"mobile", "ios", "android", "cross-platform"},
+    # React Native is React: fused into one term, the bullets stopped answering "React".
+    "react native": {"react", "mobile", "ios", "android", "cross-platform"},
     "expo": {"mobile", "ios", "android", "react native"},
     "swift": {"ios", "mobile"},
     "kotlin": {"android", "mobile"},
@@ -89,6 +90,8 @@ IS_A: dict[str, set[str]] = {
     "fullstack": {"full stack", "frontend", "backend", "front end", "back end"},
     "full-stack": {"fullstack", "frontend", "backend", "front end", "back end"},
     "claude api": {"ai", "llm", "genai", "artificial", "intelligence"},
+    "gemini": {"ai", "llm", "genai"},
+    "ollama": {"ai", "llm", "genai"},
     "openai": {"ai", "llm", "genai", "artificial", "intelligence"},
     "langchain": {"ai", "llm", "genai"},
     "agile": {"scrum", "backlog", "sprint", "planning", "estimation", "estimate", "standup"},
@@ -135,6 +138,19 @@ for _library in SIBLINGS["state management"]:
     IS_A.setdefault(_library, set()).add("state management")
 
 
+_FUSED = re.compile(r"\b(react[\s\-\u2010-\u2015]+native|cross[\s\-\u2010-\u2015]+platform)\b", re.I)
+
+
+def fuse(text: str) -> str:
+    """
+    "React Native" as one word, so "React" alone never answers it.
+
+    Split, a posting asking for React Native was answered by every React web
+    project, and "cross-platform" by anything that said "platform".
+    """
+    return _FUSED.sub(lambda m: re.sub(r"[\s\-\u2010-\u2015]+", "", m.group(0).casefold()), text)
+
+
 def implied(terms: set[str], names: list[str]) -> set[str]:
     """`terms` plus everything the person's own skill names honestly imply.
 
@@ -154,6 +170,7 @@ def implied(terms: set[str], names: list[str]) -> set[str]:
     # "cloud platform" and "source control" answered "open source".
     out = set(terms)
     for phrase in extra:
+        phrase = fuse(phrase)
         words = [_singular(w) for w in re.split(r"[-\u2010-\u2015/\s]+", phrase) if w]
         out.add(words[0] if len(words) == 1 else " ".join(w for w in words if len(w) > 2))
     return out

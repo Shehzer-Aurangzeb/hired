@@ -184,7 +184,7 @@ def _belongs(project: Project, jd: ParsedJd | None, title: str) -> bool:
     if "mobile" not in project.tags or title == "mobile":
         return True
     return any(
-        {"mobile", "ios", "android"} & words or {"react", "native"} <= words
+        {"mobile", "ios", "android", "reactnative"} & words
         for _name, _weight, words, _kind in (_wants(jd) if jd else [])
     )
 
@@ -664,6 +664,9 @@ _FILLER = frozenset(
     "a an and or the of in on for to with using strong clear basic solid good"
     " experience knowledge working familiarity understanding exposure ability"
     " skills skill years proficiency demonstrated related least one"
+    # "platform" alone answered "iOS and Android platforms" for a crypto
+    # analysis platform.
+    " platform"
     # "open source contribution with code review" was answered by "opened a
     # second checkout page" and by "code" in any bullet at all.
     " code open source"
@@ -688,7 +691,7 @@ def _terms(text: str) -> set[str]:
     nothing, so a posting spelling it that way reported React as a gap for a
     React developer.
     """
-    plain = re.sub(r"[-\u2010-\u2015/]", " ", text)
+    plain = re.sub(r"[-\u2010-\u2015/]", " ", taxonomy.fuse(text))
     plain = _DOT_JS.sub("", plain)
     plain = plain.replace(".", " ")
     words = {_singular(w) for w in _words(plain) if len(w) > 1} - _FILLER

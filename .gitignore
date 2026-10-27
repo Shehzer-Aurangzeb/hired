@@ -18,5 +18,6 @@ docs/cv/
 backend/.hired.pid
 backend/.hired.log
 backend/.hired-demo.pid
+backend/.hired-ollama.pid
 backend/.hired-demo.log
 backend/.ask-log.jsonl

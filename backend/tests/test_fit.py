@@ -906,3 +906,15 @@ def test_html5_css3_state_management_and_collaboration_are_read_right():
     assert _terms("HTML5, CSS3") == {"html", "css"}
     assert taxonomy.backs(_terms("Experience with state management"), taxonomy.implied(set(), ["Zustand"]))
     assert _non_bullet("Collaboration skills", profile) == "not something a CV evidences"
+
+
+def test_react_alone_never_answers_react_native():
+    from app.generate import _terms
+
+    rn = _terms("Experience with React Native")
+    assert not taxonomy.backs(rn, taxonomy.implied(_terms("Built React screens."), ["Built React screens."]))
+    assert taxonomy.backs(rn, _terms("Built the chat layer in React Native."))
+    assert taxonomy.backs(_terms("cross-platform apps"), taxonomy.implied(set(), ["React Native"]))
+    assert not taxonomy.backs(_terms("iOS and Android platforms"), _terms("A crypto analysis platform."))
+    # React Native is still React.
+    assert taxonomy.backs(_terms("Experience using React"), taxonomy.implied(_terms("Built it in React Native."), ["Built it in React Native."]))
