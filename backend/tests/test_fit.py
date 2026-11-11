@@ -880,6 +880,21 @@ def test_the_taxonomy_sees_through_punctuation():
     assert "cloud" not in taxonomy.implied(_terms("Moved DNS to Cloudflare."), ["Moved DNS to Cloudflare."])
 
 
+def test_a_dotted_skill_name_still_implies():
+    """Next.js on every stack line, and "Full stack development" scored as a gap.
+
+    The name was stripped of its dot before the lookup, the key was not, so
+    "next js" never met "next.js". ASP.NET had the same hole.
+    """
+    from app import taxonomy
+    from app.generate import _terms
+
+    have = taxonomy.implied(_terms("Next.js"), ["Next.js"])
+    assert taxonomy.backs(_terms("Full stack development"), have)
+    assert "react" in have
+    assert "c#" in taxonomy.implied(_terms("ASP.NET Core"), ["ASP.NET Core"])
+
+
 def test_a_phrase_in_the_taxonomy_backs_only_the_whole_phrase():
     """"cross-platform" answered "cloud platform" and "source control" answered "open source"."""
     from app.generate import _terms

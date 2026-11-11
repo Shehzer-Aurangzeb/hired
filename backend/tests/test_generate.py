@@ -889,14 +889,16 @@ def test_preferred_skills_break_ties_between_projects():
     """
     from app.models import ParsedJd, RequiredSkill
 
+    # TypeScript, not React: the Next.js side project is React too, so React
+    # alone already ranks it and leaves no tie for the nice-to-have to break.
     profile = parse_text(DEFAULT_TEMPLATE)
     required_only = generate._rank(
-        profile, ParsedJd(required_skills=[RequiredSkill(name="React", importance=3)]), 3
+        profile, ParsedJd(required_skills=[RequiredSkill(name="TypeScript", importance=3)]), 3
     )
     with_preferred = generate._rank(
         profile,
         ParsedJd(
-            required_skills=[RequiredSkill(name="React", importance=3)],
+            required_skills=[RequiredSkill(name="TypeScript", importance=3)],
             preferred_skills=[RequiredSkill(name="PostgreSQL", importance=1)],
         ),
         3,

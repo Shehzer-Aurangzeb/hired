@@ -138,6 +138,20 @@ for _library in SIBLINGS["state management"]:
     IS_A.setdefault(_library, set()).add("state management")
 
 
+_PUNCT = re.compile(r"[.,;:()\"']")
+
+
+def _plain(text: str) -> str:
+    return _PUNCT.sub(" ", text.casefold()).strip()
+
+
+# Keys stripped the same way as the names they are matched against. "Next.js"
+# became "next js" and never met the key "next.js", so a Next.js stack implied
+# neither React nor full-stack, and "Full stack development" scored as a gap
+# for someone with Next.js on every other line. ASP.NET had the same hole.
+_IS_A_PLAIN: dict[str, set[str]] = {_plain(key): broader for key, broader in IS_A.items()}
+
+
 _FUSED = re.compile(r"\b(react[\s\-\u2010-\u2015]+native|cross[\s\-\u2010-\u2015]+platform)\b", re.I)
 
 
@@ -161,8 +175,8 @@ def implied(terms: set[str], names: list[str]) -> set[str]:
     for name in names:
         # Punctuation to spaces first: "TypeScript." and "TypeScript," were
         # not matching, which is every bullet, since every bullet ends in one.
-        lowered = re.sub(r"[.,;:()\"']", " ", name.casefold()).strip()
-        for key, broader in IS_A.items():
+        lowered = _plain(name)
+        for key, broader in _IS_A_PLAIN.items():
             if key == lowered or key in lowered.split(" / ") or f" {key} " in f" {lowered} ":
                 extra |= broader
     # Split the way _terms does, or "full-stack" never meets "full stack". A
