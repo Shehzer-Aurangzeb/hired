@@ -228,10 +228,16 @@ def _rank(profile: Profile, jd: ParsedJd, limit: int, title: str = "") -> list[P
     # The reader's label and the code backstop both, as the fit and the
     # coverage already do. Trusting the label alone let "desire to own code
     # quality" count six points for a mobile app on a web posting.
+    # Years and a degree are answered by the dates and the education section,
+    # never by a project, so they do not pick one: "3+ years of mobile app
+    # development" was credited to every web project that said "app".
     scorable = [
         (name, weight, words)
         for name, weight, words, kind in wants
-        if kind != "trait" and _non_bullet(name, profile) != "not something a CV evidences"
+        if kind != "trait"
+        and _non_bullet(name, profile) != "not something a CV evidences"
+        and not _YEARS.search(name)
+        and not _SCHOOLING.search(name)
     ]
     covers = {
         project.id: {
@@ -253,8 +259,14 @@ def _rank(profile: Profile, jd: ParsedJd, limit: int, title: str = "") -> list[P
         # WordPress hosting work outranked the React product on a React
         # posting because it alone mentioned the cloud. Priority breaks ties,
         # so a posting that names nothing a bullet mentions still gets a page.
+        # On a mobile title, mobile work's overlap counts in full: the second
+        # React Native app is what a mobile reader wants to see, not a repeat.
+        # Counted as a quarter, a React Native posting got one mobile project
+        # and three web ones, because every web project was "fresh" on words
+        # the mobile ones had already covered.
         total = sum(covers[project.id].values())
-        return (fresh(project) + total / 4) / max(project.priority, 1), -project.priority
+        share = 1 if title == "mobile" and "mobile" in project.tags else 4
+        return (fresh(project) + total / share) / max(project.priority, 1), -project.priority
 
     # Four projects fill a page and five is the most it holds. Past four, only
     # new coverage earns a place. Six came back once, trimmed to a bullet each.

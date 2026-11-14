@@ -1303,6 +1303,34 @@ def test_mobile_work_stays_off_a_web_posting_that_never_asks_for_it():
     assert "app" in ids("frontend", "iOS")
 
 
+def test_a_second_mobile_project_outranks_web_work_on_a_mobile_title():
+    """
+    A React Native posting got one mobile project and three web ones: once the
+    first app covered React Native, the second was all overlap, counted a
+    quarter, and every web project won on words like "testing" and "api".
+    """
+    from app.generate import _rank
+    from app.models import Bullet, ParsedJd, Project, RequiredSkill
+    from app.profile_parser import parse_text
+    from app.profile_template import DEFAULT_TEMPLATE
+
+    profile = parse_text(DEFAULT_TEMPLATE)
+    chat = Project(id="chat", name="Chat", priority=1, tags=["mobile"],
+                   bullets=[Bullet(id="c1", text="Built React Native screens in TypeScript.")])
+    store = Project(id="store", name="Store", priority=1, tags=["mobile"],
+                    bullets=[Bullet(id="s1", text="Shipped a React Native app in TypeScript with Jest tests.")])
+    web = Project(id="web", name="Web", priority=1, tags=["frontend", "backend"],
+                  bullets=[Bullet(id="w1", text="Built a REST API with Jest tests in TypeScript.")])
+    profile.experience = []
+    profile.projects = [web, chat, store]
+    jd = ParsedJd(required_skills=[
+        RequiredSkill(name=n, importance=3) for n in ("React Native", "TypeScript", "REST APIs", "Jest")
+    ])
+    ranked = [p.id for p in _rank(profile, jd, 7, title="mobile")]
+    assert ranked.index("chat") < ranked.index("web")
+    assert ranked.index("store") < ranked.index("web")
+
+
 def test_a_skills_row_with_only_with_needs_a_project_of_that_kind_on_the_page():
     from app.models import SkillLine
 
