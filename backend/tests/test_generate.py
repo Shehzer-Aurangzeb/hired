@@ -1449,3 +1449,34 @@ def test_one_of_your_own_projects_takes_a_free_slot_but_never_displaces_work():
     profile.experience = [Experience(name="Co", projects=work)]
     # max_projects of four: four employer projects fill it, so no slot is free.
     assert "mine" not in [p.id for p in _rank(profile, jd, 4)]
+
+
+def test_a_slash_list_of_frameworks_is_several_asks():
+    """
+    "React/Next.js/Expo/Native" was one want: once Next.js answered it the
+    Expo app added nothing, and a posting naming Expo printed no mobile work.
+    """
+    from app.generate import _alternatives, _rank
+    from app.models import Bullet, ParsedJd, Project, RequiredSkill
+    from app.profile_parser import parse_text
+    from app.profile_template import DEFAULT_TEMPLATE
+
+    assert _alternatives("React/Next.js/Expo/Native") == ["React", "Next.js", "Expo", "Native"]
+    assert _alternatives("Python / Django") == ["Python", "Django"]
+    assert _alternatives("CI/CD") == ["CI/CD"]
+
+    profile = parse_text(DEFAULT_TEMPLATE)
+    web = Project(id="web", name="Web", priority=1, tags=["frontend"],
+                  bullets=[Bullet(id="w1", text="Built a Next.js app in TypeScript with Jest tests.")])
+    tool = Project(id="tool", name="Tool", priority=1, tags=["backend"],
+                   bullets=[Bullet(id="t1", text="Built a REST API in TypeScript with Jest tests.")])
+    app = Project(id="app", name="App", priority=1, tags=["mobile"],
+                  bullets=[Bullet(id="a1", text="Shipped an Expo app in TypeScript.")])
+    profile.experience = []
+    profile.projects = [web, tool, app]
+    jd = ParsedJd(required_skills=[
+        RequiredSkill(name=n, importance=3)
+        for n in ("React/Next.js/Expo/Native", "TypeScript", "Jest")
+    ])
+    ranked = [p.id for p in _rank(profile, jd, 7, title="fullstack")]
+    assert ranked.index("app") < ranked.index("tool")

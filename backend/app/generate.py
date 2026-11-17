@@ -179,12 +179,27 @@ def _evidence(project: Project) -> set[str]:
     )
 
 
+def _alternatives(name: str) -> list[str]:
+    """
+    "React/Next.js/Expo/Native" as four asks, "CI/CD" as one.
+
+    Split only when every part is a word or two: "Python / Django" is two
+    things, while "and/or" inside a sentence is not a list of anything.
+    """
+    parts = [p.strip() for p in name.split("/") if p.strip()]
+    if len(parts) < 2 or any(len(p.split()) > 2 for p in parts):
+        return [name]
+    if len(parts) == 2 and all(len(p) <= 2 for p in parts):
+        return [name]
+    return parts
+
+
 def _belongs(project: Project, jd: ParsedJd | None, title: str) -> bool:
     """Mobile work only on a mobile title or a posting that asks for mobile."""
     if "mobile" not in project.tags or title == "mobile":
         return True
     return any(
-        {"mobile", "ios", "android", "reactnative"} & words
+        {"mobile", "ios", "android", "reactnative", "expo"} & words
         for _name, _weight, words, _kind in (_wants(jd) if jd else [])
     )
 
@@ -231,13 +246,18 @@ def _rank(profile: Profile, jd: ParsedJd, limit: int, title: str = "") -> list[P
     # Years and a degree are answered by the dates and the education section,
     # never by a project, so they do not pick one: "3+ years of mobile app
     # development" was credited to every web project that said "app".
+    # A slash list is several asks, each worth a share: "React/Next.js/Expo/
+    # Native" was one want, so once Next.js answered it the Expo app added
+    # nothing and a posting naming Expo got no mobile project.
     scorable = [
-        (name, weight, words)
-        for name, weight, words, kind in wants
+        (part, weight / len(parts), _terms(part))
+        for name, weight, _words, kind in wants
         if kind != "trait"
         and _non_bullet(name, profile) != "not something a CV evidences"
         and not _YEARS.search(name)
         and not _SCHOOLING.search(name)
+        for parts in [_alternatives(name)]
+        for part in parts
     ]
     covers = {
         project.id: {
@@ -251,7 +271,7 @@ def _rank(profile: Profile, jd: ParsedJd, limit: int, title: str = "") -> list[P
     chosen: list[Project] = []
     covered: set[str] = set()
 
-    def fresh(project: Project) -> int:
+    def fresh(project: Project) -> float:
         return sum(w for name, w in covers[project.id].items() if name not in covered)
 
     def gain(project: Project) -> tuple[float, int]:

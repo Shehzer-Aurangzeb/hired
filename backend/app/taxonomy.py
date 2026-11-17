@@ -24,6 +24,9 @@ IS_A: dict[str, set[str]] = {
     "mysql": {"sql", "relational", "database", "rdbms"},
     "sqlite": {"sql", "relational", "database"},
     "mongodb": {"nosql", "database"},
+    # Firestore is Firebase: a posting says "Firebase/GCP", a bullet says Firestore.
+    "firestore": {"firebase", "nosql", "database"},
+    "firebase": {"backend", "cloud", "database"},
     "prisma": {"orm", "database"},
     "github actions": {"ci", "cd", "cicd", "pipeline", "automation"},
     "gitlab ci": {"ci", "cd", "cicd", "pipeline"},
